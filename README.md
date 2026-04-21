@@ -19,6 +19,12 @@ which the CLI can install for you.
 
 ## Install
 
+Prerequisites:
+
+- `python3`
+- `tmux`
+- `ttyd` on `$PATH`, or let `install-ttyd` fetch it into `~/.local/bin`
+
 ```bash
 # One-time: fetch the ttyd static binary into ~/.local/bin
 python3 tmux_browse.py install-ttyd
@@ -34,6 +40,24 @@ python3 tb.py exec work --json -- pytest -q
 `install-ttyd` is only needed where `ttyd` isn't already on `$PATH`. If your
 distro packages it (Debian/Ubuntu `apt install ttyd`, Homebrew `brew install
 ttyd`), that works too.
+
+## Quick Start
+
+If you want to try it immediately, create a throwaway tmux session first:
+
+```bash
+# Create a scratch session
+python3 tb.py new demo
+
+# Run a command inside it
+python3 tb.py exec demo --json -- pwd
+
+# Start the dashboard
+python3 tmux_browse.py serve
+```
+
+Then open `http://localhost:8096/` on the same machine. The dashboard is most
+useful once at least one tmux session exists.
 
 ## Ports
 
