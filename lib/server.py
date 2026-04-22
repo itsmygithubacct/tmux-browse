@@ -18,6 +18,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
     agent_logs,
+    agent_run_index,
     agent_scheduler,
     agent_status,
     agent_store,
@@ -385,6 +386,50 @@ class Handler(BaseHTTPRequestHandler):
         except TBError as e:
             self._send_tb_error(e)
 
+    def _h_agent_runs(self, parsed: ParseResult) -> None:
+        q = parse_qs(parsed.query)
+
+        def _first(key: str) -> str | None:
+            vals = q.get(key)
+            if vals:
+                return vals[0].strip() or None
+            return None
+
+        def _int(key: str, default: int | None = None) -> int | None:
+            v = _first(key)
+            if v is None:
+                return default
+            try:
+                return int(v)
+            except ValueError:
+                return default
+
+        try:
+            rows = agent_run_index.query(
+                agent=_first("agent"),
+                status=_first("status"),
+                since=_int("since"),
+                until=_int("until"),
+                text=_first("q"),
+                tool=_first("tool"),
+                limit=max(1, min(500, _int("limit", 50) or 50)),
+            )
+            self._send_json({"ok": True, "runs": rows})
+        except TBError as e:
+            self._send_tb_error(e)
+
+    def _h_agent_run(self, parsed: ParseResult) -> None:
+        q = parse_qs(parsed.query)
+        run_id = (q.get("run_id", [""])[0] or "").strip()
+        if not run_id:
+            self._send_json({"ok": False, "error": "missing 'run_id'"}, status=400)
+            return
+        row = agent_run_index.get_run(run_id)
+        if row is None:
+            self._send_json({"ok": False, "error": "run not found"}, status=404)
+            return
+        self._send_json({"ok": True, "run": row})
+
     def _h_session_log(self, parsed: ParseResult) -> None:
         query = parse_qs(parsed.query)
         name = (query.get("session", [""])[0] or "").strip()
@@ -621,6 +666,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-workflows":    _h_agent_workflows_get,
         "/api/agent-workflow-state": _h_agent_workflow_state,
         "/api/agent-workflow-runs":  _h_agent_workflow_runs,
+        "/api/agent-runs":           _h_agent_runs,
+        "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
         "/health":                 _h_health,
     })

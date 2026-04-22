@@ -171,6 +171,23 @@ def render_index() -> str:
         <div id="agents-pane" class="agent-grid"></div>
     </div>
 </details>
+<details id="runs-wrap" class="config-pane" hidden>
+    <summary>Runs (<span id="runs-count">0</span>)</summary>
+    <div class="config-body">
+        <div class="runs-search-bar">
+            <input type="text" id="runs-search-q" placeholder="Search prompts and messages..." />
+            <select id="runs-filter-agent"><option value="">All agents</option></select>
+            <select id="runs-filter-status">
+                <option value="">All statuses</option>
+                <option value="run_completed">Completed</option>
+                <option value="run_failed">Failed</option>
+                <option value="run_rate_limited">Rate Limited</option>
+            </select>
+            <button class="btn blue" id="runs-search-btn" type="button">Search</button>
+        </div>
+        <div id="runs-pane" class="agent-grid"></div>
+    </div>
+</details>
 <div id="agent-steps-modal" class="modal-backdrop" hidden>
     <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="agent-steps-modal-title">
         <div class="modal-head">
