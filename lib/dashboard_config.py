@@ -17,7 +17,7 @@ DEFAULTS: dict[str, Any] = {
     "auto_refresh": False,
     "refresh_seconds": 5,
     "hot_loop_idle_seconds": 5,
-    "agent_max_steps": 100,
+    "agent_max_steps": 20,
     "launch_on_expand": True,
     "default_ttyd_height_vh": 70,
     "default_ttyd_min_height_px": 200,
@@ -39,6 +39,7 @@ DEFAULTS: dict[str, Any] = {
     "show_body_launch": False,
     "show_body_stop": False,
     "show_body_kill": False,
+    "show_body_send_bar": False,
     "show_body_hot_buttons": True,
     "show_hot_loop_toggles": True,
 }

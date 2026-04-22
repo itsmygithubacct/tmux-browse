@@ -167,7 +167,7 @@ whole file through the same rules the dashboard uses. Booleans accept common
 string forms such as `true`, `false`, `on`, and `off`.
 
 ```bash
-tb config set agent_max_steps 100
+tb config set agent_max_steps 20
 tb config set auto_refresh true
 ```
 
@@ -418,7 +418,7 @@ inventing its own shell protocol. It cannot call `tb agent`, `tb attach`, or
 
 Useful flags:
 
-- `--steps N` limits the number of tool/action rounds (default: `tb config get agent_max_steps`, initially 100)
+- `--steps N` limits the number of tool/action rounds (default: `tb config get agent_max_steps`, initially 20)
 - `--timeout SEC` sets the per-request provider timeout (default 90)
 
 Shared flags such as `--json`, `--quiet`, and `--no-header` work before or

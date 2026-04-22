@@ -10,7 +10,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     auto_refresh: false,
     refresh_seconds: 5,
     hot_loop_idle_seconds: 5,
-    agent_max_steps: 100,
+    agent_max_steps: 20,
     launch_on_expand: true,
     default_ttyd_height_vh: 70,
     default_ttyd_min_height_px: 200,
@@ -32,6 +32,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_body_launch: false,
     show_body_stop: false,
     show_body_kill: false,
+    show_body_send_bar: false,
     show_body_hot_buttons: true,
     show_hot_loop_toggles: true,
 };
@@ -224,6 +225,7 @@ function configFieldMap() {
         show_body_launch: document.getElementById("cfg-show-body-launch"),
         show_body_stop: document.getElementById("cfg-show-body-stop"),
         show_body_kill: document.getElementById("cfg-show-body-kill"),
+        show_body_send_bar: document.getElementById("cfg-show-body-send-bar"),
         show_body_hot_buttons: document.getElementById("cfg-show-body-hot-buttons"),
         show_hot_loop_toggles: document.getElementById("cfg-show-hot-loop-toggles"),
         show_footer: document.getElementById("cfg-show-footer"),
@@ -569,6 +571,41 @@ function updateTopbarStatus() {
     setVisible(node, cfg.show_topbar_status);
 }
 
+const SUMMARY_TOGGLE_KEYS = [
+    "show_attached_badge", "show_window_badge", "show_port_badge",
+    "show_idle_text", "show_idle_alert_button", "show_summary_open",
+    "show_summary_log", "show_summary_scroll", "show_summary_split",
+    "show_summary_hide", "show_summary_reorder",
+];
+const BODY_TOGGLE_KEYS = [
+    "show_body_launch", "show_body_stop", "show_body_kill",
+    "show_body_send_bar", "show_body_hot_buttons", "show_hot_loop_toggles",
+    "show_footer", "show_inline_messages", "show_topbar_status",
+];
+
+function toggleAllSection(keys, btn) {
+    const fields = configFieldMap();
+    const allOn = keys.every((k) => fields[k] && fields[k].checked);
+    const target = !allOn;
+    for (const k of keys) {
+        if (fields[k]) fields[k].checked = target;
+    }
+    btn.textContent = target ? "All Off" : "All On";
+    previewDashboardConfig();
+}
+
+function updateToggleAllButtons() {
+    const fields = configFieldMap();
+    const summaryBtn = document.getElementById("cfg-toggle-all-summary");
+    const bodyBtn = document.getElementById("cfg-toggle-all-body");
+    if (summaryBtn) {
+        summaryBtn.textContent = SUMMARY_TOGGLE_KEYS.every((k) => fields[k] && fields[k].checked) ? "All Off" : "All On";
+    }
+    if (bodyBtn) {
+        bodyBtn.textContent = BODY_TOGGLE_KEYS.every((k) => fields[k] && fields[k].checked) ? "All Off" : "All On";
+    }
+}
+
 function renderConfigForm() {
     const cfg = state.config;
     const fields = configFieldMap();
@@ -577,6 +614,7 @@ function renderConfigForm() {
         if (input.type === "checkbox") input.checked = !!cfg[key];
         else input.value = cfg[key];
     }
+    updateToggleAllButtons();
 }
 
 function readConfigForm() {
@@ -631,6 +669,7 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.launchBtn, cfg.show_body_launch, "");
     setVisible(rec.stopBtn, cfg.show_body_stop, "");
     setVisible(rec.killBtn, cfg.show_body_kill, "");
+    setVisible(rec.sendBar, cfg.show_body_send_bar, "flex");
     setVisible(rec.hotManageBtn, cfg.show_body_hot_buttons, "");
     setVisible(rec.msg, cfg.show_inline_messages, "");
     setVisible(rec.footer, cfg.show_footer, "flex");
@@ -706,6 +745,7 @@ function resetDashboardConfig() {
 function previewDashboardConfig() {
     state.config = readConfigForm();
     applyDashboardConfig();
+    updateToggleAllButtons();
     setConfigStatus("previewing unsaved config", "dim");
 }
 
@@ -809,6 +849,13 @@ async function launch(session) {
     if (iframe) iframe.src = url;
     if (msg) { msg.textContent = r.already ? "attached" : "launched"; msg.className = "inline-msg ok"; }
     state.openPanes.add(session);
+}
+
+async function sendToPane(session, inputEl) {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    const r = await api("POST", "/api/session/type", { session, text });
+    if (r.ok) inputEl.value = "";
 }
 
 async function openRawTtyd() {
@@ -1648,11 +1695,19 @@ function createPane(s) {
     });
     const iframeWrap = el("div", { class: "ttyd-resize-wrap" }, iframe);
 
+    const sendInput = el("input", {
+        type: "text", class: "send-bar-input",
+        placeholder: `Send to ${s.name}...`,
+    });
+    const sendBtn = el("button", { class: "btn green", onclick: () => sendToPane(s.name, sendInput) }, "Send");
+    sendInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendToPane(s.name, sendInput); });
+    const sendBar = el("div", { class: "send-bar" }, sendInput, sendBtn);
+
     const fPort = el("span"), fPid = el("span"), fCreated = el("span");
     const footer = el("div", { class: "pane-footer" }, fPort, fPid, fCreated);
 
     const details = el("details", { class: "session", "data-session": s.name },
-        summary, el("div", { class: "pane-body" }, actions, iframeWrap, footer),
+        summary, el("div", { class: "pane-body" }, actions, iframeWrap, sendBar, footer),
     );
 
     details.addEventListener("toggle", () => {
@@ -1701,7 +1756,7 @@ function createPane(s) {
         summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
-        iframe, iframeWrap, fPort, fPid, fCreated, footer,
+        iframe, iframeWrap, sendBar, fPort, fPid, fCreated, footer,
         hotPairs,
     };
 }
@@ -1930,6 +1985,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("cfg-save-btn").addEventListener("click", saveDashboardConfig);
     document.getElementById("cfg-load-btn").addEventListener("click", reloadDashboardConfig);
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);
+    document.getElementById("cfg-toggle-all-summary").addEventListener("click", (e) => toggleAllSection(SUMMARY_TOGGLE_KEYS, e.currentTarget));
+    document.getElementById("cfg-toggle-all-body").addEventListener("click", (e) => toggleAllSection(BODY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-sound-test").addEventListener("click", () => {
         primeAudio();
         playIdleTone(document.getElementById("cfg-idle-sound").value);

@@ -88,7 +88,7 @@ def _parse_repl(argv: list[str]) -> argparse.Namespace:
 
 
 def _default_agent_steps() -> int:
-    return max(1, int(dashboard_config.load().get("agent_max_steps", 100)))
+    return max(1, int(dashboard_config.load().get("agent_max_steps", 20)))
 
 
 def _run_steps(value: int | None) -> int:
