@@ -126,6 +126,7 @@ class AnthropicMessagesShapeTests(unittest.TestCase):
         captured = {}
 
         def fake_urlopen(req, timeout):
+            captured["url"] = req.full_url
             captured["body"] = json.loads(req.data.decode())
             return _FakeResp(json.dumps({
                 "content": [{"type": "text", "text": "pong"}]
@@ -142,9 +143,28 @@ class AnthropicMessagesShapeTests(unittest.TestCase):
             )
         self.assertEqual(out, "pong")
         # system rolled into payload["system"], not messages
+        self.assertEqual(captured["url"], "https://a/v1/messages")
         self.assertEqual(captured["body"]["system"], "be helpful")
         self.assertEqual(captured["body"]["messages"],
                          [{"role": "user", "content": "hi"}])
+
+    def test_base_url_without_v1_gets_messages_under_v1(self):
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["url"] = req.full_url
+            return _FakeResp(json.dumps({
+                "content": [{"type": "text", "text": "pong"}]
+            }).encode())
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            out = ap.anthropic_messages(
+                {"model": "m", "api_key": "k", "base_url": "https://api.kimi.com/coding"},
+                [{"role": "user", "content": "hi"}],
+                timeout=1.0,
+            )
+        self.assertEqual(out, "pong")
+        self.assertEqual(captured["url"], "https://api.kimi.com/coding/v1/messages")
 
     def test_invalid_role_raises_usage_error(self):
         with mock.patch("urllib.request.urlopen"):

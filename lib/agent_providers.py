@@ -68,6 +68,13 @@ def _text_from_anthropic_content(content: Any) -> str:
     return _text_from_openai_content(content)
 
 
+def _anthropic_messages_url(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}/messages"
+    return f"{base}/v1/messages"
+
+
 def openai_chat(agent: dict[str, Any], messages: list[dict[str, str]],
                 timeout: float) -> str:
     base_url = agent["base_url"].rstrip("/")
@@ -115,7 +122,7 @@ def anthropic_messages(agent: dict[str, Any], messages: list[dict[str, str]],
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
     }
-    data = _post_json(f"{base_url}/messages", headers, payload, timeout=timeout)
+    data = _post_json(_anthropic_messages_url(base_url), headers, payload, timeout=timeout)
     try:
         return _text_from_anthropic_content(data["content"])
     except KeyError as e:
