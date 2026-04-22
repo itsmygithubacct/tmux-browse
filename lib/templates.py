@@ -50,6 +50,10 @@ def render_index() -> str:
                     <span>Hot loop idle wait seconds</span>
                     <input type="number" id="cfg-hot-loop-idle-seconds" min="1" max="3600" step="1" />
                 </label>
+                <label class="field">
+                    <span>Default agent step budget</span>
+                    <input type="number" id="cfg-agent-max-steps" min="1" max="1000" step="1" />
+                </label>
                 <label class="check-row">
                     <input type="checkbox" id="cfg-launch-on-expand" />
                     <span>Launch ttyd when a pane opens</span>

@@ -217,6 +217,7 @@ It covers:
 
 - Auto-refresh enable/seconds
 - Hot-loop idle wait seconds
+- Default agent step budget
 - Launch-on-expand behavior
 - Default ttyd iframe height and min height
 - Agent setup: load a built-in preset or existing agent, edit provider/model/
@@ -228,7 +229,9 @@ Use **Save Config** to write the file, **Load From File** to discard unsaved
 changes and reload it, and **Defaults** to preview the built-in defaults
 before saving them. Agent actions are separate: **Save Agent**, **Reload
 Agents**, and **Remove Agent** write `~/.tmux-browse/agents.json` plus the
-private `~/.tmux-browse/agent-secrets.json` secret store.
+private `~/.tmux-browse/agent-secrets.json` secret store. The same
+dashboard config file can now also be inspected and edited from the CLI via
+`tb config show|get|set|reset`.
 
 ## Hidden section
 

@@ -138,6 +138,48 @@ probe.
 tb exists work && tb exec work -- ./run_tests.sh
 ```
 
+### Config
+
+#### `tb config [show]`
+
+Prints the current dashboard config from
+`~/.tmux-browse/dashboard-config.json`. In plain mode it renders a two-column
+table; in `--json` mode it emits `{path, config}`.
+
+```bash
+tb config
+tb config --json
+```
+
+#### `tb config get <key>`
+
+Prints one config value. Useful in shell scripts and for checking the current
+agent step budget.
+
+```bash
+tb config get agent_max_steps
+```
+
+#### `tb config set <key> <value>`
+
+Updates one key in `dashboard-config.json`, then normalizes and persists the
+whole file through the same rules the dashboard uses. Booleans accept common
+string forms such as `true`, `false`, `on`, and `off`.
+
+```bash
+tb config set agent_max_steps 100
+tb config set auto_refresh true
+```
+
+#### `tb config reset`
+
+Writes the built-in dashboard defaults back to
+`~/.tmux-browse/dashboard-config.json`.
+
+```bash
+tb config reset
+```
+
 ### Write
 
 #### `tb send <target> <text...>`

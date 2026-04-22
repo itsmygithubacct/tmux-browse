@@ -17,6 +17,7 @@ DEFAULTS: dict[str, Any] = {
     "auto_refresh": False,
     "refresh_seconds": 5,
     "hot_loop_idle_seconds": 5,
+    "agent_max_steps": 100,
     "launch_on_expand": True,
     "default_ttyd_height_vh": 70,
     "default_ttyd_min_height_px": 200,
@@ -49,6 +50,7 @@ _BOOL_KEYS = {
 _INT_RANGES = {
     "refresh_seconds": (1, 300),
     "hot_loop_idle_seconds": (1, 3600),
+    "agent_max_steps": (1, 1000),
     "default_ttyd_height_vh": (20, 95),
     "default_ttyd_min_height_px": (120, 900),
 }
