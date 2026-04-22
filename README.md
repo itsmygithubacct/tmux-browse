@@ -59,6 +59,38 @@ python3 tmux_browse.py serve
 Then open `http://localhost:8096/` on the same machine. The dashboard is most
 useful once at least one tmux session exists.
 
+## Drive an agent from the terminal, watch it in the browser
+
+![Driving a coding agent from one pane, output in another](tmux_browse_2.png)
+
+Because `tb` exposes tmux as a CLI, an agent can use it as a tool: you run
+the agent in one session and tell it to drive a coding session (claude,
+codex, aider, …) in another, pinning the build/test output to a third.
+Each session is its own pane in the dashboard, so you watch the whole
+pipeline from a second monitor or your phone.
+
+```bash
+# Three sessions: the agent, the coding session it drives, the output pane
+tb new agent
+tb new coder
+tb new website_terminal
+
+# Start a coding agent in "coder" and a long-running build in "website_terminal"
+tb type coder "claude"
+tb type website_terminal "npm run dev"
+
+# Kick off the orchestrating agent and give it the targets as instructions
+tb type agent "gpt"
+tb type agent "drive 'coder' to add a /health endpoint; surface build output in 'website_terminal'"
+```
+
+The agent uses `tb type coder "..."` to prompt the coding session and
+`tb capture website_terminal` to read back what the build produced —
+everything stays visible in the dashboard the whole time.
+
+See [docs/recipes.md](docs/recipes.md) for the full LLM tool-use pattern
+(`snapshot` → `exec` + `wait` → `capture`).
+
 ## Same sessions, any device on your LAN
 
 The dashboard binds `0.0.0.0` by default, so every terminal you see in the
