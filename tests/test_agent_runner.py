@@ -32,7 +32,9 @@ class ExtractJsonTests(unittest.TestCase):
             "Here's what I found in the panes.",
             '{"type":"final","message":"done"}',
         ])
-        with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=lambda *a, **k: next(replies)):
+        with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=lambda *a, **k: next(replies)), mock.patch(
+            "lib.agent_runner.agent_logs.append_entry",
+        ) as append_entry:
             result = agent_runner.run_agent(
                 {"name": "minimax", "model": "MiniMax-M2.7", "wire_api": "openai-chat"},
                 "check panes",
@@ -43,6 +45,23 @@ class ExtractJsonTests(unittest.TestCase):
         self.assertEqual(result["message"], "done")
         self.assertEqual(result["steps"], 2)
         self.assertIn("parse_error", result["transcript"][0])
+        append_entry.assert_called_once()
+        self.assertEqual(append_entry.call_args.args[0], "minimax")
+
+    def test_logs_error_run(self):
+        with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=UsageError("bad response")), mock.patch(
+            "lib.agent_runner.agent_logs.append_entry",
+        ) as append_entry:
+            with self.assertRaises(UsageError):
+                agent_runner.run_agent(
+                    {"name": "gpt", "model": "gpt-5.4", "wire_api": "openai-chat"},
+                    "check panes",
+                    repo_root=Path("/tmp"),
+                    max_steps=3,
+                    request_timeout=1.0,
+                )
+        self.assertEqual(append_entry.call_args.args[0], "gpt")
+        self.assertEqual(append_entry.call_args.args[1]["status"], "error")
 
 
 if __name__ == "__main__":

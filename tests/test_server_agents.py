@@ -29,8 +29,12 @@ class AgentRouteTableTests(unittest.TestCase):
 
     def test_routes_are_registered(self):
         self.assertIn("/api/agents", server.Handler._GET_ROUTES)
+        self.assertIn("/api/agent-log", server.Handler._GET_ROUTES)
+        self.assertIn("/api/agent-workflows", server.Handler._GET_ROUTES)
         self.assertIn("/api/agents", server.Handler._POST_ROUTES)
         self.assertIn("/api/agents/remove", server.Handler._POST_ROUTES)
+        self.assertIn("/api/agent-workflows", server.Handler._POST_ROUTES)
+        self.assertIn("/api/agent-conversation", server.Handler._POST_ROUTES)
 
 
 class AgentHandlerTests(unittest.TestCase):
@@ -55,6 +59,30 @@ class AgentHandlerTests(unittest.TestCase):
         self.assertNotIn("api_key", fake.payload["agents"][0])
         self.assertEqual(fake.payload["defaults"][0]["label"], "OpenAI GPT")
         self.assertEqual(fake.payload["paths"]["agents"], "/tmp/agents.json")
+
+    def test_agent_log_returns_plain_text(self):
+        fake = _FakeHandler()
+        fake.text = None
+        fake.text_status = None
+
+        def send_text(text, status=200):
+            fake.text = text
+            fake.text_status = status
+
+        fake._send_text = send_text
+        with mock.patch("lib.server.agent_logs.render_text", return_value="hello\n"):
+            server.Handler._h_agent_log(fake, urlparse("/api/agent-log?name=gpt"))
+        self.assertEqual(fake.text_status, 200)
+        self.assertEqual(fake.text, "hello\n")
+
+    def test_agent_workflows_get_returns_config(self):
+        fake = _FakeHandler()
+        with mock.patch("lib.server.agent_workflows.load", return_value={"agents": {}}), mock.patch(
+            "lib.server.config.AGENT_WORKFLOWS_FILE", Path("/tmp/agent-workflows.json"),
+        ):
+            server.Handler._h_agent_workflows_get(fake, urlparse("/api/agent-workflows"))
+        self.assertEqual(fake.status, 200)
+        self.assertEqual(fake.payload["path"], "/tmp/agent-workflows.json")
 
     def test_agents_post_saves_agent(self):
         fake = _FakeHandler()
@@ -104,6 +132,31 @@ class AgentHandlerTests(unittest.TestCase):
         self.assertEqual(fake.status, 200)
         self.assertTrue(fake.payload["removed"])
         remove_agent.assert_called_once_with("gpt")
+
+    def test_agent_workflows_post_saves(self):
+        fake = _FakeHandler()
+        with mock.patch("lib.server.agent_workflows.save", return_value={"agents": {"gpt": {"enabled": True, "workflows": []}}}), mock.patch(
+            "lib.server.config.AGENT_WORKFLOWS_FILE", Path("/tmp/agent-workflows.json"),
+        ):
+            server.Handler._h_agent_workflows_post(fake, urlparse("/api/agent-workflows"), {"config": {"agents": {}}})
+        self.assertEqual(fake.status, 200)
+        self.assertTrue(fake.payload["config"]["agents"]["gpt"]["enabled"])
+
+    def test_agent_conversation_open_creates_session_and_ttyd(self):
+        fake = _FakeHandler()
+        fake.server = type("S", (), {"tls_paths": None, "ttyd_bind_addr": "127.0.0.1"})()
+        with mock.patch("lib.server.agent_store.get_agent", return_value={"name": "gpt"}), mock.patch(
+            "lib.server.sessions.exists", return_value=False,
+        ), mock.patch(
+            "lib.server.sessions.new_session", return_value=(True, ""),
+        ) as new_session, mock.patch(
+            "lib.server.ttyd.start",
+            return_value={"ok": True, "port": 7777, "scheme": "http", "already": False},
+        ):
+            server.Handler._h_agent_conversation_open(fake, urlparse("/api/agent-conversation"), {"name": "gpt"})
+        self.assertEqual(fake.status, 200)
+        self.assertEqual(fake.payload["session"], "agent-repl-gpt")
+        new_session.assert_called_once()
 
     def test_agents_get_maps_state_error_to_json_500(self):
         fake = _FakeHandler()

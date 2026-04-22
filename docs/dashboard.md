@@ -233,6 +233,22 @@ private `~/.tmux-browse/agent-secrets.json` secret store. The same
 dashboard config file can now also be inspected and edited from the CLI via
 `tb config show|get|set|reset`.
 
+## Agents section
+
+When one or more agents exist, the dashboard also shows a furled **Agents**
+pane. Each configured agent gets:
+
+- a **Log** button that opens the persisted agent action log
+- a **Start REPL** / **Open REPL** button that creates or reuses a tmux
+  conversation session named `agent-repl-<agent>` and opens its ttyd
+
+Those conversation sessions still appear in the main session grid like any
+other tmux session. When a session is in conversation mode, its expanded pane
+adds a **Workflows** button and a workflow on/off switch. Workflows are
+scheduled prompts saved server-side in `~/.tmux-browse/agent-workflows.json`;
+when enabled, the browser sends those prompts into the REPL pane on their
+configured intervals.
+
 ## Hidden section
 
 A furled `<details>` at the bottom labelled **Hidden (N)**. Entries reorder
@@ -253,6 +269,8 @@ dropped from the hidden set.
 - Dashboard config lives at `~/.tmux-browse/dashboard-config.json`.
 - Agent metadata lives at `~/.tmux-browse/agents.json`.
 - Agent API keys live at `~/.tmux-browse/agent-secrets.json`.
+- Agent action logs live under `~/.tmux-browse/agent-logs/`.
+- Agent workflow schedules live at `~/.tmux-browse/agent-workflows.json`.
 
 A session keeps its port forever, or until you explicitly drop it via
 `tmux-browse ports --prune` (for sessions that no longer exist).
@@ -269,6 +287,8 @@ All JSON responses use a stable `{ok, …}` envelope.
 | GET    | `/api/ports`        | — | `{ok, assignments: {name: port}}` |
 | GET    | `/api/dashboard-config` | — | `{ok, path, config}` |
 | GET    | `/api/agents`       | — | `{ok, agents, defaults, paths}` |
+| GET    | `/api/agent-log`    | `?name=AGENT&limit=N` | `text/plain` formatted agent action log |
+| GET    | `/api/agent-workflows` | — | `{ok, path, config}` |
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
 | GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
 | POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
@@ -277,6 +297,8 @@ All JSON responses use a stable `{ok, …}` envelope.
 | POST   | `/api/dashboard-config` | `{config}` | `{ok, path, config}` |
 | POST   | `/api/agents`       | `{agent: {name, provider, model, base_url, wire_api, api_key?}}` | `{ok, agent}` |
 | POST   | `/api/agents/remove` | `{name}` | `{ok, removed, name}` |
+| POST   | `/api/agent-workflows` | `{config}` | `{ok, path, config}` |
+| POST   | `/api/agent-conversation` | `{name}` | `{ok, agent, session, port, scheme, already}` |
 | POST   | `/api/session/new`  | `{name}` | `{ok, name}` |
 | POST   | `/api/session/kill` | `{session}` | `{ok}` — also stops the ttyd |
 | POST   | `/api/session/scroll` | `{session}` | `{ok}` — equivalent to `C-b [` |

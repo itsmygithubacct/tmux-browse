@@ -393,6 +393,15 @@ Lists configured agents without printing their API keys.
 
 Deletes the stored metadata and secret for that agent.
 
+#### `tb agent repl <name>`
+
+Starts an interactive conversation-mode REPL for the named agent. Each line
+you enter is run through the same `tb`-only agent loop used by one-shot
+invocations, and every run is appended to that agent's log under
+`~/.tmux-browse/agent-logs/`.
+
+This is the command the dashboard uses for conversation-mode ttyd sessions.
+
 #### `tb agent <name> <prompt...>`
 
 Runs the named model in a small plan/act loop where its only tool surface is
@@ -409,7 +418,7 @@ inventing its own shell protocol. It cannot call `tb agent`, `tb attach`, or
 
 Useful flags:
 
-- `--steps N` limits the number of tool/action rounds (default 12)
+- `--steps N` limits the number of tool/action rounds (default: `tb config get agent_max_steps`, initially 100)
 - `--timeout SEC` sets the per-request provider timeout (default 90)
 
 Shared flags such as `--json`, `--quiet`, and `--no-header` work before or
