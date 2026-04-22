@@ -4,6 +4,7 @@ const ORDER_KEY  = "tmux-browse:order";
 const LAYOUT_KEY = "tmux-browse:layout";
 const HOT_KEY    = "tmux-browse:hot-buttons";
 const IDLE_KEY   = "tmux-browse:idle-alerts";
+const AGENT_CONVERSATION_PREFIX = "agent-repl-";
 const IDLE_SOUND_CHOICES = ["beep", "chime", "knock", "bell", "blip", "ding"];
 const DASHBOARD_CONFIG_DEFAULTS = {
     auto_refresh: false,
@@ -81,6 +82,31 @@ function normalizeIdleAlert(value) {
     };
 }
 
+function normalizeWorkflowSlot(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    const interval = Number(raw.interval_seconds);
+    return {
+        name: typeof raw.name === "string" ? raw.name.trim() : "",
+        prompt: typeof raw.prompt === "string" ? raw.prompt.trim() : "",
+        interval_seconds: Number.isFinite(interval) ? Math.max(5, Math.min(86400, Math.floor(interval))) : 300,
+    };
+}
+
+function normalizeAgentWorkflowConfig(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    const agents = raw.agents && typeof raw.agents === "object" ? raw.agents : {};
+    const out = { agents: {} };
+    for (const [name, spec] of Object.entries(agents)) {
+        const workflows = Array.isArray(spec && spec.workflows) ? spec.workflows.slice(0, 8) : [];
+        while (workflows.length < 8) workflows.push({ name: "", prompt: "", interval_seconds: 300 });
+        out.agents[name] = {
+            enabled: !!(spec && spec.enabled),
+            workflows: workflows.map(normalizeWorkflowSlot),
+        };
+    }
+    return out;
+}
+
 function normalizeDashboardConfig(value) {
     const raw = value && typeof value === "object" ? value : {};
     const cfg = { ...DASHBOARD_CONFIG_DEFAULTS };
@@ -122,6 +148,12 @@ const state = {
     idleRuntime: {},
     idleEditor: { open: false, session: "" },
     splitPicker: { open: false, session: "", filter: "" },
+    workflowEditor: { open: false, agent: "", slot: 0 },
+    workflowConfig: normalizeAgentWorkflowConfig({}),
+    workflowPath: "",
+    workflowRuntime: {},
+    workflowTimer: null,
+    workflowBusy: false,
     audioCtx: null,
     hotLoops: {},
     agents: [],
@@ -164,7 +196,7 @@ function stopSummaryToggle(e) {
 }
 
 function syncModalChrome() {
-    const open = state.hotEditor.open || state.idleEditor.open || state.splitPicker.open;
+    const open = state.hotEditor.open || state.idleEditor.open || state.splitPicker.open || state.workflowEditor.open;
     document.body.style.overflow = open ? "hidden" : "";
 }
 
@@ -239,6 +271,61 @@ function agentSummaryText() {
     else bits.push("configured: none");
     if (state.agentPaths.agents) bits.push(state.agentPaths.agents);
     return bits.join(" · ");
+}
+
+function conversationSessionName(agentName) {
+    return AGENT_CONVERSATION_PREFIX + (agentName || "").trim().toLowerCase();
+}
+
+function workflowEntry(agentName) {
+    const name = (agentName || "").trim().toLowerCase();
+    if (!state.workflowConfig.agents[name]) {
+        state.workflowConfig.agents[name] = {
+            enabled: false,
+            workflows: Array.from({ length: 8 }, () => ({ name: "", prompt: "", interval_seconds: 300 })),
+        };
+    }
+    return state.workflowConfig.agents[name];
+}
+
+function renderAgentsPane() {
+    const wrap = document.getElementById("agents-wrap");
+    const count = document.getElementById("agents-count");
+    const root = document.getElementById("agents-pane");
+    if (!wrap || !count || !root) return;
+    count.textContent = String(state.agents.length);
+    wrap.hidden = state.agents.length === 0;
+    root.innerHTML = "";
+    for (const row of state.agents) {
+        const sessionName = conversationSessionName(row.name);
+        const live = state.sessions.find((s) => s.name === sessionName);
+        root.append(el("section", { class: "agent-card" },
+            el("div", { class: "agent-card-head" },
+                el("div", {},
+                    el("div", { class: "agent-card-title" }, row.name),
+                    el("div", { class: "dim agent-card-meta" }, `${row.provider || "custom"} · ${row.model || "no model"}`),
+                ),
+                el("div", { class: "agent-card-actions" },
+                    el("a", {
+                        class: "btn",
+                        target: "_blank",
+                        rel: "noopener",
+                        href: `/api/agent-log?name=${encodeURIComponent(row.name)}`,
+                    }, "Log"),
+                    el("button", {
+                        class: "btn green",
+                        type: "button",
+                        onclick: () => openAgentConversation(row.name),
+                    }, live ? "Open REPL" : "Start REPL"),
+                ),
+            ),
+            el("div", { class: "dim agent-card-meta" },
+                live
+                    ? `conversation session ${sessionName} is live on port ${live.port || "—"}`
+                    : `conversation session ${sessionName} is not running`,
+            ),
+        ));
+    }
 }
 
 function renderAgentSummary() {
@@ -383,7 +470,42 @@ async function loadAgents(selectedName = "") {
     } else {
         enforceAgentConstraint();
     }
+    renderAgentsPane();
     return true;
+}
+
+async function loadAgentWorkflows(showStatus = false) {
+    const r = await api("GET", "/api/agent-workflows");
+    if (!r.ok) {
+        if (showStatus) setAgentStatus("error loading workflows: " + (r.error || "unknown"), "err");
+        return false;
+    }
+    state.workflowConfig = normalizeAgentWorkflowConfig(r.config);
+    state.workflowPath = r.path || "";
+    scheduleWorkflowLoop();
+    return true;
+}
+
+async function saveAgentWorkflows(showStatus = false) {
+    const r = await api("POST", "/api/agent-workflows", { config: state.workflowConfig });
+    if (!r.ok) {
+        if (showStatus) setAgentStatus("error saving workflows: " + (r.error || "unknown"), "err");
+        return false;
+    }
+    state.workflowConfig = normalizeAgentWorkflowConfig(r.config);
+    state.workflowPath = r.path || "";
+    scheduleWorkflowLoop();
+    return true;
+}
+
+async function openAgentConversation(name) {
+    const r = await api("POST", "/api/agent-conversation", { name });
+    if (!r.ok) {
+        setAgentStatus("error opening conversation mode: " + (r.error || "unknown"), "err");
+        return;
+    }
+    await refresh();
+    window.open(ttydUrl(r.port), "_blank", "noopener");
 }
 
 function readAgentForm() {
@@ -471,6 +593,27 @@ function scheduleRefreshLoop() {
     state.refreshTimer = null;
     if (!state.config.auto_refresh) return;
     state.refreshTimer = setInterval(refresh, state.config.refresh_seconds * 1000);
+}
+
+function scheduleWorkflowLoop() {
+    if (state.workflowTimer) clearInterval(state.workflowTimer);
+    state.workflowTimer = setInterval(workflowTick, 5000);
+}
+
+async function workflowTick() {
+    if (state.workflowBusy) return;
+    const hasEnabled = Object.values(state.workflowConfig.agents || {}).some((row) => row && row.enabled);
+    if (!hasEnabled) return;
+    state.workflowBusy = true;
+    try {
+        const r = await api("GET", "/api/sessions");
+        if (!r.ok) return;
+        state.sessions = Array.isArray(r.sessions) ? r.sessions : [];
+        renderAgentsPane();
+        await checkAgentWorkflows(state.sessions);
+    } finally {
+        state.workflowBusy = false;
+    }
 }
 
 function applyDashboardConfigToPane(rec) {
@@ -1059,6 +1202,117 @@ function closeHotButtons() {
     syncModalChrome();
 }
 
+function renderWorkflowEditor() {
+    const agent = state.workflowEditor.agent;
+    const slot = state.workflowEditor.slot;
+    const entry = workflowEntry(agent);
+    const slots = entry.workflows;
+    const title = document.getElementById("workflow-modal-title");
+    const list = document.getElementById("workflow-slot-list");
+    const row = slots[slot] || { name: "", prompt: "", interval_seconds: 300 };
+    title.textContent = `Agent Workflows · ${agent}`;
+    document.getElementById("workflow-name").value = row.name;
+    document.getElementById("workflow-prompt").value = row.prompt;
+    document.getElementById("workflow-interval").value = row.interval_seconds;
+    list.textContent = "";
+    slots.forEach((workflow, idx) => {
+        const present = !!workflow.prompt.trim();
+        list.append(el("button", {
+            class: idx === slot ? "hot-slot-item active" : "hot-slot-item",
+            type: "button",
+            onclick: () => {
+                state.workflowEditor.slot = idx;
+                renderWorkflowEditor();
+            },
+        },
+        el("span", { class: "hot-slot-kicker" }, `Workflow ${idx + 1}`),
+        el("span", { class: "hot-slot-name" }, workflow.name || (present ? `Every ${workflow.interval_seconds}s` : "Empty slot")),
+        el("span", { class: "hot-slot-command" }, present ? workflow.prompt : "Create scheduled workflow"),
+        ));
+    });
+}
+
+function openWorkflowEditor(agentName, slot = 0) {
+    state.workflowEditor.open = true;
+    state.workflowEditor.agent = (agentName || "").trim().toLowerCase();
+    state.workflowEditor.slot = slot;
+    workflowEntry(state.workflowEditor.agent);
+    renderWorkflowEditor();
+    document.getElementById("workflow-modal").hidden = false;
+    syncModalChrome();
+}
+
+function closeWorkflowEditor() {
+    state.workflowEditor.open = false;
+    document.getElementById("workflow-modal").hidden = true;
+    syncModalChrome();
+}
+
+async function saveWorkflowEditor() {
+    const agent = state.workflowEditor.agent;
+    const slot = state.workflowEditor.slot;
+    const entry = workflowEntry(agent);
+    entry.workflows[slot] = normalizeWorkflowSlot({
+        name: document.getElementById("workflow-name").value,
+        prompt: document.getElementById("workflow-prompt").value,
+        interval_seconds: document.getElementById("workflow-interval").value,
+    });
+    await saveAgentWorkflows(true);
+    renderWorkflowEditor();
+    refresh();
+}
+
+async function clearWorkflowEditor() {
+    const agent = state.workflowEditor.agent;
+    const slot = state.workflowEditor.slot;
+    const entry = workflowEntry(agent);
+    entry.workflows[slot] = { name: "", prompt: "", interval_seconds: 300 };
+    await saveAgentWorkflows(true);
+    renderWorkflowEditor();
+    refresh();
+}
+
+async function toggleWorkflowEnabled(agentName) {
+    const entry = workflowEntry(agentName);
+    entry.enabled = !entry.enabled;
+    if (!entry.enabled) delete state.workflowRuntime[(agentName || "").trim().toLowerCase()];
+    await saveAgentWorkflows(true);
+    refresh();
+}
+
+async function checkAgentWorkflows(rows) {
+    const byName = new Map(rows.map((row) => [row.name, row]));
+    const now = Date.now();
+    for (const [agentName, spec] of Object.entries(state.workflowConfig.agents || {})) {
+        if (!spec.enabled) continue;
+        const session = conversationSessionName(agentName);
+        const row = byName.get(session);
+        if (!row || !row.conversation_mode) continue;
+        if ((row.idle_seconds || 0) < 3) continue;
+        const runtime = state.workflowRuntime[agentName] || {};
+        for (let idx = 0; idx < spec.workflows.length; idx += 1) {
+            const workflow = normalizeWorkflowSlot(spec.workflows[idx]);
+            if (!workflow.prompt.trim()) continue;
+            const last = runtime[idx] || 0;
+            if (now - last < workflow.interval_seconds * 1000) continue;
+            runtime[idx] = now;
+            state.workflowRuntime[agentName] = runtime;
+            const msg = document.getElementById("msg-" + cssId(session));
+            if (msg) {
+                msg.textContent = `running workflow ${idx + 1}…`;
+                msg.className = "inline-msg dim";
+            }
+            const r = await api("POST", "/api/session/type", { session, text: workflow.prompt });
+            if (msg) {
+                msg.textContent = r.ok
+                    ? `workflow ${idx + 1}: ${workflow.name || "sent"}`
+                    : ("error: " + (r.error || ""));
+                msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
+            }
+        }
+    }
+}
+
 function openSplitPicker(session) {
     state.splitPicker.open = true;
     state.splitPicker.session = session;
@@ -1350,6 +1604,19 @@ function createPane(s) {
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
     }, "Kill");
+    const workflowBtn = el("button", {
+        class: "btn blue", onclick: () => openWorkflowEditor(s.agent_name || ""),
+        title: "edit scheduled prompts for this conversation-mode agent pane",
+    }, "Workflows");
+    const workflowToggleInput = el("input", {
+        type: "checkbox",
+        onchange: () => toggleWorkflowEnabled(s.agent_name || ""),
+    });
+    const workflowToggleText = el("span", { class: "workflow-switch-text" }, "Workflows");
+    const workflowToggle = el("label", {
+        class: "workflow-switch",
+        title: "enable or disable scheduled workflow prompts for this agent conversation pane",
+    }, workflowToggleInput, el("span", { class: "workflow-switch-track" }, el("span", { class: "workflow-switch-thumb" })), workflowToggleText);
     const hotManageBtn = el("button", {
         class: "btn blue", onclick: () => openHotButtons(s.name),
         title: "edit the shared hot buttons that appear in every session pane",
@@ -1372,7 +1639,7 @@ function createPane(s) {
     const launchBtn = el("button", { class: "btn green", onclick: () => launch(s.name) }, "Launch");
     const stopBtn = el("button", { class: "btn orange", onclick: () => stopTtyd(s.name) }, "Stop ttyd");
     const actions = el("div", { class: "pane-actions" },
-        launchBtn, stopBtn, bodyKillBtn, msg, hotManageBtn, ...hotPairs.map((pair) => pair.wrap),
+        launchBtn, stopBtn, bodyKillBtn, workflowBtn, workflowToggle, msg, hotManageBtn, ...hotPairs.map((pair) => pair.wrap),
     );
 
     const iframe = el("iframe", {
@@ -1433,6 +1700,7 @@ function createPane(s) {
         details, sbadges, idle, idleWrap, idleAlertBtn,
         summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
+        workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
         iframe, iframeWrap, fPort, fPid, fCreated, footer,
         hotPairs,
     };
@@ -1488,6 +1756,12 @@ function updatePane(rec, s) {
     rec.fCreated.textContent = `created ${s.created_seconds_ago !== undefined
         ? fmtAgeSeconds(s.created_seconds_ago)
         : fmtAge(s.created)} ago`;
+    const workflow = s.agent_name ? workflowEntry(s.agent_name) : { enabled: false };
+    rec.workflowToggleInput.checked = !!workflow.enabled;
+    rec.workflowToggle.classList.toggle("is-on", !!workflow.enabled);
+    rec.workflowToggleText.textContent = workflow.enabled ? "Workflows On" : "Workflows Off";
+    setVisible(rec.workflowBtn, !!s.conversation_mode, "");
+    setVisible(rec.workflowToggle, !!s.conversation_mode, "inline-flex");
 
     // Iframe src: set it once when ttyd comes up AND pane is open;
     // never blow it away on refresh unless ttyd went down.
@@ -1601,6 +1875,7 @@ async function refresh() {
     state.sessions = sessions;
     checkIdleAlerts(sessions);
     await checkHotLoops(sessions);
+    await checkAgentWorkflows(sessions);
     const root = document.getElementById("sessions");
     const seen = new Set();
 
@@ -1642,6 +1917,7 @@ async function refresh() {
 
     document.getElementById("count").textContent =
         `${sessions.length} session${sessions.length === 1 ? "" : "s"}`;
+    renderAgentsPane();
     renderLayout();
     if (state.splitPicker.open) renderSplitPicker();
 }
@@ -1680,6 +1956,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("hot-close-btn").addEventListener("click", closeHotButtons);
     document.getElementById("hot-save-btn").addEventListener("click", saveHotButton);
     document.getElementById("hot-clear-btn").addEventListener("click", clearHotButton);
+    document.getElementById("workflow-close-btn").addEventListener("click", closeWorkflowEditor);
+    document.getElementById("workflow-save-btn").addEventListener("click", saveWorkflowEditor);
+    document.getElementById("workflow-clear-btn").addEventListener("click", clearWorkflowEditor);
     document.getElementById("idle-close-btn").addEventListener("click", closeIdleEditor);
     document.getElementById("idle-save-btn").addEventListener("click", saveIdleEditor);
     document.getElementById("idle-clear-btn").addEventListener("click", clearIdleEditor);
@@ -1690,6 +1969,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
     document.getElementById("hot-modal").addEventListener("click", (e) => {
         if (e.target.id === "hot-modal") closeHotButtons();
+    });
+    document.getElementById("workflow-modal").addEventListener("click", (e) => {
+        if (e.target.id === "workflow-modal") closeWorkflowEditor();
     });
     document.getElementById("idle-modal").addEventListener("click", (e) => {
         if (e.target.id === "idle-modal") closeIdleEditor();
@@ -1704,6 +1986,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.addEventListener("keydown", primeAudio);
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && state.hotEditor.open) closeHotButtons();
+        if (e.key === "Escape" && state.workflowEditor.open) closeWorkflowEditor();
         if (e.key === "Escape" && state.idleEditor.open) closeIdleEditor();
         if (e.key === "Escape" && state.splitPicker.open) closeSplitPicker();
     });
@@ -1712,6 +1995,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderAgentSelectors();
     await loadDashboardConfig();
     await loadAgents();
+    await loadAgentWorkflows();
     await refresh();
     scheduleRefreshLoop();
 });

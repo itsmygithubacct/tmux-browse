@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_providers
+from . import agent_logs, agent_providers
 from .errors import TmuxFailed, UsageError
 
 
@@ -108,7 +108,8 @@ def _run_tb_command(repo_root: Path, args: list[str], stdin_text: str | None) ->
 def run_agent(agent: dict[str, Any], prompt: str, *,
               repo_root: Path,
               max_steps: int = 100,
-              request_timeout: float = 90.0) -> dict[str, Any]:
+              request_timeout: float = 90.0,
+              origin: str = "cli") -> dict[str, Any]:
     if not prompt.strip():
         raise UsageError("missing agent prompt")
     messages = [
@@ -116,50 +117,72 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
         {"role": "user", "content": prompt.strip()},
     ]
     transcript: list[dict[str, Any]] = []
-    for step in range(1, max_steps + 1):
-        raw = agent_providers.complete(agent, messages, timeout=request_timeout)
-        try:
-            action = _extract_json(raw)
-        except UsageError as e:
-            transcript.append({"step": step, "model": raw, "parse_error": e.message})
-            messages.append({"role": "assistant", "content": raw})
+    try:
+        for step in range(1, max_steps + 1):
+            raw = agent_providers.complete(agent, messages, timeout=request_timeout)
+            try:
+                action = _extract_json(raw)
+            except UsageError as e:
+                transcript.append({"step": step, "model": raw, "parse_error": e.message})
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your previous response did not follow the required protocol. "
+                        "Respond again with JSON only, using exactly one object in one of the allowed shapes. "
+                        "Do not include prose, markdown fences, or <think> tags."
+                    ),
+                })
+                continue
+            transcript.append({"step": step, "model": raw, "action": action})
+            if action.get("type") == "final":
+                out = {
+                    "agent": agent["name"],
+                    "model": agent["model"],
+                    "steps": step,
+                    "message": str(action.get("message") or "").strip(),
+                    "transcript": transcript,
+                }
+                agent_logs.append_entry(agent["name"], {
+                    "origin": origin,
+                    "status": "ok",
+                    "prompt": prompt.strip(),
+                    "message": out["message"],
+                    "steps": step,
+                    "model": agent.get("model"),
+                    "transcript": transcript,
+                })
+                return out
+            if action.get("type") != "tool" or action.get("tool") != "tb_command":
+                raise UsageError("agent must return either a final action or a tb_command tool action")
+            tool_args = action.get("args")
+            if not isinstance(tool_args, list) or not all(isinstance(x, str) for x in tool_args):
+                raise UsageError("tb_command args must be a list of strings")
+            stdin_text = action.get("stdin")
+            if stdin_text is not None and not isinstance(stdin_text, str):
+                raise UsageError("tb_command stdin must be a string when present")
+            result = _run_tb_command(repo_root, tool_args, stdin_text)
+            tool_payload = {
+                "ok": result.ok,
+                "exit_code": result.exit_code,
+                "stdout": result.stdout[-12000:],
+                "stderr": result.stderr[-4000:],
+                "json": result.json_data,
+            }
+            transcript[-1]["tool_result"] = tool_payload
+            messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append({
                 "role": "user",
-                "content": (
-                    "Your previous response did not follow the required protocol. "
-                    "Respond again with JSON only, using exactly one object in one of the allowed shapes. "
-                    "Do not include prose, markdown fences, or <think> tags."
-                ),
+                "content": "Tool result for tb_command:\n" + json.dumps(tool_payload, ensure_ascii=True),
             })
-            continue
-        transcript.append({"step": step, "model": raw, "action": action})
-        if action.get("type") == "final":
-            return {
-                "agent": agent["name"],
-                "model": agent["model"],
-                "steps": step,
-                "message": str(action.get("message") or "").strip(),
-                "transcript": transcript,
-            }
-        if action.get("type") != "tool" or action.get("tool") != "tb_command":
-            raise UsageError("agent must return either a final action or a tb_command tool action")
-        tool_args = action.get("args")
-        if not isinstance(tool_args, list) or not all(isinstance(x, str) for x in tool_args):
-            raise UsageError("tb_command args must be a list of strings")
-        stdin_text = action.get("stdin")
-        if stdin_text is not None and not isinstance(stdin_text, str):
-            raise UsageError("tb_command stdin must be a string when present")
-        result = _run_tb_command(repo_root, tool_args, stdin_text)
-        tool_payload = {
-            "ok": result.ok,
-            "exit_code": result.exit_code,
-            "stdout": result.stdout[-12000:],
-            "stderr": result.stderr[-4000:],
-            "json": result.json_data,
-        }
-        messages.append({"role": "assistant", "content": json.dumps(action)})
-        messages.append({
-            "role": "user",
-            "content": "Tool result for tb_command:\n" + json.dumps(tool_payload, ensure_ascii=True),
+        raise TmuxFailed(f"agent exceeded max steps ({max_steps})")
+    except Exception as e:
+        agent_logs.append_entry(agent["name"], {
+            "origin": origin,
+            "status": "error",
+            "prompt": prompt.strip(),
+            "error": str(e),
+            "model": agent.get("model"),
+            "transcript": transcript,
         })
-    raise TmuxFailed(f"agent exceeded max steps ({max_steps})")
+        raise

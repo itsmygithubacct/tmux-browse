@@ -164,6 +164,12 @@ def render_index() -> str:
         </div>
     </div>
 </details>
+<details id="agents-wrap" class="config-pane" hidden>
+    <summary>Agents (<span id="agents-count">0</span>)</summary>
+    <div class="config-body">
+        <div id="agents-pane" class="agent-grid"></div>
+    </div>
+</details>
 <div id="hot-modal" class="modal-backdrop" hidden>
     <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="hot-modal-title">
         <div class="modal-head">
@@ -194,6 +200,41 @@ def render_index() -> str:
                 </div>
                 <div class="dim hot-editor-hint">
                     Edit from any pane. The same shared hot buttons appear in every session pane and send their command to that pane's active terminal. Loop count `0` means run forever; any positive number stops after that many idle-triggered sends.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="workflow-modal" class="modal-backdrop" hidden>
+    <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
+        <div class="modal-head">
+            <div>
+                <div class="modal-eyebrow">Conversation Mode</div>
+                <h2 id="workflow-modal-title">Agent Workflows</h2>
+            </div>
+            <button class="btn" id="workflow-close-btn" title="close the workflow editor">Close</button>
+        </div>
+        <div class="hot-editor-grid">
+            <div class="hot-slot-list" id="workflow-slot-list"></div>
+            <div class="hot-editor-form">
+                <label class="field">
+                    <span>Workflow name</span>
+                    <input type="text" id="workflow-name" maxlength="80" placeholder="Morning sweep" />
+                </label>
+                <label class="field">
+                    <span>Prompt</span>
+                    <textarea id="workflow-prompt" rows="6" placeholder="tell me what changed in the panes since the last run"></textarea>
+                </label>
+                <label class="field">
+                    <span>Run every seconds</span>
+                    <input type="number" id="workflow-interval" min="5" max="86400" step="5" value="300" />
+                </label>
+                <div class="hot-editor-actions">
+                    <button class="btn green" id="workflow-save-btn">Save</button>
+                    <button class="btn red" id="workflow-clear-btn">Clear</button>
+                </div>
+                <div class="dim hot-editor-hint">
+                    Workflows are saved server-side and run in the conversation REPL pane when the workflow switch is enabled. Each workflow sends its prompt into the agent REPL on its own interval.
                 </div>
             </div>
         </div>

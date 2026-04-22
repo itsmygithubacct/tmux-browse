@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import signal
 import sys
 import threading
@@ -16,7 +17,10 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
+    agent_logs,
     agent_store,
+    agent_runtime,
+    agent_workflows,
     auth,
     config,
     dashboard_config,
@@ -73,11 +77,16 @@ def _session_summary() -> list[dict]:
     """
     now = int(time.time())
     assignments = ports.all_assignments()
+    try:
+        configured_agents = {row["name"] for row in agent_store.list_agents()}
+    except TBError:
+        configured_agents = set()
     out: list[dict] = []
     for s in sessions.list_sessions():
         name = s["name"]
         port = assignments.get(name)
         pid = ttyd.read_pid(name)
+        agent_name = agent_runtime.agent_name_from_session(name)
         out.append({
             "name": name,
             "windows": s["windows"],
@@ -89,6 +98,8 @@ def _session_summary() -> list[dict]:
             "port": port,
             "pid": pid,
             "ttyd_running": pid is not None,
+            "conversation_mode": bool(agent_name and agent_name in configured_agents),
+            "agent_name": agent_name if agent_name in configured_agents else None,
         })
     return out
 
@@ -281,7 +292,35 @@ class Handler(BaseHTTPRequestHandler):
                 "paths": {
                     "agents": str(agent_store.AGENTS_FILE),
                     "secrets": str(agent_store.SECRETS_FILE),
+                    "logs": str(config.AGENT_LOG_DIR),
+                    "workflows": str(config.AGENT_WORKFLOWS_FILE),
                 },
+            })
+        except TBError as e:
+            self._send_tb_error(e)
+
+    def _h_agent_log(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        name = (query.get("name", [""])[0] or "").strip().lower()
+        try:
+            limit = int(query.get("limit", ["200"])[0])
+        except ValueError:
+            limit = 200
+        limit = max(1, min(limit, 1000))
+        if not name:
+            self._send_text("missing 'name' query parameter", status=400)
+            return
+        try:
+            self._send_text(agent_logs.render_text(name, limit=limit))
+        except TBError as e:
+            self._send_tb_error(e)
+
+    def _h_agent_workflows_get(self, _parsed: ParseResult) -> None:
+        try:
+            self._send_json({
+                "ok": True,
+                "config": agent_workflows.load(),
+                "path": str(config.AGENT_WORKFLOWS_FILE),
             })
         except TBError as e:
             self._send_tb_error(e)
@@ -410,6 +449,59 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True, "removed": removed, "name": name})
 
+    def _h_agent_workflows_post(self, _parsed: ParseResult, body: dict) -> None:
+        payload = body.get("config", body)
+        try:
+            saved = agent_workflows.save(payload)
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        self._send_json({
+            "ok": True,
+            "config": saved,
+            "path": str(config.AGENT_WORKFLOWS_FILE),
+        })
+
+    def _h_agent_conversation_open(self, _parsed: ParseResult, body: dict) -> None:
+        agent_name = (body.get("name") or "").strip().lower()
+        if not agent_name:
+            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
+            return
+        try:
+            agent_store.get_agent(agent_name)
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        session_name = agent_runtime.conversation_session_name(agent_name)
+        if not sessions.exists(session_name):
+            cmd = " ".join([
+                shlex.quote(sys.executable),
+                "-u",
+                shlex.quote(str(config.PROJECT_DIR / "tb.py")),
+                "agent",
+                "repl",
+                shlex.quote(agent_name),
+            ])
+            ok, err = sessions.new_session(session_name, cwd=str(config.PROJECT_DIR), cmd=cmd)
+            if not ok:
+                self._send_json({"ok": False, "error": err}, status=400)
+                return
+        tls_paths = getattr(self.server, "tls_paths", None)
+        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
+        ttyd_result = ttyd.start(session_name, tls_paths=tls_paths, bind_addr=bind_addr)
+        if not ttyd_result.get("ok"):
+            self._send_json(ttyd_result, status=400)
+            return
+        self._send_json({
+            "ok": True,
+            "agent": agent_name,
+            "session": session_name,
+            "port": ttyd_result.get("port"),
+            "scheme": ttyd_result.get("scheme", "http"),
+            "url": f"{ttyd_result.get('scheme', 'http')}://localhost:{ttyd_result.get('port')}/",
+            "already": ttyd_result.get("already", False),
+        })
+
     def _h_server_restart(self, _parsed: ParseResult, _body: dict) -> None:
         self._send_json({"ok": True, "restarting": True})
         threading.Thread(target=_restart_self, daemon=True).start()
@@ -464,6 +556,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/ports":              _h_ports,
         "/api/dashboard-config":   _h_dashboard_config_get,
         "/api/agents":             _h_agents_get,
+        "/api/agent-log":          _h_agent_log,
+        "/api/agent-workflows":    _h_agent_workflows_get,
         "/api/session/log":        _h_session_log,
         "/health":                 _h_health,
     })
@@ -477,6 +571,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/dashboard-config":   _h_dashboard_config_post,
         "/api/agents":             _h_agents_post,
         "/api/agents/remove":      _h_agents_remove,
+        "/api/agent-workflows":    _h_agent_workflows_post,
+        "/api/agent-conversation": _h_agent_conversation_open,
         "/api/server/restart":     _h_server_restart,
         "/api/session/kill":       _h_session_kill,
     })

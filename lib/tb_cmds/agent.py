@@ -79,8 +79,56 @@ def _parse_run(name: str, argv: list[str]) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def _parse_repl(argv: list[str]) -> argparse.Namespace:
+    p = _Parser(prog="tb agent repl")
+    p.add_argument("name")
+    p.add_argument("--steps", type=int, default=None)
+    p.add_argument("--timeout", type=float, default=90.0)
+    return p.parse_args(argv)
+
+
 def _default_agent_steps() -> int:
     return max(1, int(dashboard_config.load().get("agent_max_steps", 100)))
+
+
+def _run_steps(value: int | None) -> int:
+    return max(1, value if value is not None else _default_agent_steps())
+
+
+def _run_repl(name: str, *, steps: int, timeout: float) -> int:
+    agent = agent_store.get_agent(name)
+    repo_root = Path(__file__).resolve().parents[2]
+    print(f"Agent REPL for {agent['name']} ({agent['model']})")
+    print("Enter a prompt and press Enter. Commands: /exit, /quit, /help")
+    while True:
+        try:
+            prompt = input(f"{agent['name']}> ").strip()
+        except EOFError:
+            print()
+            return 0
+        except KeyboardInterrupt:
+            print()
+            return 130
+        if not prompt:
+            continue
+        if prompt in {"/exit", "/quit"}:
+            return 0
+        if prompt == "/help":
+            print("Type any prompt to run the tmux agent. /exit quits the REPL.")
+            continue
+        try:
+            result = agent_runner.run_agent(
+                agent,
+                prompt,
+                repo_root=repo_root,
+                max_steps=steps,
+                request_timeout=max(5.0, timeout),
+                origin="repl",
+            )
+        except Exception as e:
+            print(f"error: {e}")
+            continue
+        print(result["message"])
 
 
 def _rows() -> list[dict]:
@@ -100,7 +148,7 @@ def cmd_agent(args: argparse.Namespace) -> int:
     mode = (args.mode or "").strip()
     rest = _consume_common_flags(list(args.rest or []), args)
     if not mode:
-        raise UsageError("usage: tb agent <name> <prompt...> | tb agent add|list|remove|defaults ...")
+        raise UsageError("usage: tb agent <name> <prompt...> | tb agent repl <name> | tb agent add|list|remove|defaults ...")
 
     if mode in {"list", "ls"}:
         rows = _rows()
@@ -163,6 +211,10 @@ def cmd_agent(args: argparse.Namespace) -> int:
             print("removed" if removed else "not found")
         return 0
 
+    if mode == "repl":
+        ns = _parse_repl(rest)
+        return _run_repl(ns.name, steps=_run_steps(ns.steps), timeout=ns.timeout)
+
     run = _parse_run(mode, rest)
     agent = agent_store.get_agent(mode)
     repo_root = Path(__file__).resolve().parents[2]
@@ -170,8 +222,9 @@ def cmd_agent(args: argparse.Namespace) -> int:
         agent,
         " ".join(run.prompt),
         repo_root=repo_root,
-        max_steps=max(1, run.steps if run.steps is not None else _default_agent_steps()),
+        max_steps=_run_steps(run.steps),
         request_timeout=max(5.0, run.timeout),
+        origin="cli",
     )
     if args.json:
         output.emit_json(result)

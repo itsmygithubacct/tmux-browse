@@ -268,6 +268,39 @@ details.session.drop-right {
 .config-body {
     padding-top: 0.7rem;
 }
+.agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.8rem;
+}
+.agent-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.95rem 1rem;
+    background: var(--card);
+    display: grid;
+    gap: 0.7rem;
+}
+.agent-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.9rem;
+}
+.agent-card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+.agent-card-meta {
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+.agent-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
 .config-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -450,6 +483,56 @@ details.session.drop-right {
 .hot-editor-hint {
     padding-top: 0.1rem;
     line-height: 1.5;
+}
+.workflow-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.18rem 0.45rem 0.18rem 0.18rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.02);
+}
+.workflow-switch input {
+    display: none;
+}
+.workflow-switch-track {
+    width: 2.45rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    background: var(--border);
+    position: relative;
+    transition: background 0.16s ease;
+}
+.workflow-switch-thumb {
+    position: absolute;
+    top: 0.15rem;
+    left: 0.17rem;
+    width: 1.02rem;
+    height: 1.02rem;
+    border-radius: 50%;
+    background: var(--fg);
+    transition: transform 0.16s ease;
+}
+.workflow-switch.is-on {
+    border-color: var(--green);
+}
+.workflow-switch.is-on .workflow-switch-track {
+    background: rgba(63, 185, 80, 0.8);
+}
+.workflow-switch.is-on .workflow-switch-thumb {
+    transform: translateX(1.05rem);
+}
+.workflow-switch-text {
+    font-size: 0.78rem;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.workflow-switch.is-on .workflow-switch-text {
+    color: var(--green);
 }
 .idle-editor-form {
     display: grid;
