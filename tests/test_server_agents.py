@@ -30,6 +30,7 @@ class AgentRouteTableTests(unittest.TestCase):
     def test_routes_are_registered(self):
         self.assertIn("/api/agents", server.Handler._GET_ROUTES)
         self.assertIn("/api/agent-log", server.Handler._GET_ROUTES)
+        self.assertIn("/api/agent-log-json", server.Handler._GET_ROUTES)
         self.assertIn("/api/agent-workflows", server.Handler._GET_ROUTES)
         self.assertIn("/api/agents", server.Handler._POST_ROUTES)
         self.assertIn("/api/agents/remove", server.Handler._POST_ROUTES)
@@ -74,6 +75,16 @@ class AgentHandlerTests(unittest.TestCase):
             server.Handler._h_agent_log(fake, urlparse("/api/agent-log?name=gpt"))
         self.assertEqual(fake.text_status, 200)
         self.assertEqual(fake.text, "hello\n")
+
+    def test_agent_log_json_returns_entries(self):
+        fake = _FakeHandler()
+        with mock.patch("lib.server.agent_logs.read_entries", return_value=[{"ts": 1, "status": "ok"}]), mock.patch(
+            "lib.server.agent_logs.log_path", return_value=Path("/tmp/gpt.jsonl"),
+        ):
+            server.Handler._h_agent_log_json(fake, urlparse("/api/agent-log-json?name=gpt"))
+        self.assertEqual(fake.status, 200)
+        self.assertEqual(fake.payload["entries"][0]["status"], "ok")
+        self.assertEqual(fake.payload["path"], "/tmp/gpt.jsonl")
 
     def test_agent_workflows_get_returns_config(self):
         fake = _FakeHandler()

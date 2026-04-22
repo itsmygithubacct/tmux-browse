@@ -177,6 +177,14 @@ details.session[open] > summary::before { content: "▾"; }
 }
 .summary-link:hover { background: rgba(88, 166, 255, 0.12); }
 .summary-link.disabled { color: var(--dim); pointer-events: none; }
+.send-bar {
+    display: flex; gap: 0.4rem; padding: 0.4rem 0; align-items: center;
+}
+.send-bar-input {
+    flex: 1; background: var(--surface); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.85rem; font-family: inherit;
+}
+.send-bar-input::placeholder { color: var(--dim); }
 .pane-footer {
     margin-top: 0.4rem; font-size: 0.75rem; color: var(--dim);
     display: flex; gap: 0.8rem; flex-wrap: wrap;
@@ -319,6 +327,15 @@ details.session.drop-right {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.toggle-all-btn {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    text-transform: none;
+    letter-spacing: normal;
 }
 .config-actions {
     display: flex;
@@ -351,6 +368,46 @@ details.session.drop-right {
     border-radius: 12px;
     background: linear-gradient(180deg, rgba(22, 27, 34, 0.98), rgba(13, 17, 23, 0.98));
     box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+}
+.agent-steps-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem 1.1rem 1.1rem;
+}
+.agent-steps-detail {
+    display: grid;
+    gap: 0.8rem;
+    max-height: min(75vh, 900px);
+    overflow: auto;
+    padding-right: 0.2rem;
+}
+.agent-step-meta {
+    display: grid;
+    gap: 0.25rem;
+    color: var(--dim);
+    font-size: 0.82rem;
+}
+.agent-step-block {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+}
+.agent-step-label {
+    color: var(--accent);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.agent-step-pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font: inherit;
+    color: var(--fg);
 }
 .modal-head {
     display: flex;
@@ -582,6 +639,9 @@ details.session.drop-right {
     padding: 1rem 0.2rem 0.2rem;
 }
 @media (max-width: 820px) {
+    .agent-steps-grid {
+        grid-template-columns: 1fr;
+    }
     .hot-editor-grid {
         grid-template-columns: 1fr;
     }
