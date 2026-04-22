@@ -48,11 +48,11 @@ _BUILTIN_CATALOG: dict[str, dict[str, str]] = {
         "wire_api": "openai-chat",
     },
     "kimi": {
-        "label": "Moonshot Kimi",
-        "provider": "moonshot",
-        "model": "kimi-k2.6",
-        "base_url": "https://api.moonshot.ai/v1",
-        "wire_api": "openai-chat",
+        "label": "Kimi",
+        "provider": "kimi",
+        "model": "K2.6-code-preview",
+        "base_url": "https://api.kimi.com/coding",
+        "wire_api": "anthropic-messages",
     },
     "minimax": {
         "label": "MiniMax",
@@ -183,6 +183,17 @@ def _normalize_agent_meta(name: str, meta: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _apply_builtin_constraints(name: str, entry: dict[str, Any]) -> dict[str, Any]:
+    out = dict(entry)
+    if name == "kimi":
+        if out.get("provider") not in {"", "kimi"}:
+            raise UsageError("kimi must use provider 'kimi'")
+        if out.get("wire_api") != "anthropic-messages":
+            raise UsageError("kimi must use wire API 'anthropic-messages'")
+        out["provider"] = "kimi"
+    return out
+
+
 def get_agent(name: str) -> dict[str, Any]:
     name = _validate_name(name)
     agents = _load_json(AGENTS_FILE, default={})
@@ -218,6 +229,7 @@ def save_agent(name: str, *, api_key: str | None = None,
         "base_url": (base_url or existing.get("base_url") or defaults.get("base_url") or "").rstrip("/"),
         "wire_api": wire_api or existing.get("wire_api") or defaults.get("wire_api", "openai-chat"),
     }
+    entry = _apply_builtin_constraints(name, entry)
     if not entry["model"]:
         raise UsageError("missing model (required for custom agents)")
     if not entry["base_url"]:

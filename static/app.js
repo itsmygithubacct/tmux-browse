@@ -274,6 +274,32 @@ function findAgentDefault(name) {
     return state.agentDefaults.find((row) => row.name === name) || null;
 }
 
+function currentAgentConstraint() {
+    const fields = agentFieldMap();
+    const name = (fields.name.value || fields.existing.value || fields.preset.value || "").trim().toLowerCase();
+    if (name === "kimi") {
+        return {
+            provider: "kimi",
+            wire_api: "anthropic-messages",
+            message: "kimi is locked to the Kimi coding endpoint and Anthropic wire format",
+        };
+    }
+    return null;
+}
+
+function enforceAgentConstraint() {
+    const fields = agentFieldMap();
+    const constraint = currentAgentConstraint();
+    const locked = !!constraint;
+    if (constraint) {
+        fields.provider.value = constraint.provider;
+        fields.wire_api.value = constraint.wire_api;
+    }
+    fields.provider.readOnly = locked;
+    fields.wire_api.disabled = locked;
+    return constraint;
+}
+
 function fillAgentForm(row, opts = {}) {
     const fields = agentFieldMap();
     const preset = opts.presetName !== undefined ? opts.presetName : (findAgentDefault(row.name) ? row.name : "");
@@ -285,6 +311,7 @@ function fillAgentForm(row, opts = {}) {
     fields.api_key.value = "";
     fields.existing.value = opts.existingName !== undefined ? opts.existingName : (row.name || "");
     fields.preset.value = preset;
+    enforceAgentConstraint();
 }
 
 function clearAgentForm() {
@@ -306,9 +333,12 @@ function loadExistingAgentIntoForm() {
         return;
     }
     fillAgentForm(row);
-    setAgentStatus(row.has_api_key
+    const constraint = enforceAgentConstraint();
+    setAgentStatus(constraint
+        ? constraint.message
+        : row.has_api_key
         ? `loaded ${row.name}; leave API key blank to keep the stored secret`
-        : `loaded ${row.name}; add an API key before saving`, row.has_api_key ? "dim" : "err");
+        : `loaded ${row.name}; add an API key before saving`, constraint ? "dim" : (row.has_api_key ? "dim" : "err"));
 }
 
 function applyAgentPreset() {
@@ -325,7 +355,8 @@ function applyAgentPreset() {
     if (fields.existing.value && fields.existing.value !== fields.name.value.trim()) {
         fields.existing.value = "";
     }
-    setAgentStatus(`loaded preset ${preset.name}`, "dim");
+    const constraint = enforceAgentConstraint();
+    setAgentStatus(constraint ? constraint.message : `loaded preset ${preset.name}`, "dim");
 }
 
 async function loadAgents(selectedName = "") {
@@ -346,6 +377,8 @@ async function loadAgents(selectedName = "") {
         fillAgentForm(state.agents[0]);
     } else if (!current) {
         clearAgentForm();
+    } else {
+        enforceAgentConstraint();
     }
     return true;
 }
@@ -359,6 +392,11 @@ function readAgentForm() {
         base_url: fields.base_url.value.trim(),
         wire_api: fields.wire_api.value,
     };
+    const constraint = currentAgentConstraint();
+    if (constraint) {
+        payload.provider = constraint.provider;
+        payload.wire_api = constraint.wire_api;
+    }
     const apiKey = fields.api_key.value.trim();
     if (apiKey) payload.api_key = apiKey;
     return payload;
@@ -1627,6 +1665,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     agentFieldMap().name.addEventListener("input", () => {
         const fields = agentFieldMap();
         if (fields.existing.value && fields.name.value.trim() !== fields.existing.value) fields.existing.value = "";
+        const constraint = enforceAgentConstraint();
+        if (constraint) setAgentStatus(constraint.message, "dim");
     });
     for (const input of Object.values(configFieldMap())) {
         if (!input) continue;

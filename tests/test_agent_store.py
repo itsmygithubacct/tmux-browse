@@ -155,6 +155,34 @@ class AddRemoveTests(_IsolatedStateMixin, unittest.TestCase):
                 wire_api="openai-chat",
             )
 
+    def test_kimi_defaults_to_supported_provider_and_wire_api(self):
+        row = agent_store.add_agent("kimi", "sk-kimi-test")
+        self.assertEqual(row["provider"], "kimi")
+        self.assertEqual(row["wire_api"], "anthropic-messages")
+        self.assertEqual(row["base_url"], "https://api.kimi.com/coding")
+
+    def test_kimi_rejects_openai_provider_override(self):
+        with self.assertRaises(UsageError):
+            agent_store.save_agent(
+                "kimi",
+                api_key="sk-kimi-test",
+                model="K2.6-code-preview",
+                base_url="https://api.kimi.com/coding",
+                provider="openai",
+                wire_api="anthropic-messages",
+            )
+
+    def test_kimi_rejects_openai_chat_wire_api(self):
+        with self.assertRaises(UsageError):
+            agent_store.save_agent(
+                "kimi",
+                api_key="sk-kimi-test",
+                model="K2.6-code-preview",
+                base_url="https://api.kimi.com/coding",
+                provider="kimi",
+                wire_api="openai-chat",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
