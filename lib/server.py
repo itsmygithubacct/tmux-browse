@@ -315,6 +315,27 @@ class Handler(BaseHTTPRequestHandler):
         except TBError as e:
             self._send_tb_error(e)
 
+    def _h_agent_log_json(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        name = (query.get("name", [""])[0] or "").strip().lower()
+        try:
+            limit = int(query.get("limit", ["20"])[0])
+        except ValueError:
+            limit = 20
+        limit = max(1, min(limit, 100))
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name' query parameter"}, status=400)
+            return
+        try:
+            self._send_json({
+                "ok": True,
+                "name": name,
+                "entries": agent_logs.read_entries(name, limit=limit),
+                "path": str(agent_logs.log_path(name)),
+            })
+        except TBError as e:
+            self._send_tb_error(e)
+
     def _h_agent_workflows_get(self, _parsed: ParseResult) -> None:
         try:
             self._send_json({
@@ -557,6 +578,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/dashboard-config":   _h_dashboard_config_get,
         "/api/agents":             _h_agents_get,
         "/api/agent-log":          _h_agent_log,
+        "/api/agent-log-json":     _h_agent_log_json,
         "/api/agent-workflows":    _h_agent_workflows_get,
         "/api/session/log":        _h_session_log,
         "/health":                 _h_health,

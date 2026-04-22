@@ -150,6 +150,7 @@ const state = {
     idleEditor: { open: false, session: "" },
     splitPicker: { open: false, session: "", filter: "" },
     workflowEditor: { open: false, agent: "", slot: 0 },
+    stepViewer: { open: false, agent: "", entries: [], selected: 0, path: "" },
     workflowConfig: normalizeAgentWorkflowConfig({}),
     workflowPath: "",
     workflowRuntime: {},
@@ -197,7 +198,7 @@ function stopSummaryToggle(e) {
 }
 
 function syncModalChrome() {
-    const open = state.hotEditor.open || state.idleEditor.open || state.splitPicker.open || state.workflowEditor.open;
+    const open = state.hotEditor.open || state.idleEditor.open || state.splitPicker.open || state.workflowEditor.open || state.stepViewer.open;
     document.body.style.overflow = open ? "hidden" : "";
 }
 
@@ -308,6 +309,11 @@ function renderAgentsPane() {
                     el("div", { class: "dim agent-card-meta" }, `${row.provider || "custom"} · ${row.model || "no model"}`),
                 ),
                 el("div", { class: "agent-card-actions" },
+                    el("button", {
+                        class: "btn blue",
+                        type: "button",
+                        onclick: () => openAgentSteps(row.name),
+                    }, "Steps"),
                     el("a", {
                         class: "btn",
                         target: "_blank",
@@ -328,6 +334,93 @@ function renderAgentsPane() {
             ),
         ));
     }
+}
+
+function _stepBlock(label, text, cls = "agent-step-block") {
+    return el("div", { class: cls },
+        el("div", { class: "agent-step-label" }, label),
+        el("pre", { class: "agent-step-pre" }, text),
+    );
+}
+
+function renderAgentStepsModal() {
+    const title = document.getElementById("agent-steps-modal-title");
+    const list = document.getElementById("agent-steps-list");
+    const detail = document.getElementById("agent-steps-detail");
+    const entries = state.stepViewer.entries || [];
+    const agent = state.stepViewer.agent || "";
+    title.textContent = `Agent Steps · ${agent}`;
+    list.textContent = "";
+    detail.textContent = "";
+    if (!entries.length) {
+        list.append(el("div", { class: "dim split-empty" }, `No logged runs for ${agent}.`));
+        return;
+    }
+    const selected = Math.max(0, Math.min(state.stepViewer.selected, entries.length - 1));
+    state.stepViewer.selected = selected;
+    entries.forEach((entry, idx) => {
+        const steps = Array.isArray(entry.transcript) ? entry.transcript.length : 0;
+        const prompt = (entry.prompt || "").trim() || "(no prompt)";
+        list.append(el("button", {
+            class: idx === selected ? "hot-slot-item active" : "hot-slot-item",
+            type: "button",
+            onclick: () => {
+                state.stepViewer.selected = idx;
+                renderAgentStepsModal();
+            },
+        },
+        el("span", { class: "hot-slot-kicker" }, `${entry.origin || "-"} · ${entry.status || "-"} · ${steps} steps`),
+        el("span", { class: "hot-slot-name" }, prompt.length > 72 ? `${prompt.slice(0, 72)}...` : prompt),
+        el("span", { class: "hot-slot-command" }, entry.message || entry.error || `ts ${entry.ts || 0}`),
+        ));
+    });
+    const entry = entries[selected] || {};
+    detail.append(
+        el("div", { class: "agent-step-meta" },
+            el("div", {}, `origin: ${entry.origin || "-"}`),
+            el("div", {}, `status: ${entry.status || "-"}`),
+            el("div", {}, `steps: ${Array.isArray(entry.transcript) ? entry.transcript.length : 0}`),
+            el("div", {}, `log: ${state.stepViewer.path || "-"}`),
+        ),
+    );
+    if (entry.prompt) detail.append(_stepBlock("Prompt", entry.prompt));
+    if (entry.message) detail.append(_stepBlock("Final Message", entry.message));
+    if (entry.error) detail.append(_stepBlock("Error", entry.error, "agent-step-block err"));
+    if (Array.isArray(entry.transcript)) {
+        for (const item of entry.transcript) {
+            const step = item && item.step !== undefined ? item.step : "?";
+            const wrap = el("div", { class: "agent-step-block" },
+                el("div", { class: "agent-step-label" }, `Step ${step}`),
+            );
+            if (item.action) wrap.append(el("pre", { class: "agent-step-pre" }, JSON.stringify(item.action, null, 2)));
+            if (item.parse_error) wrap.append(el("pre", { class: "agent-step-pre err" }, String(item.parse_error)));
+            if (item.tool_result) wrap.append(el("pre", { class: "agent-step-pre" }, JSON.stringify(item.tool_result, null, 2)));
+            detail.append(wrap);
+        }
+    }
+}
+
+async function openAgentSteps(agentName) {
+    const name = (agentName || "").trim().toLowerCase();
+    const r = await api("GET", `/api/agent-log-json?name=${encodeURIComponent(name)}&limit=20`);
+    if (!r.ok) {
+        setAgentStatus("error loading agent steps: " + (r.error || "unknown"), "err");
+        return;
+    }
+    state.stepViewer.open = true;
+    state.stepViewer.agent = name;
+    state.stepViewer.entries = Array.isArray(r.entries) ? [...r.entries].reverse() : [];
+    state.stepViewer.selected = 0;
+    state.stepViewer.path = r.path || "";
+    renderAgentStepsModal();
+    document.getElementById("agent-steps-modal").hidden = false;
+    syncModalChrome();
+}
+
+function closeAgentSteps() {
+    state.stepViewer.open = false;
+    document.getElementById("agent-steps-modal").hidden = true;
+    syncModalChrome();
 }
 
 function renderAgentSummary() {
@@ -1997,6 +2090,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (ok) setAgentStatus("reloaded agent list", "ok");
     });
     document.getElementById("cfg-agent-remove-btn").addEventListener("click", removeAgentConfig);
+    document.getElementById("agent-steps-close-btn").addEventListener("click", closeAgentSteps);
     agentFieldMap().existing.addEventListener("change", loadExistingAgentIntoForm);
     agentFieldMap().preset.addEventListener("change", applyAgentPreset);
     agentFieldMap().name.addEventListener("input", () => {
@@ -2024,6 +2118,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.splitPicker.filter = e.target.value || "";
         renderSplitPicker();
     });
+    document.getElementById("agent-steps-modal").addEventListener("click", (e) => {
+        if (e.target.id === "agent-steps-modal") closeAgentSteps();
+    });
     document.getElementById("hot-modal").addEventListener("click", (e) => {
         if (e.target.id === "hot-modal") closeHotButtons();
     });
@@ -2042,6 +2139,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.addEventListener("pointerdown", primeAudio, { passive: true });
     document.addEventListener("keydown", primeAudio);
     document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && state.stepViewer.open) closeAgentSteps();
         if (e.key === "Escape" && state.hotEditor.open) closeHotButtons();
         if (e.key === "Escape" && state.workflowEditor.open) closeWorkflowEditor();
         if (e.key === "Escape" && state.idleEditor.open) closeIdleEditor();

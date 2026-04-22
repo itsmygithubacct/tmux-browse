@@ -82,7 +82,7 @@ def render_index() -> str:
                 </label>
             </section>
             <section class="config-card">
-                <div class="config-card-title">Summary Row</div>
+                <div class="config-card-title">Summary Row <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-summary">All On</button></div>
                 <label class="check-row"><input type="checkbox" id="cfg-show-attached-badge" /><span>Attached clients badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-window-badge" /><span>Window count badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-port-badge" /><span>Running ttyd port badge</span></label>
@@ -96,10 +96,11 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-reorder" /><span>Reorder pad</span></label>
             </section>
             <section class="config-card">
-                <div class="config-card-title">Expanded Pane</div>
+                <div class="config-card-title">Expanded Pane <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-body">All On</button></div>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-launch" /><span>Launch button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-stop" /><span>Stop ttyd button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-kill" /><span>Kill button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-send-bar" /><span>Send bar</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-hot-buttons" /><span>Hot Buttons manager</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-hot-loop-toggles" /><span>Hot-button loop toggles</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-footer" /><span>Footer metadata</span></label>
@@ -170,6 +171,21 @@ def render_index() -> str:
         <div id="agents-pane" class="agent-grid"></div>
     </div>
 </details>
+<div id="agent-steps-modal" class="modal-backdrop" hidden>
+    <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="agent-steps-modal-title">
+        <div class="modal-head">
+            <div>
+                <div class="modal-eyebrow">Agent Transcript</div>
+                <h2 id="agent-steps-modal-title">Agent Steps</h2>
+            </div>
+            <button class="btn" id="agent-steps-close-btn" title="close the step viewer">Close</button>
+        </div>
+        <div class="agent-steps-grid">
+            <div class="hot-slot-list" id="agent-steps-list"></div>
+            <div class="agent-steps-detail" id="agent-steps-detail"></div>
+        </div>
+    </div>
+</div>
 <div id="hot-modal" class="modal-backdrop" hidden>
     <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="hot-modal-title">
         <div class="modal-head">
