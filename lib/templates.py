@@ -23,7 +23,7 @@ def render_index() -> str:
     <button class="btn blue" id="raw-btn" title="open a standalone ttyd shell not attached to tmux">Raw ttyd</button>
     <button class="btn blue" id="refresh-btn">Refresh</button>
     <span class="dim" id="topbar-status" style="margin-left:auto;font-size:0.8rem">
-        auto-refresh 5s &middot; ttyd spawns on pane expand
+        auto-refresh off &middot; ttyd spawns on pane expand
     </span>
     <button class="btn red" id="restart-btn" title="restart the dashboard server process">Restart</button>
 </div>

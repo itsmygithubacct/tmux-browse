@@ -18,9 +18,9 @@ python3 tmux_browse.py serve --auth-file ~/.tb # first non-empty line = token
 python3 tmux_browse.py serve --cert cert.pem --key key.pem   # HTTPS
 ```
 
-Open `http://<host>:8096/` in a browser. The page auto-refreshes the session
-list every 5 seconds by default; the new bottom **Config** pane can change
-that and persists to `~/.tmux-browse/dashboard-config.json`.
+Open `http://<host>:8096/` in a browser. The page starts with auto-refresh
+disabled by default; use the bottom **Config** pane to enable periodic
+refreshes and persist that choice to `~/.tmux-browse/dashboard-config.json`.
 
 ## Optional authentication
 

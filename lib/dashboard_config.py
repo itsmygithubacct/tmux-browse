@@ -35,9 +35,9 @@ DEFAULTS: dict[str, Any] = {
     "show_summary_split": True,
     "show_summary_hide": True,
     "show_summary_reorder": True,
-    "show_body_launch": True,
-    "show_body_stop": True,
-    "show_body_kill": True,
+    "show_body_launch": False,
+    "show_body_stop": False,
+    "show_body_kill": False,
     "show_body_hot_buttons": True,
     "show_hot_loop_toggles": True,
 }

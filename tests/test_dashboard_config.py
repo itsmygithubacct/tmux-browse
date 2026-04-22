@@ -18,6 +18,9 @@ class NormalizeTests(unittest.TestCase):
         out = dc.normalize({})
         self.assertEqual(out, dc.DEFAULTS)
 
+    def test_auto_refresh_default_is_disabled(self):
+        self.assertFalse(dc.DEFAULTS["auto_refresh"])
+
     def test_non_dict_input_yields_defaults(self):
         self.assertEqual(dc.normalize("nope"), dc.DEFAULTS)
         self.assertEqual(dc.normalize(None), dc.DEFAULTS)

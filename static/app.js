@@ -27,9 +27,9 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_summary_split: true,
     show_summary_hide: true,
     show_summary_reorder: true,
-    show_body_launch: true,
-    show_body_stop: true,
-    show_body_kill: true,
+    show_body_launch: false,
+    show_body_stop: false,
+    show_body_kill: false,
     show_body_hot_buttons: true,
     show_hot_loop_toggles: true,
 };
