@@ -18,9 +18,11 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
     agent_logs,
+    agent_scheduler,
     agent_status,
     agent_store,
     agent_runtime,
+    agent_workflow_runs,
     agent_workflows,
     auth,
     config,
@@ -56,6 +58,7 @@ class DashboardServer(ThreadingHTTPServer):
         self.expected_token = expected_token
         self.tls_paths = tls_paths
         self.ttyd_bind_addr = ttyd_bind_addr
+        self.scheduler: agent_scheduler.Scheduler | None = None
 
 
 # Redact ``?token=…`` / ``&token=…`` from request lines before the stdlib
@@ -356,6 +359,32 @@ class Handler(BaseHTTPRequestHandler):
         except TBError as e:
             self._send_tb_error(e)
 
+    def _h_agent_workflow_state(self, _parsed: ParseResult) -> None:
+        try:
+            sched = getattr(self.server, "scheduler", None)
+            self._send_json({
+                "ok": True,
+                "state": agent_workflow_runs.get_all_state(),
+                "scheduler_running": sched.running if sched else False,
+            })
+        except TBError as e:
+            self._send_tb_error(e)
+
+    def _h_agent_workflow_runs(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        try:
+            limit = int(query.get("limit", ["50"])[0])
+        except (ValueError, TypeError):
+            limit = 50
+        limit = max(1, min(500, limit))
+        try:
+            self._send_json({
+                "ok": True,
+                "runs": agent_workflow_runs.read_runs(limit=limit),
+            })
+        except TBError as e:
+            self._send_tb_error(e)
+
     def _h_session_log(self, parsed: ParseResult) -> None:
         query = parse_qs(parsed.query)
         name = (query.get("session", [""])[0] or "").strip()
@@ -590,6 +619,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-log":          _h_agent_log,
         "/api/agent-log-json":     _h_agent_log_json,
         "/api/agent-workflows":    _h_agent_workflows_get,
+        "/api/agent-workflow-state": _h_agent_workflow_state,
+        "/api/agent-workflow-runs":  _h_agent_workflow_runs,
         "/api/session/log":        _h_session_log,
         "/health":                 _h_health,
     })
@@ -653,6 +684,14 @@ def serve(bind: str, port: int, verbose: bool = False,
     else:
         print("  auth: disabled (any reachable client can access the dashboard)")
 
+    # Start the background workflow scheduler.
+    sched = agent_scheduler.Scheduler(repo_root=config.PROJECT_DIR)
+    httpd.scheduler = sched
+    if sched.start():
+        print("  scheduler: STARTED (this process owns workflow execution)")
+    else:
+        print("  scheduler: passive (another process holds the lock)")
+
     # Graceful shutdown on SIGTERM (systemd, container runtimes, kill).
     # serve_forever() only breaks on KeyboardInterrupt out of the box;
     # moving it to a worker thread lets the main thread wait on an Event
@@ -673,6 +712,7 @@ def serve(bind: str, port: int, verbose: bool = False,
         shutdown_event.wait()
     finally:
         print("\nshutting down")
+        sched.stop()
         httpd.shutdown()             # unblocks serve_forever()
         server_thread.join(timeout=5)
         _clear_dashboard_state()
