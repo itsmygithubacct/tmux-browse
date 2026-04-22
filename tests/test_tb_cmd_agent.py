@@ -23,7 +23,7 @@ class AgentRunConfigTests(unittest.TestCase):
         )
 
     def test_uses_dashboard_default_steps_when_flag_omitted(self):
-        with mock.patch("lib.tb_cmds.agent.dashboard_config.load", return_value={"agent_max_steps": 100}), mock.patch(
+        with mock.patch("lib.tb_cmds.agent.dashboard_config.load", return_value={"agent_max_steps": 20}), mock.patch(
             "lib.tb_cmds.agent.agent_store.get_agent",
             return_value={"name": "minimax", "model": "MiniMax-M2.7", "api_key": "k", "wire_api": "openai-chat"},
         ), mock.patch(
@@ -32,10 +32,10 @@ class AgentRunConfigTests(unittest.TestCase):
         ) as run_agent:
             rc = agent_cmd.cmd_agent(self._args("check", "panes"))
         self.assertEqual(rc, 0)
-        self.assertEqual(run_agent.call_args.kwargs["max_steps"], 100)
+        self.assertEqual(run_agent.call_args.kwargs["max_steps"], 20)
 
     def test_steps_flag_overrides_dashboard_default(self):
-        with mock.patch("lib.tb_cmds.agent.dashboard_config.load", return_value={"agent_max_steps": 100}), mock.patch(
+        with mock.patch("lib.tb_cmds.agent.dashboard_config.load", return_value={"agent_max_steps": 20}), mock.patch(
             "lib.tb_cmds.agent.agent_store.get_agent",
             return_value={"name": "minimax", "model": "MiniMax-M2.7", "api_key": "k", "wire_api": "openai-chat"},
         ), mock.patch(

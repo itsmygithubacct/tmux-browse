@@ -63,6 +63,32 @@ class ExtractJsonTests(unittest.TestCase):
         self.assertEqual(append_entry.call_args.args[0], "gpt")
         self.assertEqual(append_entry.call_args.args[1]["status"], "error")
 
+    def test_compact_snapshot_payload(self):
+        payload = agent_runner._compact_json_envelope({
+            "ok": True,
+            "data": {
+                "sessions": [{"name": "a", "windows": 1, "attached": 0}] * 10,
+                "panes": [{"session": "a"}] * 20,
+                "ttyd": {"running": [{"running": True}, {"running": False}]},
+                "dashboard": {"listening": True},
+            },
+        })
+        self.assertEqual(payload["kind"], "snapshot-summary")
+        self.assertEqual(payload["session_count"], 10)
+        self.assertEqual(len(payload["sessions"]), 8)
+
+    def test_compact_content_payload(self):
+        payload = agent_runner._compact_json_envelope({
+            "ok": True,
+            "data": {
+                "target": "work",
+                "lines": 2000,
+                "content": "x" * 3000,
+            },
+        })
+        self.assertEqual(payload["kind"], "content-preview")
+        self.assertIn("[truncated]", payload["content_preview"])
+
 
 if __name__ == "__main__":
     unittest.main()

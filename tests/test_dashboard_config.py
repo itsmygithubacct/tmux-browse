@@ -21,8 +21,8 @@ class NormalizeTests(unittest.TestCase):
     def test_auto_refresh_default_is_disabled(self):
         self.assertFalse(dc.DEFAULTS["auto_refresh"])
 
-    def test_agent_max_steps_default_is_100(self):
-        self.assertEqual(dc.DEFAULTS["agent_max_steps"], 100)
+    def test_agent_max_steps_default_is_20(self):
+        self.assertEqual(dc.DEFAULTS["agent_max_steps"], 20)
 
     def test_non_dict_input_yields_defaults(self):
         self.assertEqual(dc.normalize("nope"), dc.DEFAULTS)

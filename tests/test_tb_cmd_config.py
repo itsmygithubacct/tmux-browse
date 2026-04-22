@@ -47,14 +47,14 @@ class ConfigCommandTests(_IsolatedStateMixin, unittest.TestCase):
             rc = config_cmd.cmd_config_show(self._args(json=True))
         self.assertEqual(rc, 0)
         text = out.getvalue()
-        self.assertIn('"agent_max_steps": 100', text)
+        self.assertIn('"agent_max_steps": 20', text)
 
     def test_get_plain_prints_value(self):
         out = io.StringIO()
         with mock.patch("sys.stdout", out):
             rc = config_cmd.cmd_config_get(self._args(key="agent_max_steps"))
         self.assertEqual(rc, 0)
-        self.assertEqual(out.getvalue().strip(), "100")
+        self.assertEqual(out.getvalue().strip(), "20")
 
     def test_set_persists_normalized_value(self):
         out = io.StringIO()
@@ -71,7 +71,7 @@ class ConfigCommandTests(_IsolatedStateMixin, unittest.TestCase):
             rc = config_cmd.cmd_config_reset(self._args())
         self.assertEqual(rc, 0)
         self.assertIn("reset", out.getvalue())
-        self.assertIn('"agent_max_steps": 100', cfg.DASHBOARD_CONFIG_FILE.read_text())
+        self.assertIn('"agent_max_steps": 20', cfg.DASHBOARD_CONFIG_FILE.read_text())
 
     def test_unknown_key_raises_usage_error(self):
         with self.assertRaises(UsageError):

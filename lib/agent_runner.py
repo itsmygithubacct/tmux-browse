@@ -24,7 +24,9 @@ Prefer JSON output by asking for commands that can sensibly include `--json`.
 Important rules:
 - Never ask for confirmation. Keep working until the task is complete or blocked.
 - Never recurse into `tb agent`.
-- Prefer `snapshot`, `ls`, `show`, `capture`, and `exec` to understand tmux state.
+- Start narrow: prefer `ls`, `show`, `describe`, and targeted `capture` before `snapshot`.
+- Use `snapshot` only when you truly need whole-machine state across many sessions.
+- Keep captures tight: ask for the fewest lines that answer the question.
 - For commands inside panes, use `tb exec TARGET --timeout ... -- <command>`.
 - Keep command count efficient. Read state first, then act, then verify.
 - When the task is complete, return a concise final message describing what you did and any remaining issue.
@@ -40,6 +42,98 @@ def _preview(text: str, head: int = 160, tail: int = 80) -> str:
     if len(raw) <= head + tail + 5:
         return raw
     return raw[:head] + " ... " + raw[-tail:]
+
+
+def _trim_text(text: str, limit: int = 2400) -> str:
+    raw = (text or "").strip()
+    if len(raw) <= limit:
+        return raw
+    head = max(200, limit // 2)
+    tail = max(120, limit - head - 32)
+    return raw[:head] + "\n... [truncated] ...\n" + raw[-tail:]
+
+
+def _compact_json_envelope(parsed: Any) -> Any:
+    if not isinstance(parsed, dict):
+        return parsed
+    payload = parsed.get("data", parsed)
+    if not isinstance(payload, dict):
+        return payload
+
+    if {"sessions", "panes", "ttyd", "dashboard"} <= set(payload):
+        sessions = payload.get("sessions") or []
+        panes = payload.get("panes") or []
+        ttyd = payload.get("ttyd") or {}
+        running = ttyd.get("running") or []
+        return {
+            "kind": "snapshot-summary",
+            "session_count": len(sessions),
+            "pane_count": len(panes),
+            "sessions": [
+                {
+                    "name": row.get("name"),
+                    "windows": row.get("windows"),
+                    "attached": row.get("attached"),
+                }
+                for row in sessions[:8]
+                if isinstance(row, dict)
+            ],
+            "running_ttyd": sum(1 for row in running if isinstance(row, dict) and row.get("running")),
+            "dashboard": payload.get("dashboard"),
+        }
+
+    if "session" in payload and "panes" in payload:
+        panes = payload.get("panes") or []
+        session = payload.get("session") or {}
+        return {
+            "kind": "show-summary",
+            "session": {
+                "name": session.get("name"),
+                "windows": session.get("windows"),
+                "attached": session.get("attached"),
+            } if isinstance(session, dict) else session,
+            "pane_count": len(panes),
+            "panes": [
+                {
+                    "window": row.get("window"),
+                    "pane": row.get("pane"),
+                    "command": row.get("command"),
+                    "cwd": row.get("cwd"),
+                    "active": row.get("active"),
+                }
+                for row in panes[:6]
+                if isinstance(row, dict)
+            ],
+        }
+
+    if "content" in payload and isinstance(payload.get("content"), str):
+        return {
+            "kind": "content-preview",
+            "target": payload.get("target"),
+            "lines": payload.get("lines"),
+            "content_preview": _trim_text(payload.get("content") or "", limit=1600),
+        }
+
+    if "output" in payload and isinstance(payload.get("output"), str):
+        return {
+            "kind": "exec-result",
+            "strategy": payload.get("strategy"),
+            "exit_status": payload.get("exit_status"),
+            "duration": payload.get("duration"),
+            "output_preview": _trim_text(payload.get("output") or "", limit=1600),
+        }
+
+    return payload
+
+
+def _compact_tool_payload(result: ToolResult) -> dict[str, Any]:
+    return {
+        "ok": result.ok,
+        "exit_code": result.exit_code,
+        "stdout_preview": _trim_text(result.stdout, limit=1800),
+        "stderr_preview": _trim_text(result.stderr, limit=700),
+        "json_summary": _compact_json_envelope(result.json_data),
+    }
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -107,7 +201,7 @@ def _run_tb_command(repo_root: Path, args: list[str], stdin_text: str | None) ->
 
 def run_agent(agent: dict[str, Any], prompt: str, *,
               repo_root: Path,
-              max_steps: int = 100,
+              max_steps: int = 20,
               request_timeout: float = 90.0,
               origin: str = "cli") -> dict[str, Any]:
     if not prompt.strip():
@@ -162,13 +256,7 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
             if stdin_text is not None and not isinstance(stdin_text, str):
                 raise UsageError("tb_command stdin must be a string when present")
             result = _run_tb_command(repo_root, tool_args, stdin_text)
-            tool_payload = {
-                "ok": result.ok,
-                "exit_code": result.exit_code,
-                "stdout": result.stdout[-12000:],
-                "stderr": result.stderr[-4000:],
-                "json": result.json_data,
-            }
+            tool_payload = _compact_tool_payload(result)
             transcript[-1]["tool_result"] = tool_payload
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append({
