@@ -291,6 +291,22 @@ function workflowEntry(agentName) {
     return state.workflowConfig.agents[name];
 }
 
+function agentStatusLabel(status) {
+    const labels = {
+        running: "Running",
+        idle: "Idle",
+        error: "Error",
+        rate_limited: "Rate Limited",
+        workflow_paused: "Paused",
+    };
+    return labels[status] || status || "unknown";
+}
+
+function agentLastActivity(ts) {
+    if (!ts) return "";
+    return fmtAgeSeconds(Math.max(0, Math.floor(Date.now() / 1000) - ts)) + " ago";
+}
+
 function renderAgentsPane() {
     const wrap = document.getElementById("agents-wrap");
     const count = document.getElementById("agents-count");
@@ -302,6 +318,15 @@ function renderAgentsPane() {
     for (const row of state.agents) {
         const sessionName = conversationSessionName(row.name);
         const live = state.sessions.find((s) => s.name === sessionName);
+        const st = row.status || "idle";
+        const reason = row.status_reason || "";
+        const lastTs = row.last_activity_ts || 0;
+        const statusLine = [];
+        if (reason) statusLine.push(reason);
+        const lastAct = agentLastActivity(lastTs);
+        if (lastAct) statusLine.push(lastAct);
+        if (live) statusLine.push(`session ${sessionName} on port ${live.port || "—"}`);
+
         root.append(el("section", { class: "agent-card" },
             el("div", { class: "agent-card-head" },
                 el("div", {},
@@ -327,10 +352,9 @@ function renderAgentsPane() {
                     }, live ? "Open REPL" : "Start REPL"),
                 ),
             ),
-            el("div", { class: "dim agent-card-meta" },
-                live
-                    ? `conversation session ${sessionName} is live on port ${live.port || "—"}`
-                    : `conversation session ${sessionName} is not running`,
+            el("div", { class: "agent-card-status" },
+                el("span", { class: `agent-status-badge s-${st}` }, agentStatusLabel(st)),
+                el("span", {}, statusLine.join(" · ")),
             ),
         ));
     }

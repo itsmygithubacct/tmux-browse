@@ -309,6 +309,27 @@ details.session.drop-right {
     gap: 0.5rem;
     flex-wrap: wrap;
 }
+.agent-status-badge {
+    font-size: 0.72rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+.agent-status-badge.s-running      { border-color: var(--green);  color: var(--green); }
+.agent-status-badge.s-idle         { border-color: var(--dim);    color: var(--dim); }
+.agent-status-badge.s-error        { border-color: #f85149;       color: #f85149; }
+.agent-status-badge.s-rate_limited { border-color: var(--orange); color: var(--orange); }
+.agent-status-badge.s-workflow_paused { border-color: #8957e5;    color: #8957e5; }
+.agent-card-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--dim);
+}
 .config-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
