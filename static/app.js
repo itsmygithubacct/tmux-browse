@@ -6,7 +6,7 @@ const HOT_KEY    = "tmux-browse:hot-buttons";
 const IDLE_KEY   = "tmux-browse:idle-alerts";
 const IDLE_SOUND_CHOICES = ["beep", "chime", "knock", "bell", "blip", "ding"];
 const DASHBOARD_CONFIG_DEFAULTS = {
-    auto_refresh: true,
+    auto_refresh: false,
     refresh_seconds: 5,
     hot_loop_idle_seconds: 5,
     launch_on_expand: true,

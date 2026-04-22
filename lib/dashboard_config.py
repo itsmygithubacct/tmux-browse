@@ -14,7 +14,7 @@ IDLE_SOUND_CHOICES: tuple[str, ...] = (
 
 
 DEFAULTS: dict[str, Any] = {
-    "auto_refresh": True,
+    "auto_refresh": False,
     "refresh_seconds": 5,
     "hot_loop_idle_seconds": 5,
     "launch_on_expand": True,
