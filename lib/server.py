@@ -18,6 +18,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
     agent_logs,
+    agent_status,
     agent_store,
     agent_runtime,
     agent_workflows,
@@ -285,9 +286,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def _h_agents_get(self, _parsed: ParseResult) -> None:
         try:
+            agents = agent_store.list_agents()
+            statuses = agent_status.get_all_statuses()
+            for row in agents:
+                name = row.get("name", "")
+                st = statuses.get(name)
+                if st:
+                    row["status"] = st["status"]
+                    row["status_reason"] = st["reason"]
+                    row["last_activity_ts"] = st["last_ts"]
             self._send_json({
                 "ok": True,
-                "agents": agent_store.list_agents(),
+                "agents": agents,
                 "defaults": agent_store.catalog_rows(),
                 "paths": {
                     "agents": str(agent_store.AGENTS_FILE),
