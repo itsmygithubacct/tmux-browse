@@ -35,6 +35,13 @@ You must respond with JSON only, one object per turn, in one of these shapes:
 """
 
 
+def _preview(text: str, head: int = 160, tail: int = 80) -> str:
+    raw = text.strip()
+    if len(raw) <= head + tail + 5:
+        return raw
+    return raw[:head] + " ... " + raw[-tail:]
+
+
 def _extract_json(text: str) -> dict[str, Any]:
     raw = text.strip()
     if raw.startswith("```"):
@@ -44,11 +51,11 @@ def _extract_json(text: str) -> dict[str, Any]:
     start = raw.find("{")
     end = raw.rfind("}")
     if start < 0 or end < start:
-        raise UsageError(f"agent returned non-JSON output: {text[:200]!r}")
+        raise UsageError(f"agent returned non-JSON output (preview): {_preview(text)!r}")
     try:
         data = json.loads(raw[start:end + 1])
     except ValueError as e:
-        raise UsageError(f"agent returned invalid JSON: {e}")
+        raise UsageError(f"agent returned invalid JSON: {e}; preview={_preview(raw[start:end + 1])!r}")
     if not isinstance(data, dict):
         raise UsageError("agent response must be a JSON object")
     return data
@@ -111,7 +118,20 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
     transcript: list[dict[str, Any]] = []
     for step in range(1, max_steps + 1):
         raw = agent_providers.complete(agent, messages, timeout=request_timeout)
-        action = _extract_json(raw)
+        try:
+            action = _extract_json(raw)
+        except UsageError as e:
+            transcript.append({"step": step, "model": raw, "parse_error": e.message})
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({
+                "role": "user",
+                "content": (
+                    "Your previous response did not follow the required protocol. "
+                    "Respond again with JSON only, using exactly one object in one of the allowed shapes. "
+                    "Do not include prose, markdown fences, or <think> tags."
+                ),
+            })
+            continue
         transcript.append({"step": step, "model": raw, "action": action})
         if action.get("type") == "final":
             return {

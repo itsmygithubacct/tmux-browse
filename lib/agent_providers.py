@@ -75,6 +75,17 @@ def _anthropic_messages_url(base_url: str) -> str:
     return f"{base}/v1/messages"
 
 
+def _is_minimax_openai(agent: dict[str, Any]) -> bool:
+    provider = str(agent.get("provider") or "").strip().lower()
+    base_url = str(agent.get("base_url") or "").lower()
+    model = str(agent.get("model") or "")
+    return (
+        provider == "minimax"
+        or "minimax" in base_url
+        or model.startswith("MiniMax-")
+    )
+
+
 def openai_chat(agent: dict[str, Any], messages: list[dict[str, str]],
                 timeout: float) -> str:
     base_url = agent["base_url"].rstrip("/")
@@ -83,6 +94,11 @@ def openai_chat(agent: dict[str, Any], messages: list[dict[str, str]],
         "messages": messages,
         "temperature": 0.1,
     }
+    if _is_minimax_openai(agent):
+        # MiniMax reasoning models emit <think> in content by default.
+        # reasoning_split keeps the reasoning in reasoning_details so content
+        # stays suitable for strict JSON-only agent loops.
+        payload["reasoning_split"] = True
     headers = {
         "Authorization": f"Bearer {agent['api_key']}",
         "Content-Type": "application/json",

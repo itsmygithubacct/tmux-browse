@@ -119,6 +119,24 @@ class OpenAIChatShapeTests(unittest.TestCase):
                     timeout=1.0,
                 )
 
+    def test_minimax_sets_reasoning_split(self):
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["body"] = json.loads(req.data.decode())
+            return _FakeResp(json.dumps({
+                "choices": [{"message": {"content": "{\"type\":\"final\",\"message\":\"ok\"}"}}]
+            }).encode())
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            out = ap.openai_chat(
+                {"model": "MiniMax-M2.7", "api_key": "k", "base_url": "https://api.minimax.io/v1", "provider": "minimax"},
+                [{"role": "user", "content": "hi"}],
+                timeout=1.0,
+            )
+        self.assertEqual(out, '{"type":"final","message":"ok"}')
+        self.assertTrue(captured["body"]["reasoning_split"])
+
 
 class AnthropicMessagesShapeTests(unittest.TestCase):
 
