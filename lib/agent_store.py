@@ -152,6 +152,20 @@ def list_agents() -> list[dict[str, Any]]:
     return rows
 
 
+def catalog_rows() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for name, spec in sorted(load_catalog().items()):
+        rows.append({
+            "name": name,
+            "label": spec.get("label", name),
+            "provider": spec.get("provider", ""),
+            "model": spec.get("model", ""),
+            "base_url": spec.get("base_url", ""),
+            "wire_api": spec.get("wire_api", "openai-chat"),
+        })
+    return rows
+
+
 def _normalize_agent_meta(name: str, meta: dict[str, Any]) -> dict[str, Any]:
     out = dict(meta or {})
     wire_api = (out.get("wire_api") or "").strip()
@@ -187,22 +201,22 @@ def get_agent(name: str) -> dict[str, Any]:
     return out
 
 
-def add_agent(name: str, api_key: str, *,
-              model: str | None = None,
-              base_url: str | None = None,
-              provider: str | None = None,
-              wire_api: str | None = None) -> dict[str, Any]:
+def save_agent(name: str, *, api_key: str | None = None,
+               model: str | None = None,
+               base_url: str | None = None,
+               provider: str | None = None,
+               wire_api: str | None = None) -> dict[str, Any]:
     name = _validate_name(name)
-    key = (api_key or "").strip()
-    if not key:
-        raise UsageError("missing API key")
     defaults = load_catalog().get(name, {})
+    agents = _load_json(AGENTS_FILE, default={})
+    secrets = _load_json(SECRETS_FILE, default={})
+    existing = _normalize_agent_meta(name, agents.get(name, {}))
     entry = {
-        "label": defaults.get("label", name),
-        "provider": provider or defaults.get("provider", "custom"),
-        "model": model or defaults.get("model"),
-        "base_url": (base_url or defaults.get("base_url") or "").rstrip("/"),
-        "wire_api": wire_api or defaults.get("wire_api", "openai-chat"),
+        "label": defaults.get("label", existing.get("label", name)),
+        "provider": provider or existing.get("provider") or defaults.get("provider", "custom"),
+        "model": model or existing.get("model") or defaults.get("model"),
+        "base_url": (base_url or existing.get("base_url") or defaults.get("base_url") or "").rstrip("/"),
+        "wire_api": wire_api or existing.get("wire_api") or defaults.get("wire_api", "openai-chat"),
     }
     if not entry["model"]:
         raise UsageError("missing model (required for custom agents)")
@@ -210,17 +224,36 @@ def add_agent(name: str, api_key: str, *,
         raise UsageError("missing base URL (required for custom agents)")
     if entry["wire_api"] not in SUPPORTED_WIRE_APIS:
         raise UsageError("unsupported wire API")
+    if api_key is None:
+        key = (secrets.get(name) or "").strip()
+    else:
+        key = api_key.strip()
+    if not key:
+        raise UsageError("missing API key")
 
-    agents = _load_json(AGENTS_FILE, default={})
-    secrets = _load_json(SECRETS_FILE, default={})
     agents[name] = _normalize_agent_meta(name, entry)
     secrets[name] = key
     _save_json(AGENTS_FILE, agents)
     _save_json(SECRETS_FILE, secrets)
-    out = dict(entry)
+    out = dict(agents[name])
     out["name"] = name
     out["has_api_key"] = True
     return out
+
+
+def add_agent(name: str, api_key: str, *,
+              model: str | None = None,
+              base_url: str | None = None,
+              provider: str | None = None,
+              wire_api: str | None = None) -> dict[str, Any]:
+    return save_agent(
+        name,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        provider=provider,
+        wire_api=wire_api,
+    )
 
 
 def remove_agent(name: str) -> bool:

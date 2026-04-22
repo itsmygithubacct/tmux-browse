@@ -16,6 +16,7 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
+    agent_store,
     auth,
     config,
     dashboard_config,
@@ -26,6 +27,7 @@ from . import (
     tls as tls_mod,
     ttyd,
 )
+from .errors import TBError
 from .targeting import Target
 
 
@@ -172,6 +174,10 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             return {}
 
+    def _send_tb_error(self, err: TBError) -> None:
+        status = 400 if err.exit_code == 2 else 500
+        self._send_json({"ok": False, "error": err.message}, status=status)
+
     # --- auth --------------------------------------------------------------
 
     def _auth_gate(self) -> bool:
@@ -266,6 +272,20 @@ class Handler(BaseHTTPRequestHandler):
             "path": str(config.DASHBOARD_CONFIG_FILE),
         })
 
+    def _h_agents_get(self, _parsed: ParseResult) -> None:
+        try:
+            self._send_json({
+                "ok": True,
+                "agents": agent_store.list_agents(),
+                "defaults": agent_store.catalog_rows(),
+                "paths": {
+                    "agents": str(agent_store.AGENTS_FILE),
+                    "secrets": str(agent_store.SECRETS_FILE),
+                },
+            })
+        except TBError as e:
+            self._send_tb_error(e)
+
     def _h_session_log(self, parsed: ParseResult) -> None:
         query = parse_qs(parsed.query)
         name = (query.get("session", [""])[0] or "").strip()
@@ -356,6 +376,40 @@ class Handler(BaseHTTPRequestHandler):
             "path": str(config.DASHBOARD_CONFIG_FILE),
         })
 
+    def _h_agents_post(self, _parsed: ParseResult, body: dict) -> None:
+        payload = body.get("agent", body)
+        name = (payload.get("name") or "").strip()
+        api_key = payload.get("api_key")
+        if not isinstance(api_key, str):
+            api_key = None
+        elif not api_key.strip():
+            api_key = None
+        try:
+            row = agent_store.save_agent(
+                name,
+                api_key=api_key,
+                model=(payload.get("model") or "").strip() or None,
+                base_url=(payload.get("base_url") or "").strip() or None,
+                provider=(payload.get("provider") or "").strip() or None,
+                wire_api=(payload.get("wire_api") or "").strip() or None,
+            )
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        self._send_json({"ok": True, "agent": row})
+
+    def _h_agents_remove(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("name") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
+            return
+        try:
+            removed = agent_store.remove_agent(name)
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        self._send_json({"ok": True, "removed": removed, "name": name})
+
     def _h_server_restart(self, _parsed: ParseResult, _body: dict) -> None:
         self._send_json({"ok": True, "restarting": True})
         threading.Thread(target=_restart_self, daemon=True).start()
@@ -409,6 +463,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/sessions":           _h_sessions,
         "/api/ports":              _h_ports,
         "/api/dashboard-config":   _h_dashboard_config_get,
+        "/api/agents":             _h_agents_get,
         "/api/session/log":        _h_session_log,
         "/health":                 _h_health,
     })
@@ -420,6 +475,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/session/scroll":     _h_session_scroll,
         "/api/session/type":       _h_session_type,
         "/api/dashboard-config":   _h_dashboard_config_post,
+        "/api/agents":             _h_agents_post,
+        "/api/agents/remove":      _h_agents_remove,
         "/api/server/restart":     _h_server_restart,
         "/api/session/kill":       _h_session_kill,
     })

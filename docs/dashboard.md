@@ -209,8 +209,9 @@ cannot contain whitespace, `:`, or `.`.
 
 ## Config section
 
-Below **Hidden** there is a furled **Config** pane. It edits the server-backed
-dashboard config file at `~/.tmux-browse/dashboard-config.json`.
+Below **Hidden** there is a furled **Config** pane. It includes both the
+server-backed dashboard config file at `~/.tmux-browse/dashboard-config.json`
+and an agent editor backed by the agent store under `~/.tmux-browse/`.
 
 It covers:
 
@@ -218,12 +219,16 @@ It covers:
 - Hot-loop idle wait seconds
 - Launch-on-expand behavior
 - Default ttyd iframe height and min height
+- Agent setup: load a built-in preset or existing agent, edit provider/model/
+  base URL/wire API, and save or remove the stored definition
 - Visibility toggles for summary buttons, expanded-pane buttons, badges,
   footer metadata, inline status messages, and top-bar status text
 
 Use **Save Config** to write the file, **Load From File** to discard unsaved
 changes and reload it, and **Defaults** to preview the built-in defaults
-before saving them.
+before saving them. Agent actions are separate: **Save Agent**, **Reload
+Agents**, and **Remove Agent** write `~/.tmux-browse/agents.json` plus the
+private `~/.tmux-browse/agent-secrets.json` secret store.
 
 ## Hidden section
 
@@ -243,6 +248,8 @@ dropped from the hidden set.
 - Combined stdout+stderr of each ttyd lives at
   `~/.tmux-browse/logs/<session>.log`.
 - Dashboard config lives at `~/.tmux-browse/dashboard-config.json`.
+- Agent metadata lives at `~/.tmux-browse/agents.json`.
+- Agent API keys live at `~/.tmux-browse/agent-secrets.json`.
 
 A session keeps its port forever, or until you explicitly drop it via
 `tmux-browse ports --prune` (for sessions that no longer exist).
@@ -258,12 +265,15 @@ All JSON responses use a stable `{ok, …}` envelope.
 | GET    | `/api/sessions`     | — | `{ok, sessions: [{name, windows, attached, created, activity, port, pid, ttyd_running}, …]}` |
 | GET    | `/api/ports`        | — | `{ok, assignments: {name: port}}` |
 | GET    | `/api/dashboard-config` | — | `{ok, path, config}` |
+| GET    | `/api/agents`       | — | `{ok, agents, defaults, paths}` |
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
 | GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
 | POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
 | POST   | `/api/ttyd/raw`     | `{}` | `{ok, port, pid, name, scheme, url}` — launches a standalone shell ttyd |
 | POST   | `/api/ttyd/stop`    | `{session}` | `{ok, pid?, already_stopped?}` |
 | POST   | `/api/dashboard-config` | `{config}` | `{ok, path, config}` |
+| POST   | `/api/agents`       | `{agent: {name, provider, model, base_url, wire_api, api_key?}}` | `{ok, agent}` |
+| POST   | `/api/agents/remove` | `{name}` | `{ok, removed, name}` |
 | POST   | `/api/session/new`  | `{name}` | `{ok, name}` |
 | POST   | `/api/session/kill` | `{session}` | `{ok}` — also stops the ttyd |
 | POST   | `/api/session/scroll` | `{session}` | `{ok}` — equivalent to `C-b [` |

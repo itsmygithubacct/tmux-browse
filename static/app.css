@@ -294,6 +294,9 @@ details.session.drop-right {
     flex-wrap: wrap;
     margin-top: 0.9rem;
 }
+.config-card-note {
+    line-height: 1.45;
+}
 
 .modal-backdrop {
     position: fixed;
