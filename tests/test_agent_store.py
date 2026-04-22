@@ -131,6 +131,30 @@ class AddRemoveTests(_IsolatedStateMixin, unittest.TestCase):
         got = agent_store.get_agent("opus")
         self.assertEqual(got["api_key"], "sk-xyz")
 
+    def test_save_agent_preserves_existing_key_when_api_key_omitted(self):
+        agent_store.add_agent("opus", "sk-keep")
+        row = agent_store.save_agent(
+            "opus",
+            model="claude-opus-9-1",
+            base_url="https://api.anthropic.com/v1",
+            provider="anthropic",
+            wire_api="anthropic-messages",
+        )
+        self.assertEqual(row["model"], "claude-opus-9-1")
+        got = agent_store.get_agent("opus")
+        self.assertEqual(got["api_key"], "sk-keep")
+        self.assertEqual(got["model"], "claude-opus-9-1")
+
+    def test_save_agent_without_existing_key_still_requires_one(self):
+        with self.assertRaises(UsageError):
+            agent_store.save_agent(
+                "custom",
+                model="m",
+                base_url="https://api.example.test/v1",
+                provider="example",
+                wire_api="openai-chat",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

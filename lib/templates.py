@@ -102,6 +102,55 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-inline-messages" /><span>Inline status messages</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-status" /><span>Top bar status text</span></label>
             </section>
+            <section class="config-card">
+                <div class="config-card-title">Agent</div>
+                <label class="field">
+                    <span>Configured agent</span>
+                    <select id="cfg-agent-existing"></select>
+                </label>
+                <label class="field">
+                    <span>Preset</span>
+                    <select id="cfg-agent-preset"></select>
+                </label>
+                <label class="field">
+                    <span>Name</span>
+                    <input type="text" id="cfg-agent-name" placeholder="gpt" />
+                </label>
+                <label class="field">
+                    <span>Provider</span>
+                    <input type="text" id="cfg-agent-provider" placeholder="openai" />
+                </label>
+                <label class="field">
+                    <span>Model</span>
+                    <input type="text" id="cfg-agent-model" placeholder="gpt-5.4" />
+                </label>
+                <label class="field">
+                    <span>Base URL</span>
+                    <input type="url" id="cfg-agent-base-url" placeholder="https://api.openai.com/v1" />
+                </label>
+                <label class="field">
+                    <span>Wire API</span>
+                    <select id="cfg-agent-wire-api">
+                        <option value="openai-chat">openai-chat</option>
+                        <option value="anthropic-messages">anthropic-messages</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>API key</span>
+                    <input type="password" id="cfg-agent-api-key" placeholder="Leave blank to keep existing key" />
+                </label>
+                <div class="hot-editor-actions">
+                    <button class="btn green" id="cfg-agent-save-btn" type="button">Save Agent</button>
+                    <button class="btn blue" id="cfg-agent-reload-btn" type="button">Reload Agents</button>
+                    <button class="btn red" id="cfg-agent-remove-btn" type="button">Remove Agent</button>
+                </div>
+                <div class="dim config-card-note" id="cfg-agent-summary">
+                    Agents are stored separately from dashboard-config.json.
+                </div>
+                <div class="dim" id="cfg-agent-status">
+                    Load a preset or existing agent, then save to write ~/.tmux-browse/agents.json and the secret store.
+                </div>
+            </section>
         </div>
         <div class="config-actions">
             <button class="btn green" id="cfg-save-btn">Save Config</button>

@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.4.1 — Dashboard agent editor + default tweaks
+
+### Features
+
+- **Dashboard agent config UI.** New "Agent" card inside the Config pane
+  lets you load a built-in preset or existing agent, edit
+  provider/model/base URL/wire API/API key, and save or remove agents —
+  all backed by `~/.tmux-browse/agents.json` and the private
+  `agent-secrets.json` secret store.
+- **`save_agent` upsert semantics.** Saving an agent without an API key
+  now preserves the previously stored key, so you can update model or
+  provider without re-entering the secret.
+- **`catalog_rows` helper.** New function exposes the built-in agent
+  catalog as a flat list for the dashboard preset selector.
+- **Server agent routes.** `GET /api/agents` returns configured agents,
+  catalog defaults, and file paths. `POST /api/agents` saves an agent;
+  `POST /api/agents/remove` deletes one. Errors map to structured JSON
+  with appropriate HTTP status codes.
+
+### Defaults changed
+
+- **Auto refresh off by default.** Dashboard no longer auto-refreshes on
+  first load; toggle it on in Config if desired.
+- **Launch / Stop ttyd / Kill buttons hidden by default.** Reduces
+  visual clutter for new users; re-enable via the Config visibility
+  toggles.
+
+### Tests
+
+- New `test_server_agents.py` covering route registration, save, remove,
+  and error-mapping handlers.
+- New `test_agent_store.py` cases for `save_agent` key-preservation and
+  missing-key validation.
+
 ## 0.4.0 — Hardening + modularity pass
 
 ### Features

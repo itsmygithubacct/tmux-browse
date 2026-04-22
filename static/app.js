@@ -122,6 +122,9 @@ const state = {
     splitPicker: { open: false, session: "", filter: "" },
     audioCtx: null,
     hotLoops: {},
+    agents: [],
+    agentDefaults: [],
+    agentPaths: { agents: "", secrets: "" },
 };
 
 function saveHidden(set) { saveJSON(HIDDEN_KEY, [...set]); }
@@ -205,6 +208,188 @@ function setConfigStatus(text, tone = "dim") {
     if (!node) return;
     node.textContent = text;
     node.className = tone;
+}
+
+function setAgentStatus(text, tone = "dim") {
+    const node = document.getElementById("cfg-agent-status");
+    if (!node) return;
+    node.textContent = text;
+    node.className = tone;
+}
+
+function agentFieldMap() {
+    return {
+        existing: document.getElementById("cfg-agent-existing"),
+        preset: document.getElementById("cfg-agent-preset"),
+        name: document.getElementById("cfg-agent-name"),
+        provider: document.getElementById("cfg-agent-provider"),
+        model: document.getElementById("cfg-agent-model"),
+        base_url: document.getElementById("cfg-agent-base-url"),
+        wire_api: document.getElementById("cfg-agent-wire-api"),
+        api_key: document.getElementById("cfg-agent-api-key"),
+    };
+}
+
+function agentSummaryText() {
+    const bits = [];
+    if (state.agents.length) bits.push(`configured: ${state.agents.map(r => r.name).join(", ")}`);
+    else bits.push("configured: none");
+    if (state.agentPaths.agents) bits.push(state.agentPaths.agents);
+    return bits.join(" · ");
+}
+
+function renderAgentSummary() {
+    const node = document.getElementById("cfg-agent-summary");
+    if (!node) return;
+    node.textContent = agentSummaryText();
+}
+
+function populateSelect(node, rows, firstLabel, labelFn) {
+    if (!node) return;
+    node.innerHTML = "";
+    node.append(el("option", { value: "" }, firstLabel));
+    for (const row of rows) {
+        node.append(el("option", { value: row.name }, labelFn(row)));
+    }
+}
+
+function renderAgentSelectors(selectedName = "", selectedPreset = "") {
+    const fields = agentFieldMap();
+    populateSelect(fields.existing, state.agents, "New agent", (row) =>
+        `${row.name} (${row.provider || "custom"} · ${row.model || "no model"})`,
+    );
+    populateSelect(fields.preset, state.agentDefaults, "Custom / manual", (row) =>
+        `${row.label || row.name} (${row.name})`,
+    );
+    fields.existing.value = selectedName || "";
+    fields.preset.value = selectedPreset || "";
+    renderAgentSummary();
+}
+
+function findAgentRow(name) {
+    return state.agents.find((row) => row.name === name) || null;
+}
+
+function findAgentDefault(name) {
+    return state.agentDefaults.find((row) => row.name === name) || null;
+}
+
+function fillAgentForm(row, opts = {}) {
+    const fields = agentFieldMap();
+    const preset = opts.presetName !== undefined ? opts.presetName : (findAgentDefault(row.name) ? row.name : "");
+    fields.name.value = row.name || "";
+    fields.provider.value = row.provider || "";
+    fields.model.value = row.model || "";
+    fields.base_url.value = row.base_url || "";
+    fields.wire_api.value = row.wire_api || "openai-chat";
+    fields.api_key.value = "";
+    fields.existing.value = opts.existingName !== undefined ? opts.existingName : (row.name || "");
+    fields.preset.value = preset;
+}
+
+function clearAgentForm() {
+    fillAgentForm({
+        name: "",
+        provider: "",
+        model: "",
+        base_url: "",
+        wire_api: "openai-chat",
+    }, { existingName: "", presetName: "" });
+}
+
+function loadExistingAgentIntoForm() {
+    const fields = agentFieldMap();
+    const row = findAgentRow(fields.existing.value);
+    if (!row) {
+        clearAgentForm();
+        setAgentStatus("editing a new agent", "dim");
+        return;
+    }
+    fillAgentForm(row);
+    setAgentStatus(row.has_api_key
+        ? `loaded ${row.name}; leave API key blank to keep the stored secret`
+        : `loaded ${row.name}; add an API key before saving`, row.has_api_key ? "dim" : "err");
+}
+
+function applyAgentPreset() {
+    const fields = agentFieldMap();
+    const preset = findAgentDefault(fields.preset.value);
+    if (!preset) return;
+    if (!fields.name.value.trim() || fields.existing.value !== fields.name.value.trim()) {
+        fields.name.value = preset.name;
+    }
+    fields.provider.value = preset.provider || "";
+    fields.model.value = preset.model || "";
+    fields.base_url.value = preset.base_url || "";
+    fields.wire_api.value = preset.wire_api || "openai-chat";
+    if (fields.existing.value && fields.existing.value !== fields.name.value.trim()) {
+        fields.existing.value = "";
+    }
+    setAgentStatus(`loaded preset ${preset.name}`, "dim");
+}
+
+async function loadAgents(selectedName = "") {
+    const current = selectedName || agentFieldMap().existing.value || agentFieldMap().name.value.trim();
+    const r = await api("GET", "/api/agents");
+    if (!r.ok) {
+        setAgentStatus("error loading agents: " + (r.error || "unknown"), "err");
+        return false;
+    }
+    state.agents = Array.isArray(r.agents) ? r.agents : [];
+    state.agentDefaults = Array.isArray(r.defaults) ? r.defaults : [];
+    state.agentPaths = r.paths || { agents: "", secrets: "" };
+    const selectedRow = findAgentRow(current);
+    renderAgentSelectors(selectedRow ? selectedRow.name : "", findAgentDefault(current) ? current : "");
+    if (selectedRow) fillAgentForm(selectedRow);
+    else if (!current && state.agents.length) {
+        renderAgentSelectors(state.agents[0].name, findAgentDefault(state.agents[0].name) ? state.agents[0].name : "");
+        fillAgentForm(state.agents[0]);
+    } else if (!current) {
+        clearAgentForm();
+    }
+    return true;
+}
+
+function readAgentForm() {
+    const fields = agentFieldMap();
+    const payload = {
+        name: fields.name.value.trim(),
+        provider: fields.provider.value.trim(),
+        model: fields.model.value.trim(),
+        base_url: fields.base_url.value.trim(),
+        wire_api: fields.wire_api.value,
+    };
+    const apiKey = fields.api_key.value.trim();
+    if (apiKey) payload.api_key = apiKey;
+    return payload;
+}
+
+async function saveAgentConfig() {
+    const payload = readAgentForm();
+    const r = await api("POST", "/api/agents", { agent: payload });
+    if (!r.ok) {
+        setAgentStatus("error saving agent: " + (r.error || "unknown"), "err");
+        return;
+    }
+    await loadAgents(r.agent && r.agent.name ? r.agent.name : payload.name);
+    setAgentStatus(`saved agent ${r.agent.name}`, "ok");
+}
+
+async function removeAgentConfig() {
+    const fields = agentFieldMap();
+    const name = fields.name.value.trim() || fields.existing.value;
+    if (!name) {
+        setAgentStatus("enter or load an agent name before removing", "err");
+        return;
+    }
+    const r = await api("POST", "/api/agents/remove", { name });
+    if (!r.ok) {
+        setAgentStatus("error removing agent: " + (r.error || "unknown"), "err");
+        return;
+    }
+    await loadAgents("");
+    clearAgentForm();
+    setAgentStatus(r.removed ? `removed agent ${name}` : `agent ${name} was not configured`, r.removed ? "ok" : "dim");
 }
 
 function updateTopbarStatus() {
@@ -1431,6 +1616,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         primeAudio();
         playIdleTone(document.getElementById("cfg-idle-sound").value);
     });
+    document.getElementById("cfg-agent-save-btn").addEventListener("click", saveAgentConfig);
+    document.getElementById("cfg-agent-reload-btn").addEventListener("click", async () => {
+        const ok = await loadAgents();
+        if (ok) setAgentStatus("reloaded agent list", "ok");
+    });
+    document.getElementById("cfg-agent-remove-btn").addEventListener("click", removeAgentConfig);
+    agentFieldMap().existing.addEventListener("change", loadExistingAgentIntoForm);
+    agentFieldMap().preset.addEventListener("change", applyAgentPreset);
+    agentFieldMap().name.addEventListener("input", () => {
+        const fields = agentFieldMap();
+        if (fields.existing.value && fields.name.value.trim() !== fields.existing.value) fields.existing.value = "";
+    });
     for (const input of Object.values(configFieldMap())) {
         if (!input) continue;
         input.addEventListener("input", previewDashboardConfig);
@@ -1468,7 +1665,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
     renderConfigForm();
     updateTopbarStatus();
+    renderAgentSelectors();
     await loadDashboardConfig();
+    await loadAgents();
     await refresh();
     scheduleRefreshLoop();
 });
