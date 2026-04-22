@@ -61,9 +61,13 @@ def build_context(cert: Path, key: Path) -> ssl.SSLContext:
     """Server-side SSLContext loaded from the given cert/key.
 
     ``PROTOCOL_TLS_SERVER`` picks the highest mutually-supported TLS
-    version; defaults are sensible (TLS 1.2+ on recent Pythons).
+    version. We also pin the minimum to TLS 1.2 explicitly — recent
+    Pythons default to this, but older builds may allow 1.0/1.1 and
+    we'd rather fail closed than inherit a weak default.
     """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    # Explicit floor: TLS 1.2. TLSv1_3 negotiated when both ends support it.
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
         ctx.load_cert_chain(certfile=str(cert), keyfile=str(key))
     except ssl.SSLError as e:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import fcntl
 import json
 import shutil
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,7 +39,6 @@ def _recover_corrupt(path: Path, err: Exception) -> dict:
         shutil.copy2(path, backup)
     except OSError:
         backup = None
-    import sys
     sys.stderr.write(
         f"tmux-browse: ports registry at {path} was corrupt ({err}); "
         f"reinitialised"

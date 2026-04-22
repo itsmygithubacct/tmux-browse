@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 import secrets
 import time
+from typing import Callable, TypeVar
 
 from . import sessions
 from .errors import Timeout
@@ -28,6 +29,32 @@ _SHELL_COMMANDS = {"bash", "zsh", "fish", "sh", "dash", "ksh", "tcsh", "csh"}
 def is_shell_pane(target: Target) -> bool:
     cmd = sessions.pane_current_command(target)
     return (cmd or "").lower() in _SHELL_COMMANDS
+
+
+# ----------------------------------------------------------------------------
+# Shared poll scaffolding
+# ----------------------------------------------------------------------------
+
+_T = TypeVar("_T")
+
+
+def _poll_until(check: Callable[[], tuple[bool, _T]],
+                *, deadline: float, interval: float) -> tuple[bool, _T | None]:
+    """Call ``check()`` every ``interval`` seconds until it returns
+    ``(True, value)`` or ``time.monotonic() >= deadline``.
+
+    Returns ``(True, value)`` on match, ``(False, last_value_or_None)`` on
+    timeout. The caller is responsible for any post-timeout side effects
+    (e.g., sending C-c to interrupt a runaway pane).
+    """
+    last: _T | None = None
+    while time.monotonic() < deadline:
+        hit, val = check()
+        last = val
+        if hit:
+            return True, val
+        time.sleep(interval)
+    return False, last
 
 
 # -----------------------------------------------------------------------------
@@ -74,23 +101,34 @@ def exec_sentinel(target: Target, command: str,
     if not ok:
         return {"ok": False, "error": err}
 
-    deadline = t0 + timeout_sec
-    while time.monotonic() < deadline:
+    # state carries the capture + any error out of the check closure so we
+    # don't have to re-capture after the match (the previous refactor did,
+    # doubling the tmux RTT on every successful exec).
+    state: dict = {"err": None, "match": None, "content": ""}
+
+    def check_sentinel() -> tuple[bool, None]:
         ok, content = sessions.capture_target(target, lines=5000)
         if not ok:
-            return {"ok": False, "error": content}
+            state["err"] = content
+            return True, None  # break; caller sees state["err"]
+        state["content"] = content
         m = end_re.search(content)
-        if m:
-            rc = int(m.group(1))
-            duration = time.monotonic() - t0
-            output = _extract(content, start, m)
-            return {
-                "exit_status": rc,
-                "output": output,
-                "duration": round(duration, 3),
-                "strategy": "sentinel",
-            }
-        time.sleep(poll_sec)
+        if m is not None:
+            state["match"] = m
+            return True, None
+        return False, None
+
+    _poll_until(check_sentinel, deadline=t0 + timeout_sec, interval=poll_sec)
+    if state["err"] is not None:
+        return {"ok": False, "error": state["err"]}
+    m = state["match"]
+    if m is not None:
+        return {
+            "exit_status": int(m.group(1)),
+            "output": _extract(state["content"], start, m),
+            "duration": round(time.monotonic() - t0, 3),
+            "strategy": "sentinel",
+        }
 
     if interrupt_on_timeout:
         # Best-effort: send SIGINT to whatever's running in the pane so the
@@ -150,27 +188,30 @@ def exec_idle(target: Target, command: str,
     if not ok:
         return {"ok": False, "error": err}
 
-    deadline = t0 + timeout_sec
-    last_hash = None
-    last_change = time.monotonic()
-    while True:
-        ok, after = sessions.capture_target(target, lines=5000)
+    # Track the pane hash and the monotonic time of the last observed change.
+    state: dict = {"hash": None, "last_change": time.monotonic(), "err": None, "capture": ""}
+
+    def check_idle() -> tuple[bool, str]:
+        ok, snap = sessions.capture_target(target, lines=5000)
         if not ok:
-            return {"ok": False, "error": after}
-        h = hash(after)
+            state["err"] = snap
+            return True, snap  # break out; caller checks state["err"]
+        state["capture"] = snap
+        h = hash(snap)
         now = time.monotonic()
-        if h != last_hash:
-            last_hash = h
-            last_change = now
-        if now - last_change >= idle_sec:
-            break
-        if now >= deadline:
-            if interrupt_on_timeout:
-                sessions.send_keys(target, "C-c")
-            raise Timeout(
-                f"exec timed out after {timeout_sec}s (idle strategy)",
-            )
-        time.sleep(poll_sec)
+        if h != state["hash"]:
+            state["hash"] = h
+            state["last_change"] = now
+        return (now - state["last_change"] >= idle_sec), snap
+
+    hit, _ = _poll_until(check_idle, deadline=t0 + timeout_sec, interval=poll_sec)
+    if state["err"] is not None:
+        return {"ok": False, "error": state["err"]}
+    after = state["capture"]
+    if not hit:
+        if interrupt_on_timeout:
+            sessions.send_keys(target, "C-c")
+        raise Timeout(f"exec timed out after {timeout_sec}s (idle strategy)")
 
     # New content = everything after the last line we saw pre-send.
     after_lines = after.rstrip("\n").split("\n")

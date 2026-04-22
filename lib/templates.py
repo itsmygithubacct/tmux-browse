@@ -1,5 +1,7 @@
 """Top-level dashboard HTML template."""
 
+import json
+
 from . import static
 
 
@@ -10,6 +12,7 @@ def render_index() -> str:
 <meta charset="utf-8">
 <title>tmux-browse</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>{static.CSS}</style>
 </head>
 <body>
@@ -17,8 +20,9 @@ def render_index() -> str:
     <h1>tmux sessions <span class="dim" id="count" style="font-size:0.85rem"></span></h1>
     <input type="text" id="new-name" placeholder="new session name" />
     <button class="btn green" id="new-btn">New session</button>
+    <button class="btn blue" id="raw-btn" title="open a standalone ttyd shell not attached to tmux">Raw ttyd</button>
     <button class="btn blue" id="refresh-btn">Refresh</button>
-    <span class="dim" style="margin-left:auto;font-size:0.8rem">
+    <span class="dim" id="topbar-status" style="margin-left:auto;font-size:0.8rem">
         auto-refresh 5s &middot; ttyd spawns on pane expand
     </span>
     <button class="btn red" id="restart-btn" title="restart the dashboard server process">Restart</button>
@@ -27,6 +31,85 @@ def render_index() -> str:
 <details id="hidden-wrap" class="hidden-list" hidden>
     <summary>Hidden (<span id="hidden-count">0</span>)</summary>
     <div id="sessions-hidden"></div>
+</details>
+<details id="config-wrap" class="config-pane">
+    <summary>Config</summary>
+    <div class="config-body">
+        <div class="config-grid">
+            <section class="config-card">
+                <div class="config-card-title">Behavior</div>
+                <label class="check-row">
+                    <input type="checkbox" id="cfg-auto-refresh" />
+                    <span>Enable auto refresh</span>
+                </label>
+                <label class="field">
+                    <span>Refresh seconds</span>
+                    <input type="number" id="cfg-refresh-seconds" min="1" max="300" step="1" />
+                </label>
+                <label class="field">
+                    <span>Hot loop idle wait seconds</span>
+                    <input type="number" id="cfg-hot-loop-idle-seconds" min="1" max="3600" step="1" />
+                </label>
+                <label class="check-row">
+                    <input type="checkbox" id="cfg-launch-on-expand" />
+                    <span>Launch ttyd when a pane opens</span>
+                </label>
+                <label class="field">
+                    <span>Default ttyd height (vh)</span>
+                    <input type="number" id="cfg-default-height" min="20" max="95" step="1" />
+                </label>
+                <label class="field">
+                    <span>Default ttyd min height (px)</span>
+                    <input type="number" id="cfg-min-height" min="120" max="900" step="10" />
+                </label>
+                <label class="field">
+                    <span>Idle alert sound</span>
+                    <span class="sound-row">
+                        <select id="cfg-idle-sound">
+                            <option value="beep">Beep (880 Hz sine)</option>
+                            <option value="chime">Chime (two-note)</option>
+                            <option value="knock">Knock (double thud)</option>
+                            <option value="bell">Bell (long decay)</option>
+                            <option value="blip">Blip (short square)</option>
+                            <option value="ding">Ding (high sine)</option>
+                        </select>
+                        <button type="button" class="btn" id="cfg-sound-test" title="play the selected sound">Test</button>
+                    </span>
+                </label>
+            </section>
+            <section class="config-card">
+                <div class="config-card-title">Summary Row</div>
+                <label class="check-row"><input type="checkbox" id="cfg-show-attached-badge" /><span>Attached clients badge</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-window-badge" /><span>Window count badge</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-port-badge" /><span>Running ttyd port badge</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-idle-text" /><span>Idle text</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-idle-alert-button" /><span>Idle Alert button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-open" /><span>Open button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-log" /><span>Log button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-scroll" /><span>Scroll button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-split" /><span>Side-by-side button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-hide" /><span>Hide button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-reorder" /><span>Reorder pad</span></label>
+            </section>
+            <section class="config-card">
+                <div class="config-card-title">Expanded Pane</div>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-launch" /><span>Launch button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-stop" /><span>Stop ttyd button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-kill" /><span>Kill button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-hot-buttons" /><span>Hot Buttons manager</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-hot-loop-toggles" /><span>Hot-button loop toggles</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-footer" /><span>Footer metadata</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-inline-messages" /><span>Inline status messages</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-status" /><span>Top bar status text</span></label>
+            </section>
+        </div>
+        <div class="config-actions">
+            <button class="btn green" id="cfg-save-btn">Save Config</button>
+            <button class="btn blue" id="cfg-load-btn">Load From File</button>
+            <button class="btn" id="cfg-reset-btn">Defaults</button>
+            <span class="dim" id="cfg-status">Saved to ~/.tmux-browse/dashboard-config.json</span>
+        </div>
+    </div>
 </details>
 <div id="hot-modal" class="modal-backdrop" hidden>
     <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="hot-modal-title">
@@ -48,12 +131,16 @@ def render_index() -> str:
                     <span>Command text</span>
                     <textarea id="hot-command" rows="6" placeholder="review and improve"></textarea>
                 </label>
+                <label class="field">
+                    <span>Loop count</span>
+                    <input type="number" id="hot-loop-count" min="0" step="1" value="0" />
+                </label>
                 <div class="hot-editor-actions">
                     <button class="btn green" id="hot-save-btn">Save</button>
                     <button class="btn red" id="hot-clear-btn">Clear</button>
                 </div>
                 <div class="dim hot-editor-hint">
-                    Edit from any pane. The same shared hot buttons appear in every session pane and send their command to that pane's active terminal.
+                    Edit from any pane. The same shared hot buttons appear in every session pane and send their command to that pane's active terminal. Loop count `0` means run forever; any positive number stops after that many idle-triggered sends.
                 </div>
             </div>
         </div>
@@ -98,7 +185,161 @@ def render_index() -> str:
         </div>
     </div>
 </div>
+<div id="split-modal" class="modal-backdrop" hidden>
+    <div class="modal-card split-modal" role="dialog" aria-modal="true" aria-labelledby="split-modal-title">
+        <div class="modal-head">
+            <div>
+                <div class="modal-eyebrow">Side By Side</div>
+                <h2 id="split-modal-title">Split Right</h2>
+            </div>
+            <button class="btn" id="split-close-btn" title="close the split chooser">Close</button>
+        </div>
+        <div class="split-picker-body">
+            <label class="field">
+                <span>Filter sessions</span>
+                <input type="text" id="split-search" class="split-search" placeholder="Search visible sessions" />
+            </label>
+            <div class="split-target-list" id="split-target-list"></div>
+            <div class="dim hot-editor-hint">
+                Pick a session to place the current one on its right. You can also drag the split button onto a session and snap left, right, or above it.
+            </div>
+        </div>
+    </div>
+</div>
 <script>{static.JS}</script>
+</body>
+</html>
+"""
+
+
+def render_raw_ttyd(name: str, port: int, scheme: str) -> str:
+    quoted_name = json.dumps(name)
+    quoted_port = json.dumps(port)
+    quoted_scheme = json.dumps("https" if scheme == "https" else "http")
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>raw ttyd</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {{
+    margin: 0;
+    font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #0d1117;
+    color: #e6edf3;
+}}
+.raw-shell {{
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+}}
+.raw-topbar {{
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #30363d;
+    background: #161b22;
+}}
+.raw-title {{
+    font-weight: 600;
+}}
+.raw-meta {{
+    color: #8b949e;
+    font-size: 0.88rem;
+}}
+.raw-spacer {{
+    margin-left: auto;
+}}
+.btn {{
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #21262d;
+    color: #e6edf3;
+    padding: 0.45rem 0.75rem;
+    cursor: pointer;
+}}
+.btn.red {{
+    background: #3b1117;
+    border-color: #8b1e2d;
+}}
+.btn:disabled {{
+    opacity: 0.65;
+    cursor: default;
+}}
+#raw-msg {{
+    color: #8b949e;
+    font-size: 0.88rem;
+}}
+iframe {{
+    width: 100%;
+    height: calc(100vh - 58px);
+    border: 0;
+    background: #000;
+}}
+</style>
+</head>
+<body>
+<div class="raw-shell">
+    <div class="raw-topbar">
+        <div>
+            <div class="raw-title" id="raw-title"></div>
+            <div class="raw-meta" id="raw-meta"></div>
+        </div>
+        <span class="raw-spacer"></span>
+        <span id="raw-msg">Running</span>
+        <button class="btn" id="raw-open-direct" type="button">Open Direct</button>
+        <button class="btn red" id="raw-stop" type="button">Stop</button>
+    </div>
+    <iframe id="raw-frame" allow="clipboard-read; clipboard-write"></iframe>
+</div>
+<script>
+const rawName = {quoted_name};
+const rawPort = {quoted_port};
+const rawScheme = {quoted_scheme};
+let stopping = false;
+
+function ttydUrl(port) {{
+    return `${{rawScheme}}//${{window.location.hostname}}:${{port}}/`;
+}}
+
+async function stopRaw(closeWindow = false) {{
+    if (stopping) return;
+    stopping = true;
+    document.getElementById("raw-stop").disabled = true;
+    document.getElementById("raw-msg").textContent = "Stopping…";
+    try {{
+        const res = await fetch("/api/ttyd/stop", {{
+            method: "POST",
+            headers: {{ "Content-Type": "application/json" }},
+            body: JSON.stringify({{ session: rawName }}),
+            keepalive: true,
+        }});
+        const text = await res.text();
+        let data = {{}};
+        try {{ data = text ? JSON.parse(text) : {{ ok: res.ok }}; }} catch {{ data = {{ ok: res.ok }}; }}
+        document.getElementById("raw-msg").textContent = data.ok ? "Stopped" : `Error: ${{data.error || "unknown"}}`;
+    }} catch (_err) {{
+        document.getElementById("raw-msg").textContent = "Stop request failed";
+    }}
+    if (closeWindow) window.close();
+}}
+
+window.addEventListener("pagehide", () => {{
+    if (stopping) return;
+    const blob = new Blob([JSON.stringify({{ session: rawName }})], {{ type: "application/json" }});
+    navigator.sendBeacon("/api/ttyd/stop", blob);
+}});
+
+const url = ttydUrl(rawPort);
+document.title = `raw ttyd · ${{rawName}}`;
+document.getElementById("raw-title").textContent = rawName;
+document.getElementById("raw-meta").textContent = `port ${{rawPort}}`;
+document.getElementById("raw-frame").src = url;
+document.getElementById("raw-open-direct").addEventListener("click", () => window.open(url, "_blank", "noopener"));
+document.getElementById("raw-stop").addEventListener("click", () => stopRaw(true));
+</script>
 </body>
 </html>
 """

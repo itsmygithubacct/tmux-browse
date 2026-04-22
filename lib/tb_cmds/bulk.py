@@ -10,7 +10,7 @@ import socket
 import time
 
 from .. import config, output, ports, sessions, ttyd
-from . import require_target
+from ._common import require_target
 
 
 def _dashboard_status() -> dict:

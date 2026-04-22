@@ -11,7 +11,7 @@ embeds a [ttyd][ttyd] terminal in each pane on demand.
 ```bash
 python3 tmux_browse.py serve                   # defaults: 0.0.0.0:8096
 python3 tmux_browse.py serve --port 9000
-python3 tmux_browse.py serve --bind 127.0.0.1  # local-only
+python3 tmux_browse.py serve --bind 127.0.0.1  # local-only (dashboard + ttyd)
 python3 tmux_browse.py serve -v                # log every request
 python3 tmux_browse.py serve --auth s3cr3t     # require Bearer token
 python3 tmux_browse.py serve --auth-file ~/.tb # first non-empty line = token
@@ -19,7 +19,8 @@ python3 tmux_browse.py serve --cert cert.pem --key key.pem   # HTTPS
 ```
 
 Open `http://<host>:8096/` in a browser. The page auto-refreshes the session
-list every 5 seconds.
+list every 5 seconds by default; the new bottom **Config** pane can change
+that and persists to `~/.tmux-browse/dashboard-config.json`.
 
 ## Optional authentication
 
@@ -50,13 +51,19 @@ After redirect the URL is just `/` and the cookie carries the token for a
 week (`HttpOnly; SameSite=Lax; Max-Age=604800`).
 
 **Limitation (read carefully):** this auth token guards the dashboard HTTP
-surface only. The per-session ttyd processes it spawns run on
-independent ports (7700–7799) and **are not protected by this token**.
-Anyone who can reach those ports still gets shell access. For a real
-perimeter either (a) bind the dashboard AND ttyds to `127.0.0.1` and tunnel
-over SSH, or (b) put the whole stack behind a reverse proxy that does TLS
-and auth. The token is a "don't-accidentally-discover-it" layer, not a
-hardened gate.
+surface only. The per-session ttyd processes it spawns still listen on
+their own ports and **are not protected by this token**. Anyone who can
+reach those ports still gets shell access. For a real perimeter either
+(a) run `serve --bind 127.0.0.1` and tunnel over SSH, or (b) put the whole
+stack behind a reverse proxy that does TLS and auth. The token is a
+"don't-accidentally-discover-it" layer, not a hardened gate.
+
+`serve --bind` now propagates to spawned ttyds as well:
+
+- `--bind 0.0.0.0` keeps ttyd reachable on all interfaces
+- `--bind 127.0.0.1` keeps both dashboard and ttyd local-only
+- a concrete host IP such as `--bind 192.168.1.10` is mapped to the owning
+  NIC for ttyd's `--interface`
 
 ## Optional TLS (HTTPS)
 
@@ -120,8 +127,9 @@ You can mix TLS and Bearer auth freely; they're orthogonal.
 
 ## UI — session pane summary
 
-Each row in the main list is a `<details>` pane. The collapsed **summary row**
-shows:
+Each session is still a `<details>` pane, but the main area can now group
+multiple panes into the same row for side-by-side viewing. The collapsed
+**summary row** shows:
 
 | Element | Meaning |
 |---|---|
@@ -134,15 +142,17 @@ shows:
 | **Open ↗** | green button; opens the live ttyd in a new browser tab. Only visible while ttyd is running. |
 | **Log** | serves `tmux capture-pane` output for that session as `text/plain` in a new tab — the scrollback up to `history-limit`. |
 | **Scroll** | orange button; invokes `tmux copy-mode` on the session's active pane (equivalent to `C-b [`). Useful when viewing through ttyd. |
+| **▥** split button | blue button; click it to open a chooser of visible sessions, then place the current session on the right of the selected target. The same button is draggable: drag onto the left/right side of another pane to snap there, or drop near the middle to insert above it as its own row. Persisted in `localStorage`. |
 | **Hide** | red button; moves the pane into a furled **Hidden (N)** section at the bottom of the page. The button flips to **Unhide** there. Persisted in `localStorage`. |
-| **[▲▼]** reorder pad | clickable arrows move the pane up/down one slot. The pad itself is draggable — drag it onto another pane to drop the current one above the target. Persisted in `localStorage`. |
+| **[▲▼]** reorder pad | clickable arrows move the pane up/down the main stack. Hidden sessions still use the stored flat order. Persisted in `localStorage`. |
 
 ## UI — expanded pane body
 
-Expanding a pane for the first time auto-spawns `ttyd` for that session and
-embeds the terminal in a resizable iframe. Drag the bottom-right corner of
-the iframe to resize; the wrapper uses `resize: vertical` because iframes
-swallow pointer events during a drag.
+Expanding a pane for the first time auto-spawns `ttyd` for that session by
+default and embeds the terminal in a resizable iframe. That launch-on-expand
+behavior is configurable in the bottom **Config** pane. Drag the bottom-right
+corner of the iframe to resize; the wrapper uses `resize: vertical` because
+iframes swallow pointer events during a drag.
 
 Body controls:
 
@@ -159,14 +169,26 @@ that slot's command to that pane's active terminal as a full line plus
 `Enter`. The slots are global to the page and stored in `localStorage` per
 browser.
 
-Each visible hot button also gets a small orange `⟳` loop toggle on its
-right. When toggled on, the button stays visually pressed and the dashboard
-watches that session for idleness. Once the session has been idle for a short
-period, it sends that hot button's command, then waits for activity before
-arming the loop again. Click the loop toggle again to stop it.
+Each visible hot button also gets a small orange loop toggle on its right.
+The label shows either `∞` (run until stopped) or `Nx` for a configured loop
+count. When toggled on, the button stays visually pressed and the dashboard
+watches that session for idleness. Once the session has been idle for the
+configured hot-loop wait time, it sends that hot button's command, then waits
+for activity before arming the loop again. Click the loop toggle again to
+stop it.
 
-The top bar also includes a blue **Refresh** button and a red **Restart**
-button. **Restart** re-execs the dashboard server process itself.
+The top bar also includes a blue **Raw ttyd** button, a blue **Refresh**
+button, and a red **Restart** button. **Raw ttyd** opens a standalone ttyd
+shell not attached to tmux in a small wrapper page with:
+
+- the embedded raw ttyd shell itself
+- an **Open Direct** button to jump to the ttyd port URL
+- a **Stop** button that terminates that raw shell
+
+Closing that wrapper page also sends a best-effort stop request for the raw
+shell, so Raw ttyd sessions are manageable from the UI instead of becoming
+fire-and-forget background shells. **Restart** re-execs the dashboard server
+process itself.
 
 Idle alerts are browser-side. When enabled for a session, the dashboard
 watches that session's `idle_seconds` value during the normal refresh loop
@@ -176,13 +198,32 @@ in `localStorage`. Sound alerts work best after at least one click or keypress
 in the page, because browsers often block audio until the page has received a
 user gesture.
 
-Footer: `ttyd on port N ↗` is a link to the raw ttyd URL; `pid N`; `created
-X ago`. Clicking the port link opens the terminal in its own tab.
+Footer: `ttyd on port N ↗` is a link to that session's live ttyd URL;
+`pid N`; `created X ago`. Clicking the port link opens the terminal in its
+own tab.
 
 ## New session
 
 Top of the page: a text input and a green **New session** button. Names
 cannot contain whitespace, `:`, or `.`.
+
+## Config section
+
+Below **Hidden** there is a furled **Config** pane. It edits the server-backed
+dashboard config file at `~/.tmux-browse/dashboard-config.json`.
+
+It covers:
+
+- Auto-refresh enable/seconds
+- Hot-loop idle wait seconds
+- Launch-on-expand behavior
+- Default ttyd iframe height and min height
+- Visibility toggles for summary buttons, expanded-pane buttons, badges,
+  footer metadata, inline status messages, and top-bar status text
+
+Use **Save Config** to write the file, **Load From File** to discard unsaved
+changes and reload it, and **Defaults** to preview the built-in defaults
+before saving them.
 
 ## Hidden section
 
@@ -201,6 +242,7 @@ dropped from the hidden set.
 - PID files for running ttyd processes live under `~/.tmux-browse/pids/`.
 - Combined stdout+stderr of each ttyd lives at
   `~/.tmux-browse/logs/<session>.log`.
+- Dashboard config lives at `~/.tmux-browse/dashboard-config.json`.
 
 A session keeps its port forever, or until you explicitly drop it via
 `tmux-browse ports --prune` (for sessions that no longer exist).
@@ -215,9 +257,13 @@ All JSON responses use a stable `{ok, …}` envelope.
 | GET    | `/health`           | — | `{ok: true}` |
 | GET    | `/api/sessions`     | — | `{ok, sessions: [{name, windows, attached, created, activity, port, pid, ttyd_running}, …]}` |
 | GET    | `/api/ports`        | — | `{ok, assignments: {name: port}}` |
+| GET    | `/api/dashboard-config` | — | `{ok, path, config}` |
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
-| POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already}` |
+| GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
+| POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
+| POST   | `/api/ttyd/raw`     | `{}` | `{ok, port, pid, name, scheme, url}` — launches a standalone shell ttyd |
 | POST   | `/api/ttyd/stop`    | `{session}` | `{ok, pid?, already_stopped?}` |
+| POST   | `/api/dashboard-config` | `{config}` | `{ok, path, config}` |
 | POST   | `/api/session/new`  | `{name}` | `{ok, name}` |
 | POST   | `/api/session/kill` | `{session}` | `{ok}` — also stops the ttyd |
 | POST   | `/api/session/scroll` | `{session}` | `{ok}` — equivalent to `C-b [` |
@@ -234,10 +280,11 @@ tmux-browse serve [--port N] [--bind ADDR] [-v]
 tmux-browse list                     # sessions + ttyd state, table form
 tmux-browse status                   # human-readable summary
 tmux-browse ports [--prune]
-tmux-browse start <session>          # ensure ttyd for <session>
+tmux-browse start <session> [--bind ADDR]   # ensure ttyd for <session>
 tmux-browse stop  <session>
 tmux-browse cleanup                  # stop every managed ttyd
 tmux-browse install-ttyd [--force]
+tmux-browse config [--json] [--reset] [--set KEY=VALUE ...]
 ```
 
 For the richer, session-management-focused CLI, see [docs/tb.md](tb.md).

@@ -7,7 +7,7 @@ import time
 
 from .. import output, sessions
 from ..errors import SessionNotFound, TmuxFailed
-from . import parse_target, require_target
+from ._common import parse_target, require_target
 
 
 def cmd_ls(args: argparse.Namespace) -> int:

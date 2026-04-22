@@ -298,7 +298,9 @@ $ tb watch work
 
 Ensures the dashboard's ttyd is running for this session. Idempotent.
 Prints the URL (or the JSON payload). Uses the same `~/.tmux-browse/ports.json`
-registry as the dashboard, so the port is stable.
+registry as the dashboard, so the port is stable. In `--json` mode the payload
+includes `session`, `port`, `pid`, `already`, `scheme`, and `url`, so callers
+do not need to guess whether the ttyd endpoint is `http` or `https`.
 
 #### `tb web stop <session>`
 
@@ -308,6 +310,69 @@ Stops the ttyd. The tmux session is untouched.
 
 Prints the ttyd URL for this session (if a port is assigned). Does not
 start ttyd. Host defaults to `localhost`; override with `TB_DASHBOARD_HOST`.
+The emitted scheme follows the stored ttyd state, so HTTPS dashboards return
+HTTPS ttyd URLs as well.
+
+### Agent
+
+#### `tb agent defaults`
+
+Prints the built-in agent aliases and their default provider/model/base URL.
+Current built-ins are `sonnet`, `opus`, `gpt`, `kimi`, and `minimax`.
+By default they map to Claude Sonnet 4.6, Claude Opus 4.7, `gpt-5.4`,
+`kimi-k2.6`, and `MiniMax-M2.7`.
+
+#### `tb agent add <name> --api-key-stdin`
+
+Adds or updates an agent definition and stores its API key under
+`~/.tmux-browse/agent-secrets.json` with `0600` permissions. Metadata lives
+in `~/.tmux-browse/agents.json`, also `0600`. These files are outside the git
+worktree and are not exposed by the dashboard.
+
+For the built-in aliases, `tb` fills in provider/model/base URL defaults:
+
+```bash
+printf '%s' "$OPENAI_API_KEY"    | tb agent add gpt --api-key-stdin
+printf '%s' "$ANTHROPIC_API_KEY" | tb agent add sonnet --api-key-stdin
+printf '%s' "$ANTHROPIC_API_KEY" | tb agent add opus --api-key-stdin
+printf '%s' "$MOONSHOT_API_KEY"  | tb agent add kimi --api-key-stdin
+printf '%s' "$MINIMAX_API_KEY"   | tb agent add minimax --api-key-stdin
+```
+
+You can also create a custom entry by overriding `--model` and `--base-url`.
+If needed, override the transport with `--wire-api`; supported values are
+`openai-chat` and `anthropic-messages`.
+
+#### `tb agent ls`
+
+Lists configured agents without printing their API keys.
+
+#### `tb agent remove <name>`
+
+Deletes the stored metadata and secret for that agent.
+
+#### `tb agent <name> <prompt...>`
+
+Runs the named model in a small plan/act loop where its only tool surface is
+non-interactive `tb.py` execution. This is intended for prompts like:
+
+```bash
+tb agent sonnet "move to the bash_linux project folder, have the codex session run the build for this project in the bash_linux pane"
+```
+
+The agent is instructed to prefer `tb snapshot --json`, `tb show --json`,
+`tb capture --json`, and `tb exec --json`, then act through `tb` rather than
+inventing its own shell protocol. It cannot call `tb agent`, `tb attach`, or
+`tb watch` recursively.
+
+Useful flags:
+
+- `--steps N` limits the number of tool/action rounds (default 12)
+- `--timeout SEC` sets the per-request provider timeout (default 90)
+
+Shared flags such as `--json`, `--quiet`, and `--no-header` work before or
+after the nested `agent` mode, so both `tb agent --json defaults` and
+`tb agent defaults --json` are valid.
 
 ### Bulk (for LLM context)
 

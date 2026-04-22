@@ -13,7 +13,7 @@ import time
 
 from .. import output, sessions
 from ..errors import Timeout, TmuxFailed
-from . import require_target
+from ._common import require_target
 
 
 def cmd_wait(args: argparse.Namespace) -> int:

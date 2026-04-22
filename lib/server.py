@@ -5,15 +5,50 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from types import MappingProxyType
+from typing import Callable
+from urllib.parse import ParseResult, parse_qs, urlparse
 
-from . import auth, config, ports, sessions, templates, tls as tls_mod, ttyd
+from . import (
+    auth,
+    config,
+    dashboard_config,
+    ports,
+    sessions,
+    static,
+    templates,
+    tls as tls_mod,
+    ttyd,
+)
 from .targeting import Target
+
+
+class DashboardServer(ThreadingHTTPServer):
+    """Typed ``ThreadingHTTPServer`` subclass carrying our configuration.
+
+    All attributes the ``Handler`` reads off ``self.server`` are declared
+    here so tooling doesn't need ``# type: ignore[attr-defined]`` and the
+    server/handler contract is legible at a glance.
+    """
+
+    daemon_threads = True
+
+    def __init__(self, server_address, RequestHandlerClass, *,
+                 verbose: bool = False,
+                 expected_token: str | None = None,
+                 tls_paths: tuple[Path, Path] | None = None,
+                 ttyd_bind_addr: str | None = None) -> None:
+        super().__init__(server_address, RequestHandlerClass)
+        self.verbose = verbose
+        self.expected_token = expected_token
+        self.tls_paths = tls_paths
+        self.ttyd_bind_addr = ttyd_bind_addr
 
 
 # Redact ``?token=…`` / ``&token=…`` from request lines before the stdlib
@@ -82,8 +117,11 @@ def _clear_dashboard_state() -> None:
         config.DASHBOARD_FILE.unlink(missing_ok=True)
 
 
+from . import __version__
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "tmux-browse/0.3.0"
+    server_version = f"tmux-browse/{__version__}"
 
     # Keep the default stderr logger quiet unless --verbose was used, and
     # redact any ``?token=`` before it hits stderr.
@@ -137,169 +175,281 @@ class Handler(BaseHTTPRequestHandler):
     # --- auth --------------------------------------------------------------
 
     def _auth_gate(self) -> bool:
-        """Return True if the request may proceed; False after we've already
-        sent a 401 or a redirect."""
+        """Return True if the request may proceed, False after we've sent
+        a 401 or a 302 redirect.
+
+        Composition: first decide whether the request is authenticated, then
+        (on success) give the token-rewrite-redirect a chance to fire. Keeping
+        these two concerns separate makes the code easier to reason about
+        than the previous combined block.
+        """
         expected = getattr(self.server, "expected_token", None)
         if not expected:
             return True  # auth disabled
-        parsed = urlparse(self.path)
         if auth.path_is_open(self.path):
             return True
         given = auth.extract_token(self)
-        if auth.matches(expected, given):
-            # If the token came via ?token=, strip it from the URL and
-            # persist via cookie so future requests don't leak it in logs
-            # or in the Referer header.
-            query = parse_qs(parsed.query)
-            if "token" in query and parsed.path == "/":
-                cleaned = [f"{k}={v}" for k, vs in query.items()
-                           if k != "token" for v in vs]
-                new_query = "&".join(cleaned)
-                location = parsed.path + (f"?{new_query}" if new_query else "")
-                self.send_response(302)
-                self.send_header("Location", location)
-                self.send_header("Set-Cookie", auth.make_cookie_header(expected))
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-                return False
-            return True
-        auth.send_401(self)
-        return False
+        if not auth.matches(expected, given):
+            auth.send_401(self)
+            return False
+        return not self._maybe_strip_token_redirect(expected)
 
-    # --- routes ------------------------------------------------------------
+    def _maybe_strip_token_redirect(self, token: str) -> bool:
+        """If the request carried ``?token=…`` on the root path, 302 to the
+        root with the token stripped and the token persisted as an HttpOnly
+        cookie. Returns True when a redirect was sent (caller must not
+        continue).
+
+        Only fires on the root URL — API calls don't participate in Referer
+        chains, so the extra round-trip isn't worth it for them.
+        """
+        parsed = urlparse(self.path)
+        if parsed.path != "/":
+            return False
+        query = parse_qs(parsed.query)
+        if "token" not in query:
+            return False
+        cleaned = [f"{k}={v}" for k, vs in query.items()
+                   if k != "token" for v in vs]
+        new_query = "&".join(cleaned)
+        location = parsed.path + (f"?{new_query}" if new_query else "")
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Set-Cookie", auth.make_cookie_header(token))
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return True
+
+    # --- per-route handlers ------------------------------------------------
+    # Each method handles one route. GET handlers take (parsed_url);
+    # POST handlers take (parsed_url, body_dict). The dispatch tables at
+    # the bottom of the class map paths to these. Adding a new route
+    # means: write a _handle_* method, add one line to the table.
+
+    def _h_index(self, _parsed: ParseResult) -> None:
+        self._send_html(templates.render_index())
+
+    def _h_favicon(self, _parsed: ParseResult) -> None:
+        body = static.FAVICON_SVG.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _h_raw_ttyd(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        name = (query.get("name", [""])[0] or "").strip()
+        scheme = (query.get("scheme", [""])[0] or "").strip().lower()
+        try:
+            port = int(query.get("port", ["0"])[0])
+        except ValueError:
+            port = 0
+        if not name or port <= 0:
+            self._send_json({"ok": False, "error": "missing raw ttyd name or port"}, status=400)
+            return
+        if scheme not in {"http", "https"}:
+            scheme = "http"
+        self._send_html(templates.render_raw_ttyd(name, port, scheme))
+
+    def _h_sessions(self, _parsed: ParseResult) -> None:
+        self._send_json({"ok": True, "sessions": _session_summary()})
+
+    def _h_ports(self, _parsed: ParseResult) -> None:
+        self._send_json({"ok": True, "assignments": ports.all_assignments()})
+
+    def _h_dashboard_config_get(self, _parsed: ParseResult) -> None:
+        self._send_json({
+            "ok": True,
+            "config": dashboard_config.load(),
+            "path": str(config.DASHBOARD_CONFIG_FILE),
+        })
+
+    def _h_session_log(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        name = (query.get("session", [""])[0] or "").strip()
+        try:
+            lines = int(query.get("lines", ["2000"])[0])
+        except ValueError:
+            lines = 2000
+        lines = max(1, min(lines, 50000))
+        if not name:
+            self._send_text("missing 'session' query parameter", status=400)
+            return
+        ok, content = sessions.capture_target(Target(session=name), lines=lines)
+        if not ok:
+            self._send_text(content, status=404)
+            return
+        self._send_text(content)
+
+    def _h_health(self, _parsed: ParseResult) -> None:
+        self._send_json({"ok": True})
+
+    # --- POST handlers ----
+
+    def _h_ttyd_start(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        if not sessions.exists(name):
+            self._send_json({"ok": False, "error": f"no such tmux session: {name}"},
+                            status=404)
+            return
+        tls_paths = getattr(self.server, "tls_paths", None)
+        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
+        self._send_json(ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr))
+
+    def _h_ttyd_raw(self, _parsed: ParseResult, _body: dict) -> None:
+        tls_paths = getattr(self.server, "tls_paths", None)
+        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
+        self._send_json(ttyd.start_raw(tls_paths=tls_paths, bind_addr=bind_addr))
+
+    def _h_ttyd_stop(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        self._send_json(ttyd.stop(name))
+
+    def _h_session_new(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("name") or "").strip()
+        ok, err = sessions.new_session(name)
+        if not ok:
+            self._send_json({"ok": False, "error": err}, status=400)
+            return
+        self._send_json({"ok": True, "name": name})
+
+    def _h_session_scroll(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        ok, err = sessions.enter_copy_mode(name)
+        if not ok:
+            self._send_json({"ok": False, "error": err}, status=400)
+            return
+        self._send_json({"ok": True})
+
+    def _h_session_type(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        text = body.get("text")
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        if not isinstance(text, str) or not text.strip():
+            self._send_json({"ok": False, "error": "missing 'text'"}, status=400)
+            return
+        ok, err = sessions.type_line(Target(session=name), text)
+        if not ok:
+            self._send_json({"ok": False, "error": err}, status=400)
+            return
+        self._send_json({"ok": True})
+
+    def _h_dashboard_config_post(self, _parsed: ParseResult, body: dict) -> None:
+        payload = body.get("config", body)
+        saved = dashboard_config.save(payload)
+        self._send_json({
+            "ok": True,
+            "config": saved,
+            "path": str(config.DASHBOARD_CONFIG_FILE),
+        })
+
+    def _h_server_restart(self, _parsed: ParseResult, _body: dict) -> None:
+        self._send_json({"ok": True, "restarting": True})
+        threading.Thread(target=_restart_self, daemon=True).start()
+
+    def _h_session_kill(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        # Stop ttyd first so the wrapper exits cleanly, then kill tmux.
+        ttyd.stop(name)
+        ok, err = sessions.kill(name)
+        if not ok:
+            self._send_json({"ok": False, "error": err}, status=400)
+            return
+        self._send_json({"ok": True})
+
+    # --- dispatch ----------------------------------------------------------
 
     def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
         if not self._auth_gate():
             return
         parsed = urlparse(self.path)
-        path = parsed.path
-        if path == "/":
-            self._send_html(templates.render_index())
+        handler = self._GET_ROUTES.get(parsed.path)
+        if handler is None:
+            self._send_json({"ok": False, "error": "not found"}, status=404)
             return
-        if path == "/api/sessions":
-            self._send_json({"ok": True, "sessions": _session_summary()})
-            return
-        if path == "/api/ports":
-            self._send_json({"ok": True, "assignments": ports.all_assignments()})
-            return
-        if path == "/api/session/log":
-            query = parse_qs(parsed.query)
-            name = (query.get("session", [""])[0] or "").strip()
-            try:
-                lines = int(query.get("lines", ["2000"])[0])
-            except ValueError:
-                lines = 2000
-            lines = max(1, min(lines, 50000))
-            if not name:
-                self._send_text("missing 'session' query parameter", status=400)
-                return
-            ok, content = sessions.capture_target(Target(session=name), lines=lines)
-            if not ok:
-                self._send_text(content, status=404)
-                return
-            self._send_text(content)
-            return
-        if path == "/health":
-            self._send_json({"ok": True})
-            return
-        self._send_json({"ok": False, "error": "not found"}, status=404)
+        handler(self, parsed)
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._auth_gate():
             return
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        handler = self._POST_ROUTES.get(parsed.path)
+        if handler is None:
+            self._send_json({"ok": False, "error": "not found"}, status=404)
+            return
         body = self._read_json()
+        handler(self, parsed, body)
 
-        if path == "/api/ttyd/start":
-            name = (body.get("session") or "").strip()
-            if not name:
-                self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-                return
-            if not sessions.exists(name):
-                self._send_json({"ok": False, "error": f"no such tmux session: {name}"},
-                                status=404)
-                return
-            tls_paths = getattr(self.server, "tls_paths", None)
-            self._send_json(ttyd.start(name, tls_paths=tls_paths))
-            return
-
-        if path == "/api/ttyd/stop":
-            name = (body.get("session") or "").strip()
-            if not name:
-                self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-                return
-            self._send_json(ttyd.stop(name))
-            return
-
-        if path == "/api/session/new":
-            name = (body.get("name") or "").strip()
-            ok, err = sessions.new_session(name)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-            self._send_json({"ok": True, "name": name})
-            return
-
-        if path == "/api/session/scroll":
-            name = (body.get("session") or "").strip()
-            if not name:
-                self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-                return
-            ok, err = sessions.enter_copy_mode(name)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-            self._send_json({"ok": True})
-            return
-
-        if path == "/api/session/type":
-            name = (body.get("session") or "").strip()
-            text = body.get("text")
-            if not name:
-                self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-                return
-            if not isinstance(text, str) or not text.strip():
-                self._send_json({"ok": False, "error": "missing 'text'"}, status=400)
-                return
-            ok, err = sessions.type_line(Target(session=name), text)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-            self._send_json({"ok": True})
-            return
-
-        if path == "/api/server/restart":
-            self._send_json({"ok": True, "restarting": True})
-            threading.Thread(target=_restart_self, daemon=True).start()
-            return
-
-        if path == "/api/session/kill":
-            name = (body.get("session") or "").strip()
-            if not name:
-                self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-                return
-            # Stop ttyd first so the wrapper exits cleanly, then kill tmux.
-            ttyd.stop(name)
-            ok, err = sessions.kill(name)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-            self._send_json({"ok": True})
-            return
-
-        self._send_json({"ok": False, "error": "not found"}, status=404)
+    # --- route tables ------------------------------------------------------
+    # Declared last so every method name they reference is bound in the
+    # class namespace at class-body evaluation time. Wrapped in MappingProxyType
+    # so a subclass or mistaken `Handler._GET_ROUTES["/x"] = ...` at runtime
+    # fails loudly (TypeError) instead of silently mutating dispatch.
+    _GET_ROUTES: MappingProxyType[str, Callable[["Handler", ParseResult], None]] = MappingProxyType({
+        "/":                       _h_index,
+        "/favicon.ico":            _h_favicon,
+        "/favicon.svg":            _h_favicon,
+        "/raw-ttyd":               _h_raw_ttyd,
+        "/api/sessions":           _h_sessions,
+        "/api/ports":              _h_ports,
+        "/api/dashboard-config":   _h_dashboard_config_get,
+        "/api/session/log":        _h_session_log,
+        "/health":                 _h_health,
+    })
+    _POST_ROUTES: MappingProxyType[str, Callable[["Handler", ParseResult, dict], None]] = MappingProxyType({
+        "/api/ttyd/start":         _h_ttyd_start,
+        "/api/ttyd/raw":           _h_ttyd_raw,
+        "/api/ttyd/stop":          _h_ttyd_stop,
+        "/api/session/new":        _h_session_new,
+        "/api/session/scroll":     _h_session_scroll,
+        "/api/session/type":       _h_session_type,
+        "/api/dashboard-config":   _h_dashboard_config_post,
+        "/api/server/restart":     _h_server_restart,
+        "/api/session/kill":       _h_session_kill,
+    })
 
 
 def serve(bind: str, port: int, verbose: bool = False,
           expected_token: str | None = None,
           tls_paths: tuple[Path, Path] | None = None) -> None:
     config.ensure_dirs()
+
+    # Startup GC: previous dashboard may have exited hard (SIGKILL / crash)
+    # leaving pidfiles for ttyds whose processes are dead, or port
+    # assignments for sessions that no longer exist. Both leak port slots
+    # over time.
+    try:
+        gc_stats = ttyd.gc_orphans()
+        if gc_stats["stale_pids_removed"] or gc_stats["ports_dropped"]:
+            print(f"  startup gc: removed {gc_stats['stale_pids_removed']} dead "
+                  f"pidfiles, dropped {gc_stats['ports_dropped']} stale ports")
+    except Exception as e:  # never let GC failure block startup
+        print(f"  startup gc: skipped ({e})")
+
     _write_dashboard_state(bind, port)
-    httpd = ThreadingHTTPServer((bind, port), Handler)
-    httpd.verbose = verbose  # type: ignore[attr-defined]
-    httpd.expected_token = expected_token  # type: ignore[attr-defined]
-    httpd.tls_paths = tls_paths  # type: ignore[attr-defined]
-    httpd.daemon_threads = True
+    httpd = DashboardServer(
+        (bind, port), Handler,
+        verbose=verbose,
+        expected_token=expected_token,
+        tls_paths=tls_paths,
+        ttyd_bind_addr=bind,
+    )
     if tls_paths is not None:
         ctx = tls_mod.build_context(*tls_paths)
         httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
@@ -317,10 +467,28 @@ def serve(bind: str, port: int, verbose: bool = False,
         print("  auth: ENABLED (Bearer token required — see docs/dashboard.md)")
     else:
         print("  auth: disabled (any reachable client can access the dashboard)")
+
+    # Graceful shutdown on SIGTERM (systemd, container runtimes, kill).
+    # serve_forever() only breaks on KeyboardInterrupt out of the box;
+    # moving it to a worker thread lets the main thread wait on an Event
+    # that either signal (SIGTERM or SIGINT) sets. This preserves Ctrl-C
+    # interactive behavior AND responds to `systemctl stop`.
+    shutdown_event = threading.Event()
+
+    def _on_signal(signum, _frame):
+        shutdown_event.set()
+
+    signal.signal(signal.SIGTERM, _on_signal)
+    signal.signal(signal.SIGINT, _on_signal)
+
+    server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    server_thread.start()
+
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nshutting down")
+        shutdown_event.wait()
     finally:
+        print("\nshutting down")
+        httpd.shutdown()             # unblocks serve_forever()
+        server_thread.join(timeout=5)
         _clear_dashboard_state()
         httpd.server_close()

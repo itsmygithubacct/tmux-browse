@@ -1,38 +1,20 @@
 """``tb`` CLI subcommand registry.
 
-Each module in this package defines ``register(subparsers)`` that adds its
-verbs to the shared argparse subparser set. The entry script (``tb.py``)
-imports and calls them all.
+Each module in this package defines ``register(subparsers, common)`` that
+adds its verbs to the shared argparse subparser set. ``tb.py`` imports
+``register_all`` below and calls it once.
+
+Shared helpers (``parse_target``, ``require_target``) live in ``_common``
+and are re-exported here so existing ``from . import parse_target`` imports
+inside submodules keep working.
 """
 
 from __future__ import annotations
 
-from .. import sessions, targeting
-from ..errors import SessionNotFound, UsageError
-from ..targeting import Target
+from . import agent, bulk, lifecycle, observe, read, web, write
+from ._common import parse_target, require_target
 
-
-def parse_target(expr: str) -> Target:
-    """Parse a target expression, mapping ValueError → UsageError."""
-    try:
-        return targeting.parse(expr)
-    except ValueError as e:
-        raise UsageError(str(e))
-
-
-def require_target(expr: str) -> Target:
-    """Parse + validate existence. The standard preamble for target-taking verbs.
-
-    Raises ``UsageError`` for malformed expressions and ``SessionNotFound``
-    when the session doesn't exist — both map to stable exit codes.
-    """
-    t = parse_target(expr)
-    if not sessions.exists(t.session):
-        raise SessionNotFound(f"no such session: {t.session}")
-    return t
-
-
-from . import bulk, lifecycle, observe, read, web, write  # noqa: E402
+__all__ = ["parse_target", "require_target", "register_all"]
 
 
 def register_all(subparsers, common) -> None:
@@ -42,3 +24,4 @@ def register_all(subparsers, common) -> None:
     observe.register(subparsers, common)
     web.register(subparsers, common)
     bulk.register(subparsers, common)
+    agent.register(subparsers, common)

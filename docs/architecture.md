@@ -19,12 +19,16 @@ the way."
    envelopes don't change between patch versions. Human messages can.
 4. **Boring defaults.** Sensible port numbers, 0.0.0.0 bind, no
    authentication — trusted-network assumptions, documented loudly in
-   `docs/dashboard.md`.
+   `docs/dashboard.md`. When you do tighten `--bind`, spawned ttyds inherit
+   that network scope too.
 
 ## Module map
 
 ```
 lib/config.py         ports + paths (one place to tune)
+lib/dashboard_config.py validated dashboard UI config file helpers
+lib/agent_store.py     secure agent metadata + API-key persistence
+lib/agent_runner.py    LLM loop that acts through tb.py only
 lib/ports.py          JSON+flock registry: session name → stable port
 lib/sessions.py       everything tmux-related (enumerate, capture, send)
 lib/ttyd.py           spawn/stop/track per-session ttyd, PID files, port probes
@@ -37,7 +41,7 @@ lib/errors.py         typed exceptions → stable exit codes
 lib/output.py         table/JSON emitters with TTY-aware colour
 lib/exec_runner.py    `tb exec` sentinel + idle strategies
 lib/tls.py            optional TLS: cert/key resolve, SSLContext builder
-lib/tb_cmds/          one module per tb verb group (read/write/lifecycle/…)
+lib/tb_cmds/          one module per tb verb group (read/write/lifecycle/agent/…)
 ```
 
 Entry points:
@@ -47,12 +51,13 @@ Entry points:
 
 ## Why `http.server` instead of a framework
 
-The dashboard's route set is ~10 endpoints. Adding Flask would require
-users to set up a venv or install packages. `http.server` with a
-`BaseHTTPRequestHandler` is ~200 lines of code and handles this fine. The
-one trade-off is that we don't get the free middleware ecosystem; the only
-thing we'd actually want (auth) is deliberately not provided anyway
-(trusted-network model).
+The dashboard's route set is still small enough to fit comfortably in one
+handler class: a handful of HTML/API routes, auth/TLS glue, and some process
+management endpoints. Adding Flask would require users to set up a venv or
+install packages. `http.server` with a `BaseHTTPRequestHandler` is enough for
+this scope. The trade-off is that we don't get a framework middleware
+ecosystem, but the only extra layers we actually need here are the project's
+own auth/TLS helpers and a stable JSON envelope.
 
 `ThreadingHTTPServer` + `daemon_threads=True` is enough for the tens of
 concurrent requests the dashboard ever sees.
@@ -69,8 +74,10 @@ So:
 - The file is `fcntl.flock`-protected so dashboard threads + CLI
   invocations don't race
 
-Pruning is opt-in (`tmux-browse ports --prune`) — never automatic — because
-the cost of a lost bookmark outweighs the cost of a few unused entries.
+Normal use still preserves stable session-to-port mappings, but startup now
+does a targeted GC pass: dead ttyd pidfiles are removed and port assignments
+for tmux sessions that no longer exist are pruned automatically. Explicit
+`tmux-browse ports --prune` is still available when you want a manual sweep.
 
 ## Why `bin/ttyd_wrap.sh` exists
 
@@ -116,8 +123,9 @@ concern (read / write / lifecycle / observe / web / bulk) means:
 - Shared dispatch: every module exports `register(sub, common)`; the
   entry `tb.py` just loops over them via `register_all`.
 
-The `common` argparse parent parser is the key to `--json`, `--quiet`,
-`--no-header` working both before and after the verb.
+The `common` argparse parent parser is the main reason `--json`, `--quiet`,
+and `--no-header` work both before and after most verbs. Nested `tb agent`
+submodes also preserve that contract with a small extra parsing layer.
 
 ## Why no shell completions (yet)
 
@@ -151,6 +159,13 @@ the ttyd argv. It also writes a `<session>.scheme` sidecar in `PID_DIR`
 so `tb web url` (a separate CLI process) knows which scheme to emit.
 The sidecar is deleted alongside the pidfile on `stop()`.
 
+**Why ttyd inherits `--bind`.** The dashboard's bind address is not just a
+presentation detail; it defines the exposure boundary. `lib/server.py`
+passes the configured bind address into `lib/ttyd.py`, which maps
+`127.0.0.1` to loopback-only, `0.0.0.0` to wildcard exposure, and a
+concrete host IP to the owning interface via `ip -o addr show`. That keeps
+the dashboard and the ttyd terminals on the same reachability perimeter.
+
 BYO cert only — no auto-generation. A self-signed `openssl req` recipe
 is documented in the README; a hardened stack belongs behind a reverse
 proxy, not inside this tool.
@@ -163,7 +178,8 @@ ships with ttyd. Nothing new to install.
 `lib/templates.py` and `lib/static.py` embed the full HTML/CSS/JS as Python
 strings. The server renders `index.html` once per request with the static
 assets inline — no separate static-file serving, no build tooling, no bundler.
-The JS is ~300 lines of vanilla, no dependencies.
+The JS has grown into a small vanilla app rather than a tiny snippet, but it
+is still dependency-free and ships as one embedded payload.
 
 The whole page is re-hydrated every 5 s by calling `/api/sessions` and
 diffing DOM panes against the new data (`state.nodes` map). This avoids
@@ -177,6 +193,20 @@ and `tmux-browse:hidden`), per-browser per-origin. Intentionally not
 server-side: ordering preferences are a viewer concern, not a machine
 concern, so two people hitting the same dashboard from different browsers
 can arrange their views differently.
+
+Dashboard behavior settings are different: they live in
+`~/.tmux-browse/dashboard-config.json` via `lib/dashboard_config.py`, so the
+web config pane and `tmux-browse config` CLI both operate on the same file.
+
+The UI now also carries more interaction state than the original dashboard:
+side-by-side layout rows, split placement, hot-button loop settings, idle
+alerts, and the raw-ttyd wrapper flow all live in the same no-build frontend
+rather than being pushed into a separate asset pipeline.
+
+Raw ttyd sessions are the exception to the normal "one ttyd per tmux
+session" rule. They are still tracked in the same pid/scheme machinery, but
+the browser opens them through a small wrapper page (`/raw-ttyd`) that can
+stop the shell explicitly or send a best-effort stop on page close.
 
 ## Failure modes we actively guard against
 

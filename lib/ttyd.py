@@ -7,14 +7,50 @@ A log per session lives at ``$STATE_DIR/logs/<session>.log``.
 from __future__ import annotations
 
 import os
+import secrets
 import signal
 import socket
 import subprocess
+import threading
 import time
 import urllib.parse
 from pathlib import Path
 
 from . import config, ports
+
+
+# Per-session spawn locks. Without this, two concurrent start() calls for
+# the same session both pass the read_pid() check and race to Popen ttyd,
+# with the loser hitting EADDRINUSE on bind. The outer lock guards the
+# dict; the per-session lock serializes start() for that specific session.
+_start_locks_mutex = threading.Lock()
+_start_locks: dict[str, threading.Lock] = {}
+
+# Cache of (bind_addr → interface-name | None). _ttyd_interface is called
+# on every spawn; the underlying `ip addr` / `ifconfig` call is the
+# expensive part and the mapping changes rarely (only when the operator
+# reconfigures networking). Entries stay for the life of the process.
+_iface_cache_lock = threading.Lock()
+_iface_cache: dict[str, str | None] = {}
+
+
+def _start_lock(session: str) -> threading.Lock:
+    with _start_locks_mutex:
+        lock = _start_locks.get(session)
+        if lock is None:
+            lock = threading.Lock()
+            _start_locks[session] = lock
+        return lock
+
+
+def _atomic_write(path: Path, data: str) -> None:
+    """Write ``data`` to ``path`` via tempfile+rename so readers never see a
+    half-written file. write_text() truncates and writes — a concurrent
+    read can catch zero bytes between truncate and write."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(data)
+    os.replace(tmp, path)
 
 
 def _pidfile(session: str) -> Path:
@@ -73,6 +109,146 @@ def _port_listening(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def _probe_host(bind_addr: str | None) -> str:
+    raw = (bind_addr or "").strip()
+    if not raw or raw in {"0.0.0.0", "::"}:
+        return "127.0.0.1"
+    if raw == "localhost":
+        return "127.0.0.1"
+    try:
+        infos = socket.getaddrinfo(raw, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return raw
+    for family, _, _, _, sockaddr in infos:
+        host = sockaddr[0]
+        if family == socket.AF_INET:
+            return host
+    return infos[0][4][0] if infos else raw
+
+
+def _port_listening_on(port: int, host: str) -> bool:
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False
+    for family, socktype, proto, _, sockaddr in infos:
+        with socket.socket(family, socktype, proto) as s:
+            s.settimeout(0.3)
+            if s.connect_ex(sockaddr) == 0:
+                return True
+    return False
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return int(s.getsockname()[1])
+
+
+def _iface_from_ip_addr(targets: set[str]) -> str | None:
+    """Parse Linux `ip -o addr show` to find the interface owning one of
+    the IP addresses in ``targets``. Returns None if `ip` isn't available
+    or no match is found.
+    """
+    try:
+        output = subprocess.check_output(
+            ["ip", "-o", "addr", "show"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    except Exception:
+        return None
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        ifname = parts[1]
+        address = parts[3].split("/", 1)[0]
+        if address in targets:
+            return ifname
+    return None
+
+
+def _iface_from_ifconfig(targets: set[str]) -> str | None:
+    """Parse BSD / macOS `ifconfig -a` to find the interface owning one of
+    the IP addresses in ``targets``. Returns None on missing tool or no match.
+    """
+    try:
+        output = subprocess.check_output(
+            ["ifconfig", "-a"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    except Exception:
+        return None
+    current_if: str | None = None
+    for line in output.splitlines():
+        # New interface stanzas start flush-left: "en0: flags=..."
+        if line and not line[0].isspace() and ":" in line:
+            current_if = line.split(":", 1)[0].strip() or None
+            continue
+        if current_if is None:
+            continue
+        # Indented "inet A.B.C.D ..." or "inet6 ::1 ..." lines.
+        stripped = line.strip()
+        if stripped.startswith("inet "):
+            addr = stripped.split()[1]
+            # Strip any %zone-id (e.g. fe80::1%en0)
+            addr = addr.split("%", 1)[0]
+            if addr in targets:
+                return current_if
+        elif stripped.startswith("inet6 "):
+            addr = stripped.split()[1].split("%", 1)[0]
+            if addr in targets:
+                return current_if
+    return None
+
+
+def _ttyd_interface(bind_addr: str | None) -> str | None:
+    """Map a dashboard bind address to ttyd's `--interface` argument.
+
+    ttyd binds by interface name, not by IP address. For wildcard binds we
+    intentionally omit `--interface`; for loopback or a concrete host/IP we
+    resolve the owning interface via `ip -o addr show` (Linux) with a
+    fallback to `ifconfig -a` (BSD / macOS).
+
+    Results are cached per-bind-address for the process lifetime — the
+    underlying routing table rarely changes and spawns would otherwise
+    shell out on every API hit.
+    """
+    raw = (bind_addr or "").strip()
+    if not raw or raw in {"0.0.0.0", "::"}:
+        return None
+    if raw in {"127.0.0.1", "::1", "localhost"}:
+        return "lo"
+
+    with _iface_cache_lock:
+        if raw in _iface_cache:
+            return _iface_cache[raw]
+
+    targets = {raw}
+    try:
+        infos = socket.getaddrinfo(raw, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        infos = []
+    for _, _, _, _, sockaddr in infos:
+        host = sockaddr[0]
+        if host:
+            targets.add(host)
+
+    resolved = _iface_from_ip_addr(targets)
+    if resolved is None:
+        resolved = _iface_from_ifconfig(targets)
+
+    with _iface_cache_lock:
+        _iface_cache[raw] = resolved
+    return resolved
+
+
 def read_pid(session: str) -> int | None:
     pf = _pidfile(session)
     if not pf.is_file():
@@ -112,39 +288,34 @@ def is_running(session: str) -> bool:
     return _port_listening(port)
 
 
-def start(session: str,
-          tls_paths: tuple[Path, Path] | None = None) -> dict:
-    """Ensure a ttyd instance is running for ``session``. Idempotent.
-
-    When ``tls_paths`` is set, ttyd is spawned with ``--ssl --ssl-cert --ssl-key``
-    so the dashboard (which is also serving HTTPS) can embed it without
-    tripping browser mixed-content blocking on the iframe's ``ws://``.
-    """
+def _spawn_ttyd(name: str, port: int, argv_tail: list[str],
+                tls_paths: tuple[Path, Path] | None = None,
+                bind_addr: str | None = None) -> dict:
     config.ensure_dirs()
+    probe_host = _probe_host(bind_addr)
 
-    existing_pid = read_pid(session)
-    port = ports.assign(session)
-    if existing_pid is not None:
-        return {"ok": True, "pid": existing_pid, "port": port, "already": True,
-                "scheme": read_scheme(session)}
-
-    if _port_listening(port):
-        # Someone else grabbed the port (e.g. ttyd left over from a previous
-        # run without a pidfile). Don't stomp it.
+    if _port_listening_on(port, probe_host):
         return {"ok": True, "port": port, "already": True, "note": "port already in use"}
 
     ttyd = config.ttyd_executable()
-    wrap = str(config.TTYD_WRAP)
-    if not Path(wrap).is_file():
-        return {"ok": False, "error": f"wrapper missing: {wrap}"}
-
     argv = [ttyd, "-p", str(port)]
+    interface = _ttyd_interface(bind_addr)
+    if bind_addr and not interface and bind_addr.strip() not in {"", "0.0.0.0", "::"}:
+        return {
+            "ok": False,
+            "error": (
+                f"cannot map bind address {bind_addr!r} to a ttyd interface; "
+                "use 0.0.0.0, 127.0.0.1, localhost, or an address returned by `ip addr`"
+            ),
+        }
+    if interface:
+        argv += ["-i", interface]
     if tls_paths is not None:
         cert, key = tls_paths
         argv += ["--ssl", "--ssl-cert", str(cert), "--ssl-key", str(key)]
-    argv += ["-W", "bash", wrap, session]
+    argv += argv_tail
 
-    log = _logfile(session)
+    log = _logfile(name)
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "ab", buffering=0) as lf:
         try:
@@ -164,16 +335,16 @@ def start(session: str,
         except Exception as e:
             return {"ok": False, "error": f"spawn failed: {e}"}
 
-    _pidfile(session).write_text(f"{proc.pid}\n")
     scheme = "https" if tls_paths is not None else "http"
-    _schemefile(session).write_text(f"{scheme}\n")
+    _atomic_write(_pidfile(name), f"{proc.pid}\n")
+    _atomic_write(_schemefile(name), f"{scheme}\n")
 
     # Give ttyd a moment to bind, then verify.
     deadline = time.time() + 2.0
     while time.time() < deadline:
-        if _port_listening(port):
+        if _port_listening_on(port, probe_host):
             return {"ok": True, "pid": proc.pid, "port": port, "already": False,
-                    "scheme": scheme}
+                    "scheme": scheme, "name": name}
         if proc.poll() is not None:
             return {
                 "ok": False,
@@ -181,7 +352,53 @@ def start(session: str,
             }
         time.sleep(0.05)
     return {"ok": True, "pid": proc.pid, "port": port, "already": False,
-            "scheme": scheme, "note": "spawned but not yet listening"}
+            "scheme": scheme, "note": "spawned but not yet listening", "name": name}
+
+
+def start(session: str,
+          tls_paths: tuple[Path, Path] | None = None,
+          bind_addr: str | None = None) -> dict:
+    """Ensure a ttyd instance is running for ``session``. Idempotent.
+
+    When ``tls_paths`` is set, ttyd is spawned with ``--ssl --ssl-cert --ssl-key``
+    so the dashboard (which is also serving HTTPS) can embed it without
+    tripping browser mixed-content blocking on the iframe's ``ws://``.
+
+    Thread-safe for the same session: concurrent callers for the same
+    name serialize on a per-session lock, so only one actually spawns ttyd.
+    """
+    config.ensure_dirs()
+
+    with _start_lock(session):
+        existing_pid = read_pid(session)
+        port = ports.assign(session)
+        if existing_pid is not None:
+            return {"ok": True, "pid": existing_pid, "port": port, "already": True,
+                    "scheme": read_scheme(session)}
+
+        wrap = str(config.TTYD_WRAP)
+        if not Path(wrap).is_file():
+            return {"ok": False, "error": f"wrapper missing: {wrap}"}
+        return _spawn_ttyd(
+            session,
+            port,
+            ["-W", "bash", wrap, session],
+            tls_paths=tls_paths,
+            bind_addr=bind_addr,
+        )
+
+
+def start_raw(tls_paths: tuple[Path, Path] | None = None,
+              bind_addr: str | None = None) -> dict:
+    """Spawn a one-off raw ttyd shell not attached to tmux.
+
+    The name includes 8 hex bytes of randomness so two clicks within the
+    same millisecond never collide on pidfile / per-session-lock identity.
+    """
+    name = f"raw-shell-{int(time.time() * 1000)}-{secrets.token_hex(4)}"
+    port = _find_free_port()
+    argv_tail = ["-W", "bash", "-lc", 'exec "${SHELL:-bash}" -il']
+    return _spawn_ttyd(name, port, argv_tail, tls_paths=tls_paths, bind_addr=bind_addr)
 
 
 def stop(session: str) -> dict:
@@ -219,6 +436,30 @@ def stop_all() -> int:
         if stop(session).get("ok"):
             killed += 1
     return killed
+
+
+def gc_orphans() -> dict:
+    """Sweep stale state — call at dashboard startup.
+
+    Removes pidfiles whose process is dead and prunes port assignments
+    whose tmux session no longer exists. Returns counts for logging.
+    Safe to run while other threads call start()/stop() (each operation
+    takes its own lock / acquires via read_pid's liveness check).
+    """
+    stale_pids = 0
+    for pf in config.PID_DIR.glob("*.pid"):
+        session = _unsafe(pf.stem)
+        # read_pid() already unlinks dead PIDs as a side-effect.
+        if read_pid(session) is None:
+            stale_pids += 1
+
+    # Prune port assignments for sessions that no longer exist in tmux.
+    # Lazy import avoids pulling sessions (with its subprocess surface)
+    # into a hot-path import cycle for ttyd.
+    from . import sessions
+    active = {s["name"] for s in sessions.list_sessions()}
+    dropped = ports.prune(active)
+    return {"stale_pids_removed": stale_pids, "ports_dropped": len(dropped)}
 
 
 def status_all() -> list[dict]:

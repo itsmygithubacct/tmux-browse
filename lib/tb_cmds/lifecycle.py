@@ -9,7 +9,7 @@ import sys
 
 from .. import output, sessions
 from ..errors import SessionExists, SessionNotFound, TmuxFailed, UsageError
-from . import parse_target, require_target
+from ._common import parse_target, require_target
 
 
 def _auto_name() -> str:

@@ -10,11 +10,13 @@ Subcommands:
     cleanup        Stop every managed ttyd.
     install-ttyd   Download the ttyd static binary into ~/.local/bin.
     status         Combined status view (sessions + ttyds + port budget).
+    config         Inspect or modify dashboard config file.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -23,7 +25,17 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from lib import auth, config, ports, server, sessions, tls, ttyd, ttyd_installer
+from lib import (
+    auth,
+    config,
+    dashboard_config,
+    ports,
+    server,
+    sessions,
+    tls,
+    ttyd,
+    ttyd_installer,
+)
 from lib.errors import TBError
 
 
@@ -81,7 +93,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         print(f"error: no tmux session named '{args.session}'", file=sys.stderr)
         return 1
     tls_paths = tls.load_tls_paths(cli_cert=args.cert, cli_key=args.key)
-    r = ttyd.start(args.session, tls_paths=tls_paths)
+    r = ttyd.start(args.session, tls_paths=tls_paths, bind_addr=args.bind)
     if not r.get("ok"):
         print(f"error: {r.get('error')}", file=sys.stderr)
         return 1
@@ -147,6 +159,43 @@ def cmd_status(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    if args.reset and args.set:
+        print("error: --reset cannot be combined with --set", file=sys.stderr)
+        return 2
+    if args.reset:
+        cfg = dashboard_config.save(dashboard_config.DEFAULTS)
+    elif args.set:
+        cfg = dashboard_config.load()
+        pending = dict(cfg)
+        valid_keys = set(dashboard_config.DEFAULTS.keys())
+        for item in args.set:
+            if "=" not in item:
+                print(f"error: invalid --set '{item}' (expected key=value)", file=sys.stderr)
+                return 2
+            key, value = item.split("=", 1)
+            key = key.strip()
+            if key not in valid_keys:
+                print(f"error: unknown config key '{key}'", file=sys.stderr)
+                return 2
+            pending[key] = value.strip()
+        cfg = dashboard_config.save(pending)
+    else:
+        cfg = dashboard_config.load()
+
+    if args.json:
+        print(json.dumps({
+            "path": str(config.DASHBOARD_CONFIG_FILE),
+            "config": cfg,
+        }, indent=2, sort_keys=True))
+        return 0
+
+    print(config.DASHBOARD_CONFIG_FILE)
+    for key in sorted(cfg):
+        print(f"{key:<28} {cfg[key]}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tmux-browse", description=__doc__.strip().splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -180,6 +229,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     s_start = sub.add_parser("start", help="start ttyd for a tmux session")
     s_start.add_argument("session")
+    s_start.add_argument("--bind", default="0.0.0.0",
+                         help="bind ttyd to the dashboard address (default 0.0.0.0)")
     s_start.add_argument("--cert", metavar="PATH", default=None,
                          help="TLS cert for ttyd (--ssl). Also honours $TMUX_BROWSE_CERT.")
     s_start.add_argument("--key", metavar="PATH", default=None,
@@ -200,6 +251,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     s_status = sub.add_parser("status", help="combined status view")
     s_status.set_defaults(func=cmd_status)
+
+    s_config = sub.add_parser("config", help="inspect or modify dashboard config")
+    s_config.add_argument("--json", action="store_true", help="print config as JSON")
+    s_config.add_argument("--reset", action="store_true", help="reset config file to defaults")
+    s_config.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                          help="set a config value and save (may be repeated)")
+    s_config.set_defaults(func=cmd_config)
 
     return p
 

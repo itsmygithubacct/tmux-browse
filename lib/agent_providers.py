@@ -1,0 +1,138 @@
+"""Wire-API adapters for ``tb agent``.
+
+Each provider knows how to turn a ``(agent dict, messages list)`` into a
+single string of response text. Adding a new wire protocol means writing
+one adapter function and registering it in ``PROVIDERS``.
+
+Agents are dicts (not classes) because they come straight out of
+``agent_store.py``'s JSON; we keep the same shape end-to-end.
+"""
+
+from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
+from typing import Any, Callable
+
+from .errors import AuthError, StateError, UsageError
+
+
+ProviderFn = Callable[[dict[str, Any], list[dict[str, str]], float], str]
+
+
+def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any],
+               *, timeout: float) -> dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            detail = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            detail = str(e)
+        if e.code in (401, 403):
+            raise AuthError(detail or "provider rejected API key")
+        raise StateError(f"provider HTTP {e.code}: {detail}")
+    except urllib.error.URLError as e:
+        raise StateError(f"provider request failed: {e.reason}")
+
+
+def _text_from_openai_content(content: Any) -> str:
+    """OpenAI chat completions: content is either a string or a list of parts."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return str(content)
+
+
+def _text_from_anthropic_content(content: Any) -> str:
+    """Anthropic messages: content is a list of content blocks with type 'text'."""
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return _text_from_openai_content(content)
+
+
+def openai_chat(agent: dict[str, Any], messages: list[dict[str, str]],
+                timeout: float) -> str:
+    base_url = agent["base_url"].rstrip("/")
+    payload = {
+        "model": agent["model"],
+        "messages": messages,
+        "temperature": 0.1,
+    }
+    headers = {
+        "Authorization": f"Bearer {agent['api_key']}",
+        "Content-Type": "application/json",
+    }
+    data = _post_json(f"{base_url}/chat/completions", headers, payload, timeout=timeout)
+    try:
+        return _text_from_openai_content(data["choices"][0]["message"]["content"])
+    except (KeyError, IndexError, TypeError) as e:
+        raise StateError(f"unexpected provider response shape: {e}")
+
+
+def anthropic_messages(agent: dict[str, Any], messages: list[dict[str, str]],
+                       timeout: float) -> str:
+    base_url = agent["base_url"].rstrip("/")
+    system_parts: list[str] = []
+    convo: list[dict[str, str]] = []
+    for message in messages:
+        role = str(message.get("role") or "")
+        content = str(message.get("content") or "")
+        if role == "system":
+            if content:
+                system_parts.append(content)
+            continue
+        if role not in {"user", "assistant"}:
+            raise UsageError(f"unsupported Anthropic message role: {role}")
+        convo.append({"role": role, "content": content})
+    payload: dict[str, Any] = {
+        "model": agent["model"],
+        "max_tokens": 1200,
+        "messages": convo,
+        "temperature": 0.1,
+    }
+    if system_parts:
+        payload["system"] = "\n\n".join(p for p in system_parts if p.strip())
+    headers = {
+        "x-api-key": agent["api_key"],
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+    data = _post_json(f"{base_url}/messages", headers, payload, timeout=timeout)
+    try:
+        return _text_from_anthropic_content(data["content"])
+    except KeyError as e:
+        raise StateError(f"unexpected provider response shape: {e}")
+
+
+PROVIDERS: dict[str, ProviderFn] = {
+    "openai-chat": openai_chat,
+    "anthropic-messages": anthropic_messages,
+}
+
+
+def complete(agent: dict[str, Any], messages: list[dict[str, str]],
+             *, timeout: float) -> str:
+    """Dispatch to the provider matching ``agent['wire_api']``."""
+    wire_api = str(agent.get("wire_api") or "openai-chat")
+    provider = PROVIDERS.get(wire_api)
+    if provider is None:
+        raise UsageError(f"unsupported wire API: {wire_api}")
+    return provider(agent, messages, timeout)
