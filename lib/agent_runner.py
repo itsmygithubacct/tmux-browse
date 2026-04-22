@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_logs, agent_providers
+from . import agent_logs, agent_providers, agent_run_index
 from .agent_runs import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -234,6 +235,7 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
 
     transcript: list[dict[str, Any]] = []
     cumulative_usage: dict[str, int] = {}
+    started_ts = int(time.time())
 
     agent_logs.append_entry(agent["name"], {
         "run_id": run_id,
@@ -289,6 +291,13 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                     "transcript": transcript,
                     "usage": cumulative_usage,
                 })
+                agent_run_index.append(
+                    run_id=run_id, agent=agent["name"],
+                    status=STATUS_COMPLETED, started_ts=started_ts,
+                    steps=step, prompt=prompt, message=out["message"],
+                    origin=origin, model=agent.get("model", ""),
+                    transcript=transcript,
+                )
                 return out
             if action.get("type") != "tool" or action.get("tool") != "tb_command":
                 raise UsageError("agent must return either a final action or a tb_command tool action")
@@ -319,4 +328,11 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
             "transcript": transcript,
             "usage": cumulative_usage,
         })
+        agent_run_index.append(
+            run_id=run_id, agent=agent["name"],
+            status=status, started_ts=started_ts,
+            steps=len(transcript), prompt=prompt, error=str(e),
+            origin=origin, model=agent.get("model", ""),
+            transcript=transcript,
+        )
         raise
