@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from . import agent_logs, agent_providers
+from .agent_runs import (
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_RATE_LIMITED,
+    STATUS_STARTED,
+    new_run_id,
+)
 from .errors import TmuxFailed, UsageError
 
 
@@ -199,21 +206,53 @@ def _run_tb_command(repo_root: Path, args: list[str], stdin_text: str | None) ->
     )
 
 
+def _detect_rate_limit(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "429" in msg or "rate limit" in msg or "rate_limit" in msg
+
+
 def run_agent(agent: dict[str, Any], prompt: str, *,
               repo_root: Path,
               max_steps: int = 20,
               request_timeout: float = 90.0,
-              origin: str = "cli") -> dict[str, Any]:
+              origin: str = "cli",
+              run_id: str | None = None,
+              conversation_messages: list[dict[str, str]] | None = None,
+              ) -> dict[str, Any]:
     if not prompt.strip():
         raise UsageError("missing agent prompt")
-    messages = [
+    if run_id is None:
+        run_id = new_run_id()
+
+    messages: list[dict[str, str]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt.strip()},
     ]
+    # Inject prior conversation context before the current prompt.
+    if conversation_messages:
+        messages.extend(conversation_messages)
+    messages.append({"role": "user", "content": prompt.strip()})
+
     transcript: list[dict[str, Any]] = []
+    cumulative_usage: dict[str, int] = {}
+
+    agent_logs.append_entry(agent["name"], {
+        "run_id": run_id,
+        "status": STATUS_STARTED,
+        "origin": origin,
+        "prompt": prompt.strip(),
+        "model": agent.get("model"),
+        "provider": agent.get("provider"),
+        "wire_api": agent.get("wire_api"),
+    })
+
     try:
         for step in range(1, max_steps + 1):
-            raw = agent_providers.complete(agent, messages, timeout=request_timeout)
+            result = agent_providers.complete(agent, messages, timeout=request_timeout)
+            raw = result.content
+            if result.usage:
+                for key, val in result.usage.items():
+                    if isinstance(val, (int, float)):
+                        cumulative_usage[key] = cumulative_usage.get(key, 0) + int(val)
             try:
                 action = _extract_json(raw)
             except UsageError as e:
@@ -233,18 +272,22 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                 out = {
                     "agent": agent["name"],
                     "model": agent["model"],
+                    "run_id": run_id,
                     "steps": step,
                     "message": str(action.get("message") or "").strip(),
                     "transcript": transcript,
+                    "usage": cumulative_usage,
                 }
                 agent_logs.append_entry(agent["name"], {
+                    "run_id": run_id,
                     "origin": origin,
-                    "status": "ok",
+                    "status": STATUS_COMPLETED,
                     "prompt": prompt.strip(),
                     "message": out["message"],
                     "steps": step,
                     "model": agent.get("model"),
                     "transcript": transcript,
+                    "usage": cumulative_usage,
                 })
                 return out
             if action.get("type") != "tool" or action.get("tool") != "tb_command":
@@ -255,8 +298,8 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
             stdin_text = action.get("stdin")
             if stdin_text is not None and not isinstance(stdin_text, str):
                 raise UsageError("tb_command stdin must be a string when present")
-            result = _run_tb_command(repo_root, tool_args, stdin_text)
-            tool_payload = _compact_tool_payload(result)
+            tool_result = _run_tb_command(repo_root, tool_args, stdin_text)
+            tool_payload = _compact_tool_payload(tool_result)
             transcript[-1]["tool_result"] = tool_payload
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append({
@@ -265,12 +308,15 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
             })
         raise TmuxFailed(f"agent exceeded max steps ({max_steps})")
     except Exception as e:
+        status = STATUS_RATE_LIMITED if _detect_rate_limit(e) else STATUS_FAILED
         agent_logs.append_entry(agent["name"], {
+            "run_id": run_id,
             "origin": origin,
-            "status": "error",
+            "status": status,
             "prompt": prompt.strip(),
             "error": str(e),
             "model": agent.get("model"),
             "transcript": transcript,
+            "usage": cumulative_usage,
         })
         raise

@@ -13,12 +13,30 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .errors import AuthError, StateError, UsageError
 
 
-ProviderFn = Callable[[dict[str, Any], list[dict[str, str]], float], str]
+@dataclass
+class ProviderResult:
+    """Structured response from a provider adapter.
+
+    ``content`` is the text the caller consumes.  ``usage`` carries
+    token counts when the provider includes them (keys vary by wire API
+    but typically ``prompt_tokens``, ``completion_tokens``, ``total_tokens``).
+    ``raw_model`` is the model string the provider echoed back, if any.
+    """
+
+    content: str
+    usage: dict[str, Any] = field(default_factory=dict)
+    raw_model: str = ""
+
+
+ProviderFn = Callable[
+    [dict[str, Any], list[dict[str, str]], float], ProviderResult
+]
 
 
 def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any],
@@ -87,7 +105,7 @@ def _is_minimax_openai(agent: dict[str, Any]) -> bool:
 
 
 def openai_chat(agent: dict[str, Any], messages: list[dict[str, str]],
-                timeout: float) -> str:
+                timeout: float) -> ProviderResult:
     base_url = agent["base_url"].rstrip("/")
     payload = {
         "model": agent["model"],
@@ -105,13 +123,16 @@ def openai_chat(agent: dict[str, Any], messages: list[dict[str, str]],
     }
     data = _post_json(f"{base_url}/chat/completions", headers, payload, timeout=timeout)
     try:
-        return _text_from_openai_content(data["choices"][0]["message"]["content"])
+        text = _text_from_openai_content(data["choices"][0]["message"]["content"])
     except (KeyError, IndexError, TypeError) as e:
         raise StateError(f"unexpected provider response shape: {e}")
+    usage = data.get("usage") or {}
+    raw_model = str(data.get("model") or "")
+    return ProviderResult(content=text, usage=dict(usage), raw_model=raw_model)
 
 
 def anthropic_messages(agent: dict[str, Any], messages: list[dict[str, str]],
-                       timeout: float) -> str:
+                       timeout: float) -> ProviderResult:
     base_url = agent["base_url"].rstrip("/")
     system_parts: list[str] = []
     convo: list[dict[str, str]] = []
@@ -140,9 +161,12 @@ def anthropic_messages(agent: dict[str, Any], messages: list[dict[str, str]],
     }
     data = _post_json(_anthropic_messages_url(base_url), headers, payload, timeout=timeout)
     try:
-        return _text_from_anthropic_content(data["content"])
+        text = _text_from_anthropic_content(data["content"])
     except KeyError as e:
         raise StateError(f"unexpected provider response shape: {e}")
+    usage = data.get("usage") or {}
+    raw_model = str(data.get("model") or "")
+    return ProviderResult(content=text, usage=dict(usage), raw_model=raw_model)
 
 
 PROVIDERS: dict[str, ProviderFn] = {
@@ -152,7 +176,7 @@ PROVIDERS: dict[str, ProviderFn] = {
 
 
 def complete(agent: dict[str, Any], messages: list[dict[str, str]],
-             *, timeout: float) -> str:
+             *, timeout: float) -> ProviderResult:
     """Dispatch to the provider matching ``agent['wire_api']``."""
     wire_api = str(agent.get("wire_api") or "openai-chat")
     provider = PROVIDERS.get(wire_api)

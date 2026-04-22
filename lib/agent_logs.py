@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config
+from .agent_runs import LOG_SCHEMA_VERSION
 from .errors import StateError
 
 
@@ -21,12 +22,43 @@ def append_entry(name: str, payload: dict[str, Any]) -> Path:
     path = log_path(name)
     record = dict(payload)
     record.setdefault("ts", int(time.time()))
+    record.setdefault("schema_version", LOG_SCHEMA_VERSION)
     try:
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
     except OSError as e:
         raise StateError(f"cannot write {path}: {e.strerror or e}")
     return path
+
+
+def get_latest_entry(name: str) -> dict[str, Any] | None:
+    """Read the most recent log entry without loading the entire file."""
+    path = log_path(name)
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            if size == 0:
+                return None
+            # Read a generous tail — most entries are well under 8 KB.
+            chunk_size = min(size, 8192)
+            fh.seek(-chunk_size, 2)
+            tail = fh.read().decode("utf-8", errors="replace")
+        for line in reversed(tail.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                return row
+    except OSError:
+        pass
+    return None
 
 
 def read_entries(name: str, *, limit: int = 200) -> list[dict[str, Any]]:

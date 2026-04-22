@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from .. import agent_runner, agent_store, dashboard_config, output
+from .. import agent_runner, agent_runtime, agent_store, dashboard_config, output
 from ..errors import UsageError
 
 
@@ -98,8 +98,12 @@ def _run_steps(value: int | None) -> int:
 def _run_repl(name: str, *, steps: int, timeout: float) -> int:
     agent = agent_store.get_agent(name)
     repo_root = Path(__file__).resolve().parents[2]
+    cid = agent_runtime.get_or_create_conversation(name)
+    prior = agent_runtime.load_context(name)
     print(f"Agent REPL for {agent['name']} ({agent['model']})")
-    print("Enter a prompt and press Enter. Commands: /exit, /quit, /help")
+    if prior:
+        print(f"  Resumed conversation ({len(prior)} prior messages)")
+    print("Commands: /exit  /help  /history  /clear  /new")
     while True:
         try:
             prompt = input(f"{agent['name']}> ").strip()
@@ -114,8 +118,38 @@ def _run_repl(name: str, *, steps: int, timeout: float) -> int:
         if prompt in {"/exit", "/quit"}:
             return 0
         if prompt == "/help":
-            print("Type any prompt to run the tmux agent. /exit quits the REPL.")
+            print("Type any prompt to run the tmux agent.")
+            print("  /history  — show conversation turns")
+            print("  /clear    — delete conversation and start fresh")
+            print("  /new      — start a new conversation (keeps old one)")
+            print("  /exit     — quit the REPL")
             continue
+        if prompt == "/history":
+            turns = agent_runtime.load_context(name)
+            if not turns:
+                print("(no conversation history)")
+            else:
+                for t in turns:
+                    tag = "You" if t["role"] == "user" else "Agent"
+                    preview = t["content"][:120]
+                    if len(t["content"]) > 120:
+                        preview += "..."
+                    print(f"  [{tag}] {preview}")
+            continue
+        if prompt == "/clear":
+            agent_runtime.clear_conversation(name)
+            prior = []
+            cid = agent_runtime.get_or_create_conversation(name)
+            print("Conversation cleared.")
+            continue
+        if prompt == "/new":
+            cid = agent_runtime.start_new_conversation(name)
+            prior = []
+            print("Started new conversation.")
+            continue
+
+        context = agent_runtime.load_context(name)
+        agent_runtime.record_turn(name, role="user", content=prompt)
         try:
             result = agent_runner.run_agent(
                 agent,
@@ -124,10 +158,15 @@ def _run_repl(name: str, *, steps: int, timeout: float) -> int:
                 max_steps=steps,
                 request_timeout=max(5.0, timeout),
                 origin="repl",
+                conversation_messages=context,
             )
         except Exception as e:
             print(f"error: {e}")
             continue
+        agent_runtime.record_turn(
+            name, role="assistant", content=result["message"],
+            run_id=result.get("run_id"),
+        )
         print(result["message"])
 
 

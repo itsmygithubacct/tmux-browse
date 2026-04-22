@@ -29,11 +29,11 @@ class RegistryTests(unittest.TestCase):
 
         def fake_provider(agent, messages, timeout):
             calls["agent"] = agent
-            return "ok"
+            return ap.ProviderResult(content="ok")
 
         with mock.patch.dict(ap.PROVIDERS, {"fake": fake_provider}):
             out = ap.complete({"wire_api": "fake", "x": 1}, [{"r": "u"}], timeout=1.0)
-        self.assertEqual(out, "ok")
+        self.assertEqual(out.content, "ok")
         self.assertEqual(calls["agent"], {"wire_api": "fake", "x": 1})
 
 
@@ -102,7 +102,8 @@ class OpenAIChatShapeTests(unittest.TestCase):
                 [{"role": "user", "content": "hi"}],
                 timeout=1.0,
             )
-        self.assertEqual(out, "hello")
+        self.assertIsInstance(out, ap.ProviderResult)
+        self.assertEqual(out.content, "hello")
         self.assertEqual(captured["url"], "https://api/v1/chat/completions")
         self.assertEqual(captured["body"]["model"], "m")
         self.assertEqual(captured["headers"].get("Authorization"), "Bearer k")
@@ -134,7 +135,7 @@ class OpenAIChatShapeTests(unittest.TestCase):
                 [{"role": "user", "content": "hi"}],
                 timeout=1.0,
             )
-        self.assertEqual(out, '{"type":"final","message":"ok"}')
+        self.assertEqual(out.content, '{"type":"final","message":"ok"}')
         self.assertTrue(captured["body"]["reasoning_split"])
 
 
@@ -159,7 +160,7 @@ class AnthropicMessagesShapeTests(unittest.TestCase):
                 ],
                 timeout=1.0,
             )
-        self.assertEqual(out, "pong")
+        self.assertEqual(out.content, "pong")
         # system rolled into payload["system"], not messages
         self.assertEqual(captured["url"], "https://a/v1/messages")
         self.assertEqual(captured["body"]["system"], "be helpful")
@@ -181,7 +182,7 @@ class AnthropicMessagesShapeTests(unittest.TestCase):
                 [{"role": "user", "content": "hi"}],
                 timeout=1.0,
             )
-        self.assertEqual(out, "pong")
+        self.assertEqual(out.content, "pong")
         self.assertEqual(captured["url"], "https://api.kimi.com/coding/v1/messages")
 
     def test_invalid_role_raises_usage_error(self):
