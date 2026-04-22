@@ -107,7 +107,7 @@ def _run_tb_command(repo_root: Path, args: list[str], stdin_text: str | None) ->
 
 def run_agent(agent: dict[str, Any], prompt: str, *,
               repo_root: Path,
-              max_steps: int = 12,
+              max_steps: int = 100,
               request_timeout: float = 90.0) -> dict[str, Any]:
     if not prompt.strip():
         raise UsageError("missing agent prompt")

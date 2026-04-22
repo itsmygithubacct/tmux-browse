@@ -9,6 +9,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     auto_refresh: false,
     refresh_seconds: 5,
     hot_loop_idle_seconds: 5,
+    agent_max_steps: 100,
     launch_on_expand: true,
     default_ttyd_height_vh: 70,
     default_ttyd_min_height_px: 200,
@@ -92,6 +93,7 @@ function normalizeDashboardConfig(value) {
     const ints = {
         refresh_seconds: [1, 300],
         hot_loop_idle_seconds: [1, 3600],
+        agent_max_steps: [1, 1000],
         default_ttyd_height_vh: [20, 95],
         default_ttyd_min_height_px: [120, 900],
     };
@@ -171,6 +173,7 @@ function configFieldMap() {
         auto_refresh: document.getElementById("cfg-auto-refresh"),
         refresh_seconds: document.getElementById("cfg-refresh-seconds"),
         hot_loop_idle_seconds: document.getElementById("cfg-hot-loop-idle-seconds"),
+        agent_max_steps: document.getElementById("cfg-agent-max-steps"),
         launch_on_expand: document.getElementById("cfg-launch-on-expand"),
         default_ttyd_height_vh: document.getElementById("cfg-default-height"),
         default_ttyd_min_height_px: document.getElementById("cfg-min-height"),
@@ -438,6 +441,7 @@ function updateTopbarStatus() {
     parts.push(cfg.auto_refresh ? `auto-refresh ${cfg.refresh_seconds}s` : "auto-refresh off");
     parts.push(cfg.launch_on_expand ? "ttyd spawns on pane expand" : "manual ttyd launch");
     parts.push(`hot loop wait ${cfg.hot_loop_idle_seconds}s`);
+    parts.push(`agent steps ${cfg.agent_max_steps}`);
     parts.push(`default ttyd height ${cfg.default_ttyd_height_vh}vh`);
     node.textContent = parts.join(" · ");
     setVisible(node, cfg.show_topbar_status);

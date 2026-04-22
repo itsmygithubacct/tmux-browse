@@ -21,6 +21,9 @@ class NormalizeTests(unittest.TestCase):
     def test_auto_refresh_default_is_disabled(self):
         self.assertFalse(dc.DEFAULTS["auto_refresh"])
 
+    def test_agent_max_steps_default_is_100(self):
+        self.assertEqual(dc.DEFAULTS["agent_max_steps"], 100)
+
     def test_non_dict_input_yields_defaults(self):
         self.assertEqual(dc.normalize("nope"), dc.DEFAULTS)
         self.assertEqual(dc.normalize(None), dc.DEFAULTS)
@@ -41,6 +44,9 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(dc.normalize({"refresh_seconds": 0})["refresh_seconds"], 1)
         self.assertEqual(dc.normalize({"refresh_seconds": 99999})["refresh_seconds"], 300)
         self.assertEqual(dc.normalize({"refresh_seconds": 42})["refresh_seconds"], 42)
+        self.assertEqual(dc.normalize({"agent_max_steps": 0})["agent_max_steps"], 1)
+        self.assertEqual(dc.normalize({"agent_max_steps": 2000})["agent_max_steps"], 1000)
+        self.assertEqual(dc.normalize({"agent_max_steps": 250})["agent_max_steps"], 250)
 
     def test_int_invalid_falls_back_to_default(self):
         out = dc.normalize({"refresh_seconds": "abc"})

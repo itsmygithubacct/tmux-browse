@@ -40,7 +40,7 @@ def _verbs_needing_server(verb: str) -> bool:
     they have meaningful zero-session behaviour (empty list / exit 3) and
     humans + agents rely on it.
     """
-    skip = {"snapshot", "ls", "exists", "new", "agent"}  # `new` bootstraps a server
+    skip = {"snapshot", "ls", "exists", "new", "agent", "config"}  # `new` bootstraps a server
     return verb not in skip
 
 

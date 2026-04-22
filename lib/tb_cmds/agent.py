@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from .. import agent_runner, agent_store, output
+from .. import agent_runner, agent_store, dashboard_config, output
 from ..errors import UsageError
 
 
@@ -74,9 +74,13 @@ def _parse_remove(argv: list[str]) -> argparse.Namespace:
 def _parse_run(name: str, argv: list[str]) -> argparse.Namespace:
     p = _Parser(prog=f"tb agent {name}")
     p.add_argument("prompt", nargs="+")
-    p.add_argument("--steps", type=int, default=12)
+    p.add_argument("--steps", type=int, default=None)
     p.add_argument("--timeout", type=float, default=90.0)
     return p.parse_args(argv)
+
+
+def _default_agent_steps() -> int:
+    return max(1, int(dashboard_config.load().get("agent_max_steps", 100)))
 
 
 def _rows() -> list[dict]:
@@ -166,7 +170,7 @@ def cmd_agent(args: argparse.Namespace) -> int:
         agent,
         " ".join(run.prompt),
         repo_root=repo_root,
-        max_steps=max(1, run.steps),
+        max_steps=max(1, run.steps if run.steps is not None else _default_agent_steps()),
         request_timeout=max(5.0, run.timeout),
     )
     if args.json:

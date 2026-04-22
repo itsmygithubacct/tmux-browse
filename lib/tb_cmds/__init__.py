@@ -11,7 +11,7 @@ inside submodules keep working.
 
 from __future__ import annotations
 
-from . import agent, bulk, lifecycle, observe, read, web, write
+from . import agent, bulk, config_cmd, lifecycle, observe, read, web, write
 from ._common import parse_target, require_target
 
 __all__ = ["parse_target", "require_target", "register_all"]
@@ -25,3 +25,4 @@ def register_all(subparsers, common) -> None:
     web.register(subparsers, common)
     bulk.register(subparsers, common)
     agent.register(subparsers, common)
+    config_cmd.register(subparsers, common)
