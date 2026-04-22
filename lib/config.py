@@ -14,6 +14,7 @@ PORTS_FILE = STATE_DIR / "ports.json"
 DASHBOARD_FILE = STATE_DIR / "dashboard.json"
 DASHBOARD_CONFIG_FILE = STATE_DIR / "dashboard-config.json"
 AGENT_LOG_DIR = STATE_DIR / "agent-logs"
+AGENT_CONVERSATIONS_DIR = STATE_DIR / "agent-conversations"
 AGENT_WORKFLOWS_FILE = STATE_DIR / "agent-workflows.json"
 PID_DIR = STATE_DIR / "pids"
 LOG_DIR = STATE_DIR / "logs"
@@ -23,6 +24,7 @@ TTYD_BIN = Path.home() / ".local" / "bin" / "ttyd"
 def ensure_dirs() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     AGENT_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    AGENT_CONVERSATIONS_DIR.mkdir(parents=True, exist_ok=True)
     PID_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 

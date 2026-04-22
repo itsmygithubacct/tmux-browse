@@ -8,6 +8,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import agent_runner  # noqa: E402
+from lib.agent_providers import ProviderResult  # noqa: E402
 from lib.errors import UsageError  # noqa: E402
 
 
@@ -29,8 +30,8 @@ class ExtractJsonTests(unittest.TestCase):
 
     def test_run_agent_repairs_non_json_reply(self):
         replies = iter([
-            "Here's what I found in the panes.",
-            '{"type":"final","message":"done"}',
+            ProviderResult(content="Here's what I found in the panes."),
+            ProviderResult(content='{"type":"final","message":"done"}'),
         ])
         with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=lambda *a, **k: next(replies)), mock.patch(
             "lib.agent_runner.agent_logs.append_entry",
@@ -44,9 +45,13 @@ class ExtractJsonTests(unittest.TestCase):
             )
         self.assertEqual(result["message"], "done")
         self.assertEqual(result["steps"], 2)
+        self.assertIn("run_id", result)
         self.assertIn("parse_error", result["transcript"][0])
-        append_entry.assert_called_once()
-        self.assertEqual(append_entry.call_args.args[0], "minimax")
+        # 3 log entries: run_started, run_completed (parse_error step doesn't get its own entry)
+        self.assertEqual(append_entry.call_count, 2)
+        self.assertEqual(append_entry.call_args_list[0].args[0], "minimax")
+        self.assertEqual(append_entry.call_args_list[0].args[1]["status"], "run_started")
+        self.assertEqual(append_entry.call_args_list[1].args[1]["status"], "run_completed")
 
     def test_logs_error_run(self):
         with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=UsageError("bad response")), mock.patch(
@@ -60,8 +65,11 @@ class ExtractJsonTests(unittest.TestCase):
                     max_steps=3,
                     request_timeout=1.0,
                 )
-        self.assertEqual(append_entry.call_args.args[0], "gpt")
-        self.assertEqual(append_entry.call_args.args[1]["status"], "error")
+        # 2 log entries: run_started, then run_failed
+        self.assertEqual(append_entry.call_count, 2)
+        self.assertEqual(append_entry.call_args_list[0].args[1]["status"], "run_started")
+        self.assertEqual(append_entry.call_args_list[1].args[0], "gpt")
+        self.assertEqual(append_entry.call_args_list[1].args[1]["status"], "run_failed")
 
     def test_compact_snapshot_payload(self):
         payload = agent_runner._compact_json_envelope({
