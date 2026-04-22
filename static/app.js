@@ -153,9 +153,8 @@ const state = {
     stepViewer: { open: false, agent: "", entries: [], selected: 0, path: "" },
     workflowConfig: normalizeAgentWorkflowConfig({}),
     workflowPath: "",
-    workflowRuntime: {},
-    workflowTimer: null,
-    workflowBusy: false,
+    workflowServerState: {},
+    schedulerRunning: false,
     audioCtx: null,
     hotLoops: {},
     agents: [],
@@ -751,24 +750,9 @@ function scheduleRefreshLoop() {
 }
 
 function scheduleWorkflowLoop() {
-    if (state.workflowTimer) clearInterval(state.workflowTimer);
-    state.workflowTimer = setInterval(workflowTick, 5000);
-}
-
-async function workflowTick() {
-    if (state.workflowBusy) return;
-    const hasEnabled = Object.values(state.workflowConfig.agents || {}).some((row) => row && row.enabled);
-    if (!hasEnabled) return;
-    state.workflowBusy = true;
-    try {
-        const r = await api("GET", "/api/sessions");
-        if (!r.ok) return;
-        state.sessions = Array.isArray(r.sessions) ? r.sessions : [];
-        renderAgentsPane();
-        await checkAgentWorkflows(state.sessions);
-    } finally {
-        state.workflowBusy = false;
-    }
+    // Workflow execution is now server-side. This loop just polls
+    // the server's workflow state so the UI stays current.
+    setInterval(loadWorkflowState, 15000);
 }
 
 function applyDashboardConfigToPane(rec) {
@@ -1439,41 +1423,16 @@ async function clearWorkflowEditor() {
 async function toggleWorkflowEnabled(agentName) {
     const entry = workflowEntry(agentName);
     entry.enabled = !entry.enabled;
-    if (!entry.enabled) delete state.workflowRuntime[(agentName || "").trim().toLowerCase()];
+    // Workflow execution is now server-side; toggling just saves config.
     await saveAgentWorkflows(true);
     refresh();
 }
 
-async function checkAgentWorkflows(rows) {
-    const byName = new Map(rows.map((row) => [row.name, row]));
-    const now = Date.now();
-    for (const [agentName, spec] of Object.entries(state.workflowConfig.agents || {})) {
-        if (!spec.enabled) continue;
-        const session = conversationSessionName(agentName);
-        const row = byName.get(session);
-        if (!row || !row.conversation_mode) continue;
-        if ((row.idle_seconds || 0) < 3) continue;
-        const runtime = state.workflowRuntime[agentName] || {};
-        for (let idx = 0; idx < spec.workflows.length; idx += 1) {
-            const workflow = normalizeWorkflowSlot(spec.workflows[idx]);
-            if (!workflow.prompt.trim()) continue;
-            const last = runtime[idx] || 0;
-            if (now - last < workflow.interval_seconds * 1000) continue;
-            runtime[idx] = now;
-            state.workflowRuntime[agentName] = runtime;
-            const msg = document.getElementById("msg-" + cssId(session));
-            if (msg) {
-                msg.textContent = `running workflow ${idx + 1}…`;
-                msg.className = "inline-msg dim";
-            }
-            const r = await api("POST", "/api/session/type", { session, text: workflow.prompt });
-            if (msg) {
-                msg.textContent = r.ok
-                    ? `workflow ${idx + 1}: ${workflow.name || "sent"}`
-                    : ("error: " + (r.error || ""));
-                msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
-            }
-        }
+async function loadWorkflowState() {
+    const r = await api("GET", "/api/agent-workflow-state");
+    if (r.ok) {
+        state.workflowServerState = r.state || {};
+        state.schedulerRunning = !!r.scheduler_running;
     }
 }
 
@@ -2047,7 +2006,6 @@ async function refresh() {
     state.sessions = sessions;
     checkIdleAlerts(sessions);
     await checkHotLoops(sessions);
-    await checkAgentWorkflows(sessions);
     const root = document.getElementById("sessions");
     const seen = new Set();
 
