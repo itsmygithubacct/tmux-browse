@@ -36,7 +36,7 @@ from urllib.parse import parse_qs, urlparse
 from .errors import StateError
 
 COOKIE_NAME = "tb_auth"
-OPEN_PATHS = {"/health"}  # paths that skip the auth check
+OPEN_PATHS = {"/health", "/favicon.ico", "/favicon.svg"}  # paths that skip the auth check
 
 
 def load_token(cli_token: str | None = None,

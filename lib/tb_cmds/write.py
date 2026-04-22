@@ -7,7 +7,7 @@ import sys
 
 from .. import exec_runner, output, sessions
 from ..errors import TmuxFailed, UsageError
-from . import require_target
+from ._common import require_target
 
 
 def cmd_send(args: argparse.Namespace) -> int:

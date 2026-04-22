@@ -25,12 +25,12 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from lib import output, sessions
+from lib import __version__, output, sessions
 from lib.errors import NoTmuxServer, TBError
 from lib.tb_cmds import register_all
 
 
-VERSION = "0.3.0"
+VERSION = __version__
 
 
 def _verbs_needing_server(verb: str) -> bool:
@@ -40,7 +40,7 @@ def _verbs_needing_server(verb: str) -> bool:
     they have meaningful zero-session behaviour (empty list / exit 3) and
     humans + agents rely on it.
     """
-    skip = {"snapshot", "ls", "exists", "new"}  # `new` bootstraps a server
+    skip = {"snapshot", "ls", "exists", "new", "agent"}  # `new` bootstraps a server
     return verb not in skip
 
 

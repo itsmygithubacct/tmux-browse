@@ -10,8 +10,8 @@ Two ways to look at your tmux sessions:
    machines.
 
 Both share the same Python library. Stdlib-only (`http.server`, `urllib`,
-`subprocess`) — no pip dependencies; the only external is `ttyd` itself,
-which the CLI can install for you.
+`subprocess`, `ssl`) — no pip dependencies; the only external is `ttyd`
+itself, which the CLI can install for you.
 
 ![tmux-browse dashboard](tmux_browse.png)
 
@@ -59,6 +59,58 @@ python3 tmux_browse.py serve
 Then open `http://localhost:8096/` on the same machine. The dashboard is most
 useful once at least one tmux session exists.
 
+## Same sessions, any device on your LAN
+
+The dashboard binds `0.0.0.0` by default, so every terminal you see in the
+browser is **the real tmux session on the host** — not a copy. Open the same
+URL from another device on the LAN and you're attached to the exact same
+panes. Close your laptop, pick it up on your phone, keep typing.
+
+```bash
+# On the host running tmux (e.g. your workstation or a Raspberry Pi)
+python3 tmux_browse.py serve               # → :8096 on every interface
+
+# Find the host's LAN IP
+ip -4 addr show | awk '/inet / && !/127\./ {print $2}' | cut -d/ -f1
+```
+
+Then on any other device on the same LAN:
+
+- **Phone / tablet:** open `http://<host-ip>:8096/` in the browser. Each
+  session pane embeds a full ttyd terminal — tap into one and type; the
+  keystrokes land on the host's tmux server, not a snapshot. Pinch-zoom,
+  swipe between panes, copy/paste all work.
+- **Another laptop or PC:** same URL. Multiple people (or the same person
+  across devices) can watch and drive the same session simultaneously — tmux
+  already handles the multi-client attach; ttyd just forwards a browser
+  socket to the attach.
+
+Because everything stays on the host, your devices don't need any local
+state: no ssh keys, no tmux config, no shell history. The phone in your
+pocket is just a window onto the workstation.
+
+### Before exposing on a LAN
+
+The default build is **unauthenticated plaintext HTTP**. Anyone on the
+network segment can open any of your tmux panes. Turn on both gates
+before using this outside of a trusted single-user LAN:
+
+```bash
+# Generate a self-signed cert (one-off) + pick a token
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+    -keyout key.pem -out cert.pem -subj "/CN=$(hostname)"
+TOKEN=$(openssl rand -hex 24)
+
+# Serve with TLS + auth
+python3 tmux_browse.py serve --cert cert.pem --key key.pem --auth "$TOKEN"
+# → https://<host-ip>:8096/?token=<TOKEN> from any device
+```
+
+Phones will warn about the self-signed cert — accept once and it's pinned.
+For a stricter setup (public network, multiple users, untrusted devices),
+front the dashboard with an authenticating reverse proxy or reach it over
+a VPN / SSH port-forward instead.
+
 ## Ports
 
 | Thing | Port(s) |
@@ -67,6 +119,10 @@ useful once at least one tmux session exists.
 | Per-session ttyd | `7700–7799` (100 slots) |
 
 Change in `lib/config.py` if they clash with something on your machine.
+By default both the dashboard and spawned ttyds are reachable on every
+interface. `tmux_browse.py serve --bind 127.0.0.1` keeps both local-only;
+other concrete bind addresses are mapped to the owning NIC when ttyd is
+started.
 
 ## Documentation
 
@@ -127,10 +183,16 @@ tmux-browse/
 ├── lib/
 │   ├── config.py / ports.py / sessions.py / ttyd.py
 │   ├── server.py / templates.py / static.py        # dashboard internals
+│   ├── auth.py / tls.py                            # optional auth + HTTPS
+│   ├── dashboard_config.py                         # saved dashboard settings
+│   ├── agent_store.py / agent_runner.py           # tb agent persistence + runtime
 │   ├── ttyd_installer.py
-│   ├── targeting.py / errors.py / output.py        # tb primitives
-│   ├── exec_runner.py                              # tb exec strategies
-│   └── tb_cmds/                                    # one module per verb group
+│   ├── targeting.py / errors.py / output.py       # tb primitives
+│   ├── exec_runner.py                             # tb exec strategies
+│   └── tb_cmds/                                   # one module per verb group
+│       ├── agent.py                               # tb agent subcommands
+│       ├── web.py / bulk.py / lifecycle.py
+│       └── read.py / write.py / observe.py
 ├── bin/
 │   └── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
 ├── docs/
@@ -139,5 +201,6 @@ tmux-browse/
 │   ├── recipes.md
 │   └── architecture.md
 ├── CHANGELOG.md
-└── requirements_tmux_browse.txt   # empty — stdlib only
+├── LICENSE
+└── requirements_tmux_browse.txt   # intentionally unused; runtime is stdlib-only
 ```
