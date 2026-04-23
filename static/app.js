@@ -265,6 +265,7 @@ function agentFieldMap() {
         model: document.getElementById("cfg-agent-model"),
         base_url: document.getElementById("cfg-agent-base-url"),
         wire_api: document.getElementById("cfg-agent-wire-api"),
+        sandbox: document.getElementById("cfg-agent-sandbox"),
         api_key: document.getElementById("cfg-agent-api-key"),
     };
 }
@@ -364,6 +365,23 @@ function renderAgentsPane() {
             ),
         ));
     }
+}
+
+// --- Costs ---
+
+async function loadCostSummary() {
+    const node = document.getElementById("cost-summary");
+    if (!node) return;
+    const r = await api("GET", "/api/agent-costs");
+    if (!r.ok) { node.textContent = ""; return; }
+    const agents = r.per_agent || {};
+    const names = Object.keys(agents);
+    if (!names.length) { node.textContent = ""; return; }
+    const parts = names.map((name) => {
+        const a = agents[name];
+        return `${name}: ${(a.total_tokens || 0).toLocaleString()} tokens (${a.runs} runs)`;
+    });
+    node.textContent = "Usage: " + parts.join(" · ");
 }
 
 // --- Tasks ---
@@ -673,6 +691,7 @@ function fillAgentForm(row, opts = {}) {
     fields.model.value = row.model || "";
     fields.base_url.value = row.base_url || "";
     fields.wire_api.value = row.wire_api || "openai-chat";
+    fields.sandbox.value = row.sandbox || "host";
     fields.api_key.value = "";
     fields.existing.value = opts.existingName !== undefined ? opts.existingName : (row.name || "");
     fields.preset.value = preset;
@@ -804,6 +823,7 @@ function readAgentForm() {
         model: fields.model.value.trim(),
         base_url: fields.base_url.value.trim(),
         wire_api: fields.wire_api.value,
+        sandbox: fields.sandbox.value,
     };
     const constraint = currentAgentConstraint();
     if (constraint) {
@@ -2337,5 +2357,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await refresh();
     await searchRuns();
     await loadTasks();
+    await loadCostSummary();
     scheduleRefreshLoop();
 });

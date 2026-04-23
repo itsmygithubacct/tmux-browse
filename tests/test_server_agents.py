@@ -124,6 +124,7 @@ class AgentHandlerTests(unittest.TestCase):
             base_url="https://api.openai.com/v1",
             provider="openai",
             wire_api="openai-chat",
+            sandbox=None,
         )
 
     def test_agents_post_maps_usage_error_to_400(self):

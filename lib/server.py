@@ -18,6 +18,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
     agent_conversations,
+    agent_costs,
     agent_logs,
     agent_run_index,
     agent_scheduler,
@@ -553,6 +554,7 @@ class Handler(BaseHTTPRequestHandler):
                 base_url=(payload.get("base_url") or "").strip() or None,
                 provider=(payload.get("provider") or "").strip() or None,
                 wire_api=(payload.get("wire_api") or "").strip() or None,
+                sandbox=(payload.get("sandbox") or "").strip() or None,
             )
         except TBError as e:
             self._send_tb_error(e)
@@ -657,6 +659,33 @@ class Handler(BaseHTTPRequestHandler):
             "session": fork_session,
             "port": ttyd_result.get("port"),
         })
+
+    def _h_agent_costs(self, parsed: ParseResult) -> None:
+        q = parse_qs(parsed.query)
+
+        def _first(key: str) -> str | None:
+            vals = q.get(key)
+            return vals[0].strip() if vals else None
+
+        def _int(key: str) -> int | None:
+            v = _first(key)
+            if v is None:
+                return None
+            try:
+                return int(v)
+            except ValueError:
+                return None
+
+        try:
+            self._send_json({
+                "ok": True,
+                "per_agent": agent_costs.per_agent_totals(
+                    since=_int("since"), until=_int("until")),
+                "daily": agent_costs.daily_totals(
+                    since=_int("since"), until=_int("until")),
+            })
+        except TBError as e:
+            self._send_tb_error(e)
 
     def _h_tasks_get(self, _parsed: ParseResult) -> None:
         try:
@@ -790,6 +819,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-runs":           _h_agent_runs,
         "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
+        "/api/agent-costs":        _h_agent_costs,
         "/api/tasks":              _h_tasks_get,
         "/health":                 _h_health,
     })

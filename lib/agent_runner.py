@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_logs, agent_providers, agent_run_index
+from . import agent_costs, agent_logs, agent_providers, agent_run_index
 from .agent_runs import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -298,6 +298,12 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                     origin=origin, model=agent.get("model", ""),
                     transcript=transcript,
                 )
+                if cumulative_usage:
+                    agent_costs.record(
+                        run_id=run_id, agent=agent["name"],
+                        model=agent.get("model", ""),
+                        usage=cumulative_usage, origin=origin,
+                    )
                 return out
             if action.get("type") != "tool" or action.get("tool") != "tb_command":
                 raise UsageError("agent must return either a final action or a tb_command tool action")
@@ -335,4 +341,10 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
             origin=origin, model=agent.get("model", ""),
             transcript=transcript,
         )
+        if cumulative_usage:
+            agent_costs.record(
+                run_id=run_id, agent=agent["name"],
+                model=agent.get("model", ""),
+                usage=cumulative_usage, origin=origin,
+            )
         raise
