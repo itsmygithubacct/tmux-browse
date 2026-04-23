@@ -93,5 +93,3 @@ function ttydUrl(port) {
 function cssId(s) {
     return s.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
-
-// Create a pane once per session and reuse it across refreshes, so active
