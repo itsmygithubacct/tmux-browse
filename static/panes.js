@@ -189,11 +189,56 @@ function placeSessionAbove(targetName, sessionName) {
     renderLayout();
 }
 
+function placeSessionBelow(targetName, sessionName) {
+    if (!sessionName || !targetName || sessionName === targetName) return;
+    if (state.hidden.has(sessionName) !== state.hidden.has(targetName)) return;
+    if (state.hidden.has(sessionName)) return;
+    syncLayoutState();
+    removeFromLayout(sessionName);
+    const targetPos = findLayoutPosition(targetName);
+    if (!targetPos) return;
+    placeSessionRow(sessionName, targetPos.row + 1);
+    persistLayoutState();
+    renderLayout();
+}
+
+function _makeDropBar(insertRowIdx) {
+    const bar = el("div", { class: "row-drop-bar" });
+    bar.addEventListener("dragover", (e) => {
+        if (!e.dataTransfer.types.includes("text/x-tmux-browse-split") &&
+            !e.dataTransfer.types.includes("text/x-tmux-browse-session")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        bar.classList.add("visible");
+    });
+    bar.addEventListener("dragleave", () => bar.classList.remove("visible"));
+    bar.addEventListener("drop", (e) => {
+        const name = e.dataTransfer.getData("text/x-tmux-browse-split") ||
+                     e.dataTransfer.getData("text/x-tmux-browse-session");
+        bar.classList.remove("visible");
+        if (!name) return;
+        e.preventDefault();
+        syncLayoutState();
+        if (state.hidden.has(name)) {
+            state.hidden.delete(name);
+            saveHidden(state.hidden);
+        }
+        removeFromLayout(name);
+        placeSessionRow(name, insertRowIdx);
+        persistLayoutState();
+        renderLayout();
+    });
+    return bar;
+}
+
 function renderLayout() {
     syncLayoutState();
     const root = document.getElementById("sessions");
     root.textContent = "";
-    for (const row of state.layout) {
+    for (let ri = 0; ri < state.layout.length; ri++) {
+        const row = state.layout[ri];
+        // Drop bar before this row
+        root.append(_makeDropBar(ri));
         const rowEl = el("div", { class: "session-row" });
         for (const name of row) {
             const rec = state.nodes.get(name);
@@ -201,6 +246,8 @@ function renderLayout() {
         }
         if (rowEl.childNodes.length) root.append(rowEl);
     }
+    // Drop bar after last row
+    if (state.layout.length) root.append(_makeDropBar(state.layout.length));
     if (!state.layout.length) {
         root.append(el("div", { id: "empty", class: "empty-state" },
             state.sessions.length === 0
@@ -888,8 +935,10 @@ function createPane(s) {
     const fPort = el("span"), fPid = el("span"), fCreated = el("span");
     const footer = el("div", { class: "pane-footer" }, fPort, fPid, fCreated);
 
+    const dropOverlay = el("div", { class: "drop-overlay" });
     const details = el("details", { class: "session", "data-session": s.name },
         summary, el("div", { class: "pane-body" }, actions, iframeWrap, sendBar, phoneKeys, footer),
+        dropOverlay,
     );
 
     details.addEventListener("toggle", () => {
@@ -927,23 +976,45 @@ function createPane(s) {
         e.dataTransfer.setData("text/x-tmux-browse-session", s.name);
     });
 
-    // Drag-and-drop: reorderPad, splitBtn, and summary all initiate drags.
-    // Any <details> is a valid drop target.
-    const clearDropClasses = () => details.classList.remove("drag-over", "drop-left", "drop-right");
+    // Drag-and-drop with tilix-style 4-zone triangle detection.
+    // The pane is divided into 4 triangles meeting at the center point:
+    //   LEFT:   (0,0) → (0,H) → (W/2,H/2)
+    //   RIGHT:  (W,0) → (W,H) → (W/2,H/2)
+    //   TOP:    (0,0) → (W,0) → (W/2,H/2)
+    //   BOTTOM: (0,H) → (W,H) → (W/2,H/2)
+    const DROP_ZONES = ["drop-left", "drop-right", "drop-top", "drop-bottom"];
+    const clearDropClasses = () => details.classList.remove(...DROP_ZONES);
+
+    function getDropZone(e) {
+        const rect = details.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const w = rect.width;
+        const h = rect.height;
+        if (w < 1 || h < 1) return null;
+        // Normalize to 0..1
+        const nx = x / w;
+        const ny = y / h;
+        // The two diagonals divide the rectangle into 4 triangles:
+        // diagonal 1: top-left to bottom-right (ny = nx)
+        // diagonal 2: top-right to bottom-left (ny = 1 - nx)
+        const aboveDiag1 = ny < nx;
+        const aboveDiag2 = ny < (1 - nx);
+        if (aboveDiag2 && !aboveDiag1) return "left";
+        if (aboveDiag1 && aboveDiag2) return "top";
+        if (aboveDiag1 && !aboveDiag2) return "right";
+        return "bottom";
+    }
+
     details.addEventListener("dragover", (e) => {
-        const splitDrag = e.dataTransfer.types.includes("text/x-tmux-browse-split");
-        const reorderDrag = e.dataTransfer.types.includes("text/x-tmux-browse-session");
-        if (!splitDrag && !reorderDrag) return;
+        const hasDrag = e.dataTransfer.types.includes("text/x-tmux-browse-split") ||
+                        e.dataTransfer.types.includes("text/x-tmux-browse-session");
+        if (!hasDrag) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         clearDropClasses();
-        details.classList.add("drag-over");
-        if (splitDrag) {
-            const rect = details.getBoundingClientRect();
-            const ratio = (e.clientX - rect.left) / Math.max(rect.width, 1);
-            if (ratio <= 0.28) details.classList.add("drop-left");
-            else if (ratio >= 0.72) details.classList.add("drop-right");
-        }
+        const zone = getDropZone(e);
+        if (zone) details.classList.add("drop-" + zone);
     });
     details.addEventListener("dragleave", clearDropClasses);
     details.addEventListener("drop", (e) => {
@@ -952,14 +1023,9 @@ function createPane(s) {
         clearDropClasses();
         if (!draggedSplit && !draggedReorder) return;
         e.preventDefault();
-        if (draggedSplit) {
-            const rect = details.getBoundingClientRect();
-            const ratio = (e.clientX - rect.left) / Math.max(rect.width, 1);
-            const side = ratio <= 0.28 ? "left" : (ratio >= 0.72 ? "right" : "center");
-            dropOnSession(s.name, draggedSplit, side);
-            return;
-        }
-        dropOnSession(s.name, draggedReorder, "center");
+        const zone = getDropZone(e);
+        const name = draggedSplit || draggedReorder;
+        dropOnSession(s.name, name, zone || "top");
     });
 
     return {
@@ -1102,12 +1168,17 @@ function moveSession(name, delta) {
 }
 
 
-function dropOnSession(targetName, draggedName, side = "center") {
+function dropOnSession(targetName, draggedName, side = "top") {
     if (!draggedName || draggedName === targetName) return;
     if (side === "left" || side === "right") {
         putSessionBeside(targetName, draggedName, side);
         return;
     }
+    if (side === "bottom") {
+        placeSessionBelow(targetName, draggedName);
+        return;
+    }
+    // "top" or any other value = insert above
     placeSessionAbove(targetName, draggedName);
 }
 
