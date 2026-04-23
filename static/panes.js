@@ -895,7 +895,8 @@ function createPane(s) {
         id: "iframe-" + id, class: "pane-iframe",
         allow: "clipboard-read; clipboard-write",
     });
-    const iframeWrap = el("div", { class: "ttyd-resize-wrap" }, iframe);
+    const dragShield = el("div", { class: "drag-shield" });
+    const iframeWrap = el("div", { class: "ttyd-resize-wrap" }, iframe, dragShield);
 
     // Resize row together: when this pane's iframe wrapper is resized,
     // propagate the height to all sibling panes in the same layout row.
@@ -1016,7 +1017,10 @@ function createPane(s) {
         const zone = getDropZone(e);
         if (zone) details.classList.add("drop-" + zone);
     });
-    details.addEventListener("dragleave", clearDropClasses);
+    details.addEventListener("dragleave", (e) => {
+        // Only clear if actually leaving the details element, not moving between children
+        if (!details.contains(e.relatedTarget)) clearDropClasses();
+    });
     details.addEventListener("drop", (e) => {
         const draggedSplit = e.dataTransfer.getData("text/x-tmux-browse-split");
         const draggedReorder = e.dataTransfer.getData("text/x-tmux-browse-session");
@@ -1262,6 +1266,10 @@ async function refresh() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // Shield iframes during any drag so drag events reach parent panes
+    document.addEventListener("dragstart", () => document.body.classList.add("dragging"));
+    document.addEventListener("dragend", () => document.body.classList.remove("dragging"));
+
     document.getElementById("refresh-btn").addEventListener("click", refresh);
     document.getElementById("new-btn").addEventListener("click", newSession);
     document.getElementById("raw-btn").addEventListener("click", openRawTtyd);

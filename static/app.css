@@ -190,6 +190,15 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
     border: 0;
     background: #000;
 }
+/* Transparent shield over iframes during drag — iframes swallow drag
+   events, so this overlay catches them and lets them bubble to <details> */
+.drag-shield {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 5;
+}
+body.dragging .drag-shield { display: block; }
 .summary-link {
     color: var(--accent); text-decoration: none; font-size: 0.85rem;
     padding: 0 0.35rem; border-radius: 3px;
