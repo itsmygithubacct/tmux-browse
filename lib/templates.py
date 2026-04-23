@@ -343,7 +343,7 @@ def render_index() -> str:
 <details id="pane-admin-wrap" class="config-pane">
     <summary>Pane Admin</summary>
     <div class="config-body">
-        <div id="pane-admin-list" class="agent-grid"></div>
+        <div id="pane-admin-list"></div>
     </div>
 </details>
 <details id="notifications-wrap" class="config-pane" hidden>
