@@ -129,19 +129,30 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
     line-height: 1;
 }
 .wc-controls {
-    display: flex; gap: 0.2rem; margin-left: 0.3rem;
+    display: flex; gap: 0.3rem; margin-left: 0.4rem;
 }
 .wc-btn {
-    width: 1.3rem; height: 1.3rem; border-radius: 50%;
-    border: none; cursor: pointer; font-size: 0.65rem;
+    width: 1.4rem; height: 1.4rem; border-radius: 4px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--dim); cursor: pointer; font-size: 0.7rem;
     display: inline-flex; align-items: center; justify-content: center;
     font-weight: 700; line-height: 1; padding: 0;
-    transition: opacity 0.15s;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
 }
-.wc-btn:hover { opacity: 0.8; }
-.wc-close    { background: #f85149; color: #fff; }
-.wc-maximize { background: #3fb950; color: #fff; }
-.wc-minimize { background: #d29922; color: #fff; }
+.wc-btn:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--fg);
+}
+.wc-btn:active { background: rgba(139, 148, 158, 0.25); }
+.wc-close:hover {
+    background: rgba(248, 81, 73, 0.2);
+    border-color: rgba(248, 81, 73, 0.4);
+    color: var(--red);
+}
+.wc-maximize:hover, .wc-minimize:hover {
+    color: var(--accent);
+}
 .summary-idle-wrap {
     display: inline-flex;
     align-items: center;
