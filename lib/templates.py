@@ -17,7 +17,9 @@ def render_index() -> str:
 </head>
 <body>
 <div class="topbar">
-    <h1>tmux sessions <span class="dim" id="count" style="font-size:0.85rem"></span></h1>
+    <h1>tmux sessions <span class="dim" id="count" style="font-size:0.85rem"></span>
+        <button class="tmux-help-btn" id="tmux-help-btn" type="button" title="tmux hot keys">?</button>
+    </h1>
     <input type="text" id="new-name" placeholder="new session name" />
     <button class="btn green" id="new-btn">New session</button>
     <button class="btn" id="launch-claude-btn" title="Launch Claude Code" hidden>Claude</button>
@@ -341,6 +343,74 @@ def render_index() -> str:
         <div id="notifications-pane" class="agent-grid"></div>
     </div>
 </details>
+<div id="tmux-help-modal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:680px">
+        <div class="modal-head">
+            <h2>tmux Quick Keys</h2>
+            <button class="btn" id="tmux-help-close-btn">Close</button>
+        </div>
+        <div class="tmux-help-body">
+            <p class="dim">Prefix key: <strong>Ctrl+B</strong> — press and release, then press the command key.</p>
+            <div class="tmux-help-grid">
+                <div class="tmux-help-section">
+                    <h3>Sessions</h3>
+                    <div class="hk"><kbd>d</kbd> Detach</div>
+                    <div class="hk"><kbd>s</kbd> List sessions</div>
+                    <div class="hk"><kbd>$</kbd> Rename session</div>
+                    <div class="hk"><kbd>(</kbd> <kbd>)</kbd> Prev / next session</div>
+                </div>
+                <div class="tmux-help-section">
+                    <h3>Windows</h3>
+                    <div class="hk"><kbd>c</kbd> New window</div>
+                    <div class="hk"><kbd>n</kbd> <kbd>p</kbd> Next / prev window</div>
+                    <div class="hk"><kbd>0-9</kbd> Select window by number</div>
+                    <div class="hk"><kbd>w</kbd> Choose window</div>
+                    <div class="hk"><kbd>,</kbd> Rename window</div>
+                    <div class="hk"><kbd>&amp;</kbd> Close window</div>
+                    <div class="hk"><kbd>l</kbd> Last window</div>
+                </div>
+                <div class="tmux-help-section">
+                    <h3>Panes</h3>
+                    <div class="hk"><kbd>"</kbd> Split top/bottom</div>
+                    <div class="hk"><kbd>%</kbd> Split left/right</div>
+                    <div class="hk"><kbd>Arrow</kbd> Move between panes</div>
+                    <div class="hk"><kbd>z</kbd> Zoom (toggle fullscreen)</div>
+                    <div class="hk"><kbd>x</kbd> Close pane</div>
+                    <div class="hk"><kbd>!</kbd> Break pane to window</div>
+                    <div class="hk"><kbd>Space</kbd> Cycle layouts</div>
+                    <div class="hk"><kbd>q</kbd> Show pane numbers</div>
+                </div>
+                <div class="tmux-help-section">
+                    <h3>Resize</h3>
+                    <div class="hk"><kbd>Ctrl+Arrow</kbd> Resize by 1</div>
+                    <div class="hk"><kbd>Alt+Arrow</kbd> Resize by 5</div>
+                </div>
+                <div class="tmux-help-section">
+                    <h3>Copy Mode</h3>
+                    <div class="hk"><kbd>[</kbd> Enter copy mode</div>
+                    <div class="hk"><kbd>Ctrl+R</kbd> Search backward</div>
+                    <div class="hk"><kbd>Ctrl+S</kbd> Search forward</div>
+                    <div class="hk"><kbd>n</kbd> <kbd>N</kbd> Next / prev match</div>
+                    <div class="hk"><kbd>Space</kbd> Start selection</div>
+                    <div class="hk"><kbd>Enter</kbd> Copy and exit</div>
+                    <div class="hk"><kbd>q</kbd> Exit copy mode</div>
+                    <div class="hk"><kbd>]</kbd> Paste (outside copy mode)</div>
+                </div>
+                <div class="tmux-help-section">
+                    <h3>Misc</h3>
+                    <div class="hk"><kbd>:</kbd> Command prompt</div>
+                    <div class="hk"><kbd>?</kbd> List all keybindings</div>
+                    <div class="hk"><kbd>t</kbd> Clock</div>
+                    <div class="hk"><kbd>i</kbd> Pane info</div>
+                </div>
+            </div>
+            <p class="dim" style="margin-top:0.8rem;font-size:0.78rem">
+                All keys shown are pressed after the prefix (Ctrl+B).
+                See <a href="/docs/tmux-guide.md" target="_blank" style="color:var(--accent)">docs/tmux-guide.md</a> for the full guide.
+            </p>
+        </div>
+    </div>
+</div>
 <div id="agent-steps-modal" class="modal-backdrop" hidden>
     <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="agent-steps-modal-title">
         <div class="modal-head">

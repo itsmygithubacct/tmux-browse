@@ -1327,6 +1327,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("raw-btn").addEventListener("click", openRawTtyd);
     document.getElementById("restart-btn").addEventListener("click", restartDashboard);
     document.getElementById("os-restart-btn").addEventListener("click", restartDashboard);
+    document.getElementById("tmux-help-btn").addEventListener("click", () => {
+        document.getElementById("tmux-help-modal").hidden = false;
+        syncModalChrome();
+    });
+    document.getElementById("tmux-help-close-btn").addEventListener("click", () => {
+        document.getElementById("tmux-help-modal").hidden = true;
+        syncModalChrome();
+    });
+    document.getElementById("tmux-help-modal").addEventListener("click", (e) => {
+        if (e.target.id === "tmux-help-modal") {
+            document.getElementById("tmux-help-modal").hidden = true;
+            syncModalChrome();
+        }
+    });
     document.getElementById("launch-claude-btn").addEventListener("click", () => launchCodingSession("claude", "claude"));
     document.getElementById("launch-claude-yolo-btn").addEventListener("click", () => launchCodingSession("claude-yolo", "claude --dangerously-skip-permissions"));
     document.getElementById("launch-codex-btn").addEventListener("click", () => launchCodingSession("codex", "codex"));
