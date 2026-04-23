@@ -1,8 +1,16 @@
 // panes.js — session panes, layout, hot buttons, idle alerts, modals, refresh
 
 async function launchCodingSession(label, cmd) {
-    const ts = Date.now().toString(36);
-    const name = `${label.toLowerCase().replace(/\s+/g, "-")}-${ts}`;
+    const slug = label.toLowerCase().replace(/[\s-]+/g, "_");
+    let name;
+    if (state.config.launch_ask_name) {
+        name = prompt(`Name the tmux session:`, slug);
+        if (!name) return;
+        name = name.trim().replace(/\s+/g, "_");
+    } else {
+        const uid = Date.now().toString(36).slice(-4);
+        name = `${slug}_${uid}`;
+    }
     const cwd = state.config.launch_cwd || undefined;
     const r = await api("POST", "/api/session/new", { name, cmd, cwd, launch_ttyd: true });
     if (r.ok && r.port) {

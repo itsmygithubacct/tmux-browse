@@ -26,6 +26,7 @@ function configFieldMap() {
         show_launch_codex_yolo: document.getElementById("cfg-show-launch-codex-yolo"),
         show_launch_kimi: document.getElementById("cfg-show-launch-kimi"),
         show_launch_kimi_yolo: document.getElementById("cfg-show-launch-kimi-yolo"),
+        launch_ask_name: document.getElementById("cfg-launch-ask-name"),
         launch_cwd: document.getElementById("cfg-launch-cwd"),
         show_summary_row: document.getElementById("cfg-show-summary-row"),
         show_summary_name: document.getElementById("cfg-show-summary-name"),

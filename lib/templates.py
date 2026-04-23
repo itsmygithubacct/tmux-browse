@@ -120,6 +120,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-codex-yolo" /><span>Codex YOLO launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi" /><span>Kimi launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi-yolo" /><span>Kimi YOLO launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-launch-ask-name" /><span>Ask for session name on launch</span></label>
                 <label class="field">
                     <span>Launcher working directory</span>
                     <input type="text" id="cfg-launch-cwd" placeholder="e.g. ~/myproject" />
