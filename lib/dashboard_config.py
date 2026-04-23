@@ -31,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
     "show_topbar_raw_ttyd": True,
     "show_topbar_refresh": True,
     "show_topbar_restart": True,
+    "show_topbar_os_restart": False,
     "show_topbar_status": True,
     "show_summary_row": True,
     "show_summary_name": True,

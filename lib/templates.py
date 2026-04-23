@@ -26,6 +26,7 @@ def render_index() -> str:
         auto-refresh off &middot; ttyd spawns on pane expand
     </span>
     <button class="btn red" id="restart-btn" title="restart the dashboard server process">Restart</button>
+    <button class="btn red" id="os-restart-btn" title="restart the dashboard server process" hidden>&#x23FB;</button>
 </div>
 <div id="sessions"></div>
 <details id="hidden-wrap" class="hidden-list" hidden>
@@ -106,6 +107,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-raw-ttyd" /><span>Raw ttyd button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-refresh" /><span>Refresh button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-restart" /><span>Restart button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-os-restart" /><span>Restart icon (&#x23FB;)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-status" /><span>Status text</span></label>
             </section>
             <section class="config-card">

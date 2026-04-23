@@ -1302,6 +1302,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("new-btn").addEventListener("click", newSession);
     document.getElementById("raw-btn").addEventListener("click", openRawTtyd);
     document.getElementById("restart-btn").addEventListener("click", restartDashboard);
+    document.getElementById("os-restart-btn").addEventListener("click", restartDashboard);
     document.getElementById("cfg-save-btn").addEventListener("click", saveDashboardConfig);
     document.getElementById("cfg-load-btn").addEventListener("click", reloadDashboardConfig);
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);

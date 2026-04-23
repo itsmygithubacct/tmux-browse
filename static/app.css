@@ -123,6 +123,11 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
 .summary-actions {
     margin-left: auto; display: flex; align-items: center; gap: 0.4rem;
 }
+#os-restart-btn {
+    font-size: 1.1rem;
+    padding: 0.15rem 0.5rem;
+    line-height: 1;
+}
 .wc-controls {
     display: flex; gap: 0.2rem; margin-left: 0.3rem;
 }
