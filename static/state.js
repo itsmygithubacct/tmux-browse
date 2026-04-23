@@ -34,6 +34,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_launch_kimi: false,
     show_launch_kimi_yolo: false,
     launch_cwd: "",
+    launch_ask_name: true,
     show_topbar_status: true,
     show_summary_row: true,
     show_summary_name: true,

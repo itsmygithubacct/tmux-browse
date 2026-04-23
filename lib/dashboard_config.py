@@ -39,6 +39,7 @@ DEFAULTS: dict[str, Any] = {
     "show_launch_kimi": False,
     "show_launch_kimi_yolo": False,
     "launch_cwd": "",
+    "launch_ask_name": True,
     "show_topbar_status": True,
     "show_summary_row": True,
     "show_summary_name": True,
