@@ -17,6 +17,7 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
+    agent_conversations,
     agent_logs,
     agent_run_index,
     agent_scheduler,
@@ -622,6 +623,40 @@ class Handler(BaseHTTPRequestHandler):
             "already": ttyd_result.get("already", False),
         })
 
+    def _h_agent_conversation_fork(self, _parsed: ParseResult, body: dict) -> None:
+        agent_name = (body.get("name") or "").strip().lower()
+        if not agent_name:
+            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
+            return
+        try:
+            new_cid = agent_runtime.fork_conversation(agent_name)
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        # Launch a new REPL session with --fork
+        session_name = agent_runtime.conversation_session_name(agent_name)
+        fork_session = f"{session_name}-fork"
+        if not sessions.exists(fork_session):
+            cmd = " ".join([
+                shlex.quote(sys.executable), "-u",
+                shlex.quote(str(config.PROJECT_DIR / "tb.py")),
+                "agent", "repl", "--fork", shlex.quote(agent_name),
+            ])
+            ok, err = sessions.new_session(fork_session, cwd=str(config.PROJECT_DIR), cmd=cmd)
+            if not ok:
+                self._send_json({"ok": False, "error": err}, status=400)
+                return
+        tls_paths = getattr(self.server, "tls_paths", None)
+        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
+        ttyd_result = ttyd.start(fork_session, tls_paths=tls_paths, bind_addr=bind_addr)
+        self._send_json({
+            "ok": True,
+            "agent": agent_name,
+            "conversation_id": new_cid,
+            "session": fork_session,
+            "port": ttyd_result.get("port"),
+        })
+
     def _h_server_restart(self, _parsed: ParseResult, _body: dict) -> None:
         self._send_json({"ok": True, "restarting": True})
         threading.Thread(target=_restart_self, daemon=True).start()
@@ -698,7 +733,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agents":             _h_agents_post,
         "/api/agents/remove":      _h_agents_remove,
         "/api/agent-workflows":    _h_agent_workflows_post,
-        "/api/agent-conversation": _h_agent_conversation_open,
+        "/api/agent-conversation":      _h_agent_conversation_open,
+        "/api/agent-conversation-fork": _h_agent_conversation_fork,
         "/api/server/restart":     _h_server_restart,
         "/api/session/kill":       _h_session_kill,
     })

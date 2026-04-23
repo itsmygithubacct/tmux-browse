@@ -98,6 +98,51 @@ class ListTests(_TmpDirMixin, unittest.TestCase):
         self.assertEqual(convos[0]["agent_name"], "opus")
 
 
+class ForkTests(_TmpDirMixin, unittest.TestCase):
+
+    def test_fork_copies_turns(self):
+        cid = ac.create("opus")
+        ac.append_turn(cid, role="user", content="hello")
+        ac.append_turn(cid, role="assistant", content="hi", run_id="r1")
+        new_cid = ac.fork(cid)
+        self.assertNotEqual(new_cid, cid)
+        turns = ac.load_turns(new_cid)
+        self.assertEqual(len(turns), 2)
+        self.assertEqual(turns[0]["content"], "hello")
+        self.assertEqual(turns[1]["content"], "hi")
+
+    def test_fork_sets_parent_id(self):
+        cid = ac.create("opus")
+        new_cid = ac.fork(cid)
+        header = ac.load_header(new_cid)
+        self.assertEqual(header["parent_id"], cid)
+        self.assertEqual(header["agent_name"], "opus")
+
+    def test_fork_with_custom_agent_name(self):
+        cid = ac.create("opus")
+        new_cid = ac.fork(cid, agent_name="opus-fork")
+        header = ac.load_header(new_cid)
+        self.assertEqual(header["agent_name"], "opus-fork")
+
+    def test_fork_nonexistent_raises(self):
+        from lib.errors import StateError
+        with self.assertRaises(StateError):
+            ac.fork("nonexistent")
+
+    def test_fork_and_original_diverge(self):
+        cid = ac.create("opus")
+        ac.append_turn(cid, role="user", content="shared")
+        new_cid = ac.fork(cid)
+        ac.append_turn(cid, role="user", content="original-only")
+        ac.append_turn(new_cid, role="user", content="fork-only")
+        orig_turns = ac.load_turns(cid)
+        fork_turns = ac.load_turns(new_cid)
+        self.assertEqual(len(orig_turns), 2)
+        self.assertEqual(orig_turns[1]["content"], "original-only")
+        self.assertEqual(len(fork_turns), 2)
+        self.assertEqual(fork_turns[1]["content"], "fork-only")
+
+
 class ClearTests(_TmpDirMixin, unittest.TestCase):
 
     def test_clear_existing(self):
