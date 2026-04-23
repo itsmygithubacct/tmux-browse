@@ -36,6 +36,9 @@ function configFieldMap() {
         show_summary_split: document.getElementById("cfg-show-summary-split"),
         show_summary_hide: document.getElementById("cfg-show-summary-hide"),
         show_summary_reorder: document.getElementById("cfg-show-summary-reorder"),
+        show_wc_close: document.getElementById("cfg-show-wc-close"),
+        show_wc_maximize: document.getElementById("cfg-show-wc-maximize"),
+        show_wc_minimize: document.getElementById("cfg-show-wc-minimize"),
         show_body_launch: document.getElementById("cfg-show-body-launch"),
         show_body_stop: document.getElementById("cfg-show-body-stop"),
         show_body_kill: document.getElementById("cfg-show-body-kill"),
@@ -121,6 +124,7 @@ const SUMMARY_TOGGLE_KEYS = [
     "show_idle_text", "show_idle_alert_button", "show_summary_open",
     "show_summary_log", "show_summary_scroll", "show_summary_split",
     "show_summary_hide", "show_summary_reorder",
+    "show_wc_close", "show_wc_maximize", "show_wc_minimize",
 ];
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
@@ -206,6 +210,9 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.launchBtn, cfg.show_body_launch, "");
     setVisible(rec.stopBtn, cfg.show_body_stop, "");
     setVisible(rec.killBtn, cfg.show_body_kill, "");
+    setVisible(rec.wcClose, cfg.show_wc_close, "inline-flex");
+    setVisible(rec.wcMaximize, cfg.show_wc_maximize, "inline-flex");
+    setVisible(rec.wcMinimize, cfg.show_wc_minimize, "inline-flex");
     setVisible(rec.sendBar, cfg.show_body_send_bar, "flex");
     setVisible(rec.phoneKeys, cfg.show_body_phone_keys, "flex");
     setVisible(rec.hotManageBtn, cfg.show_body_hot_buttons, "");

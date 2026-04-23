@@ -1,5 +1,14 @@
 // panes.js — session panes, layout, hot buttons, idle alerts, modals, refresh
 
+async function resizePane(session, cols) {
+    await api("POST", "/api/session/resize", { session, cols });
+    const rec = state.nodes.get(session);
+    if (rec && rec.iframeWrap) {
+        const defaultH = state.config.default_ttyd_height_vh || 70;
+        rec.iframeWrap.style.height = `${defaultH}vh`;
+    }
+}
+
 async function launch(session) {
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) msg.textContent = "starting…";
@@ -843,13 +852,30 @@ function createPane(s) {
         onclick: stopSummaryToggle,
     }, upBtn, downBtn);
 
-    const summary = el("summary", { draggable: "true" },
-        sname, sbadges, idleWrap,
-        el("span", { class: "summary-actions" },
-            summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad),
-    );
-
     const msg = el("span", { id: "msg-" + id, class: "inline-msg dim" });
+
+    const wcMinimize = el("button", {
+        class: "wc-btn wc-minimize", type: "button",
+        title: "minimize (furl pane)",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); if (details.open) details.open = false; },
+    }, "\u2013");
+    const wcMaximize = el("button", {
+        class: "wc-btn wc-maximize", type: "button",
+        title: "maximize (resize to 160 columns)",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); resizePane(s.name, 160); },
+    }, "\u25a1");
+    const wcClose = el("button", {
+        class: "wc-btn wc-close", type: "button",
+        title: "close (kill session)",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); killSession(s.name); },
+    }, "\u00d7");
+    const wcControls = el("span", { class: "wc-controls" }, wcMinimize, wcMaximize, wcClose);
+
+    const summary = el("summary", { draggable: "true" },
+        sname, msg, sbadges, idleWrap,
+        el("span", { class: "summary-actions" },
+            summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad, wcControls),
+    );
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
     }, "Kill");
@@ -1036,6 +1062,7 @@ function createPane(s) {
         details, sbadges, idle, idleWrap, idleAlertBtn,
         summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
+        wcClose, wcMaximize, wcMinimize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
         iframe, iframeWrap, sendBar, phoneKeys, fPort, fPid, fCreated, footer,
         hotPairs,
@@ -1261,6 +1288,7 @@ async function refresh() {
     document.getElementById("count").textContent =
         `${sessions.length} session${sessions.length === 1 ? "" : "s"}`;
     renderAgentsPane();
+    renderPaneAdmin();
     renderLayout();
     if (state.splitPicker.open) renderSplitPicker();
 }

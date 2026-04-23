@@ -124,6 +124,9 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-split" /><span>Side-by-side button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-hide" /><span>Hide button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-reorder" /><span>Reorder pad</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-close" /><span>Close button (x)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-maximize" /><span>Maximize button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-minimize" /><span>Minimize button</span></label>
             </section>
             <section class="config-card">
                 <div class="config-card-title">Expanded Pane <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-body">All On</button></div>
@@ -305,6 +308,12 @@ def render_index() -> str:
             <span class="dim" id="client-you-id" style="font-size:0.78rem"></span>
         </div>
         <div id="clients-pane" class="agent-grid"></div>
+    </div>
+</details>
+<details id="pane-admin-wrap" class="config-pane">
+    <summary>Pane Admin</summary>
+    <div class="config-body">
+        <div id="pane-admin-list" class="agent-grid"></div>
     </div>
 </details>
 <details id="notifications-wrap" class="config-pane" hidden>

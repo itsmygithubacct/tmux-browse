@@ -543,6 +543,25 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True, "name": name})
 
+    def _h_session_resize(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        cols = int(body.get("cols") or 0)
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        if cols < 20 or cols > 500:
+            self._send_json({"ok": False, "error": "cols must be 20-500"}, status=400)
+            return
+        import subprocess
+        r = subprocess.run(
+            ["tmux", "resize-window", "-t", f"={name}", "-x", str(cols)],
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode != 0:
+            self._send_json({"ok": False, "error": r.stderr.strip() or "resize failed"}, status=400)
+            return
+        self._send_json({"ok": True})
+
     def _h_session_scroll(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("session") or "").strip()
         if not name:
@@ -1020,6 +1039,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/ttyd/raw":           _h_ttyd_raw,
         "/api/ttyd/stop":          _h_ttyd_stop,
         "/api/session/new":        _h_session_new,
+        "/api/session/resize":     _h_session_resize,
         "/api/session/scroll":     _h_session_scroll,
         "/api/session/type":       _h_session_type,
         "/api/session/key":        _h_session_key,
