@@ -207,7 +207,7 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
     width: 100%;
     height: var(--ttyd-default-height, 70vh);
     min-height: var(--ttyd-default-min-height, 200px);
-    max-height: 95vh;
+    /* no max-height — user can drag to any size */
     border: 1px solid var(--border);
     border-radius: 4px;
     background: #000;
