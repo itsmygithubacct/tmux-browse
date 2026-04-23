@@ -353,7 +353,7 @@ def render_index() -> str:
     </div>
 </details>
 <div id="tmux-help-modal" class="modal-backdrop" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:680px">
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:960px">
         <div class="modal-head">
             <h2>tmux Quick Keys</h2>
             <button class="btn" id="tmux-help-close-btn">Close</button>
