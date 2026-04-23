@@ -161,6 +161,8 @@ Body controls:
 | **Launch** (green) | ensure ttyd is running for this session (idempotent) |
 | **Stop ttyd** (orange) | stop the session's ttyd; the tmux session itself is untouched |
 | **Kill** (red) | kill the tmux session (and its ttyd) |
+| **Send bar** | text input + Send button below the iframe — sends text to the pane and presses Enter. Hidden by default; enable in Config. |
+| **Phone keyboard addons** | floating row of touch-friendly buttons: arrow keys, Esc, C-c, C-b, Shift, PgUp, PgDn. Hidden by default; enable in Config. Sends via `POST /api/session/key`. |
 | **Hot Buttons** (blue) | opens a wide in-page editor for up to 32 shared hot-button slots |
 
 When a hot-button slot has a saved name + command, it appears to the right of
@@ -235,19 +237,47 @@ dashboard config file can now also be inspected and edited from the CLI via
 
 ## Agents section
 
-When one or more agents exist, the dashboard also shows a furled **Agents**
+When one or more agents exist, the dashboard shows a furled **Agents**
 pane. Each configured agent gets:
 
+- a colored **status badge** (Running / Idle / Error / Rate Limited /
+  Paused) with reason text and relative last-activity timestamp
+- a **Steps** button to view the last run's tool transcript
 - a **Log** button that opens the persisted agent action log
 - a **Start REPL** / **Open REPL** button that creates or reuses a tmux
   conversation session named `agent-repl-<agent>` and opens its ttyd
+- a **Fork REPL** button that branches the current conversation into a
+  new session with copied history — both can then diverge independently
+
+Below the agent cards, a **token usage summary** shows cumulative token
+counts per agent (when provider usage data is available).
 
 Those conversation sessions still appear in the main session grid like any
 other tmux session. When a session is in conversation mode, its expanded pane
 adds a **Workflows** button and a workflow on/off switch. Workflows are
-scheduled prompts saved server-side in `~/.tmux-browse/agent-workflows.json`;
-when enabled, the browser sends those prompts into the REPL pane on their
-configured intervals.
+scheduled prompts saved server-side in `~/.tmux-browse/agent-workflows.json`.
+Workflow execution is **server-side** — a background scheduler thread
+evaluates due workflows every 10 seconds and runs them via `run_agent`,
+so workflows continue even when the browser tab is closed. The scheduler
+uses a PID-based lock file to prevent duplicate execution across multiple
+dashboard processes.
+
+## Runs section
+
+Below Agents, a **Runs** section provides a searchable index of all
+completed and failed agent runs. Filters: agent, status
+(completed/failed/rate limited), and free-text search across prompts
+and messages. Results show status badge, agent name, step count,
+duration, prompt preview, and relative timestamp.
+
+## Tasks section
+
+An optional **Tasks** section allows creating isolated coding tasks.
+Each task links a title, a git repo, an optional worktree, and an
+assigned agent. Creating a task with a worktree provisions a git
+worktree under `~/.tmux-browse/worktrees/` with a `tb-task/<slug>`
+branch. The **Launch** button opens the assigned agent's REPL in the
+task's worktree directory. Tasks can be marked done or archived.
 
 ## Hidden section
 
@@ -270,7 +300,15 @@ dropped from the hidden set.
 - Agent metadata lives at `~/.tmux-browse/agents.json`.
 - Agent API keys live at `~/.tmux-browse/agent-secrets.json`.
 - Agent action logs live under `~/.tmux-browse/agent-logs/`.
+- Agent conversation turns live under `~/.tmux-browse/agent-conversations/`.
 - Agent workflow schedules live at `~/.tmux-browse/agent-workflows.json`.
+- Agent workflow run history lives at `~/.tmux-browse/agent-workflow-runs.jsonl`.
+- Agent workflow runtime state lives at `~/.tmux-browse/agent-workflow-state.json`.
+- Agent run index lives at `~/.tmux-browse/agent-run-index.jsonl`.
+- Agent cost tracking lives at `~/.tmux-browse/agent-costs.jsonl`.
+- Task definitions live at `~/.tmux-browse/tasks.json`.
+- Task worktrees live under `~/.tmux-browse/worktrees/`.
+- Scheduler lock lives at `~/.tmux-browse/agent-scheduler.lock`.
 
 A session keeps its port forever, or until you explicitly drop it via
 `tmux-browse ports --prune` (for sessions that no longer exist).
@@ -286,9 +324,15 @@ All JSON responses use a stable `{ok, …}` envelope.
 | GET    | `/api/sessions`     | — | `{ok, sessions: [{name, windows, attached, created, activity, port, pid, ttyd_running}, …]}` |
 | GET    | `/api/ports`        | — | `{ok, assignments: {name: port}}` |
 | GET    | `/api/dashboard-config` | — | `{ok, path, config}` |
-| GET    | `/api/agents`       | — | `{ok, agents, defaults, paths}` |
+| GET    | `/api/agents`       | — | `{ok, agents, defaults, paths}` — each agent includes `status`, `status_reason`, `last_activity_ts` |
 | GET    | `/api/agent-log`    | `?name=AGENT&limit=N` | `text/plain` formatted agent action log |
 | GET    | `/api/agent-workflows` | — | `{ok, path, config}` |
+| GET    | `/api/agent-workflow-state` | — | `{ok, state, scheduler_running}` |
+| GET    | `/api/agent-workflow-runs` | `?limit=N` | `{ok, runs}` — workflow execution history |
+| GET    | `/api/agent-runs`   | `?agent=&status=&since=&until=&q=&tool=&limit=` | `{ok, runs}` — searchable run index |
+| GET    | `/api/agent-run`    | `?run_id=X` | `{ok, run}` — single run detail |
+| GET    | `/api/agent-costs`  | `?agent=&since=&until=` | `{ok, per_agent, daily}` — token usage totals |
+| GET    | `/api/tasks`        | — | `{ok, tasks}` — task list (excludes archived) |
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
 | GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
 | POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
@@ -299,10 +343,15 @@ All JSON responses use a stable `{ok, …}` envelope.
 | POST   | `/api/agents/remove` | `{name}` | `{ok, removed, name}` |
 | POST   | `/api/agent-workflows` | `{config}` | `{ok, path, config}` |
 | POST   | `/api/agent-conversation` | `{name}` | `{ok, agent, session, port, scheme, already}` |
+| POST   | `/api/agent-conversation-fork` | `{name}` | `{ok, agent, conversation_id, session, port}` |
+| POST   | `/api/tasks`        | `{title, repo_path, agent?, branch?, use_worktree?}` | `{ok, task}` |
+| POST   | `/api/tasks/update`  | `{id, status?, agent?, ...}` | `{ok, task}` |
+| POST   | `/api/tasks/launch`  | `{id}` | `{ok, task_id, session, port}` |
 | POST   | `/api/session/new`  | `{name}` | `{ok, name}` |
 | POST   | `/api/session/kill` | `{session}` | `{ok}` — also stops the ttyd |
 | POST   | `/api/session/scroll` | `{session}` | `{ok}` — equivalent to `C-b [` |
 | POST   | `/api/session/type` | `{session, text}` | `{ok}` — sends `text` to the active pane and presses Enter |
+| POST   | `/api/session/key`  | `{session, keys: [...]}` | `{ok}` — sends tmux key names (e.g. `Up`, `C-c`, `Escape`) |
 
 ## CLI companion
 
