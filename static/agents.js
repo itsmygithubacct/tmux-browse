@@ -576,6 +576,8 @@ function renderPaneAdmin() {
     const root = document.getElementById("pane-admin-list");
     if (!root) return;
     root.innerHTML = "";
+    root.style.display = "grid";
+    root.style.gap = "0.4rem";
     for (const s of state.sessions) {
         const name = s.name;
         root.append(el("div", { class: "run-row" },
