@@ -240,6 +240,9 @@ function applyDashboardConfig() {
     const root = document.documentElement.style;
     root.setProperty("--ttyd-default-height", `${state.config.default_ttyd_height_vh}vh`);
     root.setProperty("--ttyd-default-min-height", `${state.config.default_ttyd_min_height_px}px`);
+    // Show/hide phone keys config pane based on the enable toggle
+    const phoneKeysWrap = document.getElementById("phone-keys-wrap");
+    if (phoneKeysWrap) phoneKeysWrap.hidden = !state.config.show_body_phone_keys;
     for (const rec of state.nodes.values()) applyDashboardConfigToPane(rec);
 }
 
