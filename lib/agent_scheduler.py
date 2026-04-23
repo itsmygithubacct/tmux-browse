@@ -13,10 +13,8 @@ multiple dashboard processes are running.
 from __future__ import annotations
 
 import threading
-import time
 import traceback
 from pathlib import Path
-from typing import Any
 
 from . import (
     agent_runner,
