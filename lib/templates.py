@@ -270,35 +270,35 @@ def render_index() -> str:
     <div class="config-body">
         <div id="agents-pane" class="agent-grid"></div>
         <div id="cost-summary" class="dim" style="margin-top:0.6rem;font-size:0.82rem"></div>
-    </div>
-</details>
-<details id="runs-wrap" class="config-pane" hidden>
-    <summary>Runs (<span id="runs-count">0</span>)</summary>
-    <div class="config-body">
-        <div class="runs-search-bar">
-            <input type="text" id="runs-search-q" placeholder="Search prompts and messages..." />
-            <select id="runs-filter-agent"><option value="">All agents</option></select>
-            <select id="runs-filter-status">
-                <option value="">All statuses</option>
-                <option value="run_completed">Completed</option>
-                <option value="run_failed">Failed</option>
-                <option value="run_rate_limited">Rate Limited</option>
-            </select>
-            <button class="btn blue" id="runs-search-btn" type="button">Search</button>
-        </div>
-        <div id="runs-pane" class="agent-grid"></div>
-    </div>
-</details>
-<details id="tasks-wrap" class="config-pane">
-    <summary>Tasks (<span id="tasks-count">0</span>)</summary>
-    <div class="config-body">
-        <div class="task-create-bar">
-            <input type="text" id="task-title" placeholder="Task title" />
-            <input type="text" id="task-repo" placeholder="Repo path (e.g. ~/myrepo)" />
-            <select id="task-agent"><option value="">No agent</option></select>
-            <button class="btn green" id="task-create-btn" type="button">Create</button>
-        </div>
-        <div id="tasks-pane" class="agent-grid"></div>
+        <details id="runs-wrap" style="margin-top:0.6rem">
+            <summary class="dim" style="cursor:pointer;font-size:0.85rem">Runs (<span id="runs-count">0</span>)</summary>
+            <div style="margin-top:0.4rem">
+                <div class="runs-search-bar">
+                    <input type="text" id="runs-search-q" placeholder="Search prompts and messages..." />
+                    <select id="runs-filter-agent"><option value="">All agents</option></select>
+                    <select id="runs-filter-status">
+                        <option value="">All statuses</option>
+                        <option value="run_completed">Completed</option>
+                        <option value="run_failed">Failed</option>
+                        <option value="run_rate_limited">Rate Limited</option>
+                    </select>
+                    <button class="btn blue" id="runs-search-btn" type="button">Search</button>
+                </div>
+                <div id="runs-pane" class="agent-grid"></div>
+            </div>
+        </details>
+        <details id="tasks-wrap" style="margin-top:0.4rem">
+            <summary class="dim" style="cursor:pointer;font-size:0.85rem">Tasks (<span id="tasks-count">0</span>)</summary>
+            <div style="margin-top:0.4rem">
+                <div class="task-create-bar">
+                    <input type="text" id="task-title" placeholder="Task title" />
+                    <input type="text" id="task-repo" placeholder="Repo path (e.g. ~/myrepo)" />
+                    <select id="task-agent"><option value="">No agent</option></select>
+                    <button class="btn green" id="task-create-btn" type="button">Create</button>
+                </div>
+                <div id="tasks-pane" class="agent-grid"></div>
+            </div>
+        </details>
     </div>
 </details>
 <details id="clients-wrap" class="config-pane">

@@ -29,8 +29,7 @@ function renderRunsPane(runs) {
     const wrap = document.getElementById("runs-wrap");
     const count = document.getElementById("runs-count");
     const root = document.getElementById("runs-pane");
-    if (!wrap || !root) return;
-    wrap.hidden = false;
+    if (!root) return;
     if (count) count.textContent = String(runs.length);
     root.innerHTML = "";
     if (!runs.length) {
