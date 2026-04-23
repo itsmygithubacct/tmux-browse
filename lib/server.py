@@ -537,9 +537,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _h_session_new(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("name") or "").strip()
-        ok, err = sessions.new_session(name)
+        cmd = (body.get("cmd") or "").strip() or None
+        cwd = (body.get("cwd") or "").strip() or None
+        ok, err = sessions.new_session(name, cwd=cwd, cmd=cmd)
         if not ok:
             self._send_json({"ok": False, "error": err}, status=400)
+            return
+        # Auto-start ttyd if requested
+        if body.get("launch_ttyd"):
+            tls_paths = getattr(self.server, "tls_paths", None)
+            bind_addr = getattr(self.server, "ttyd_bind_addr", None)
+            ttyd_result = ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr)
+            self._send_json({"ok": True, "name": name,
+                             "port": ttyd_result.get("port"),
+                             "url": ttyd_result.get("url", "")})
             return
         self._send_json({"ok": True, "name": name})
 
