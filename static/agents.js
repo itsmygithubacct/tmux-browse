@@ -478,3 +478,95 @@ async function removeAgentConfig() {
     setAgentStatus(r.removed ? `removed agent ${name}` : `agent ${name} was not configured`, r.removed ? "ok" : "dim");
 }
 
+// --- Event hooks ---
+
+async function loadHooks() {
+    const r = await api("GET", "/api/agent-hooks");
+    if (r.ok) renderHooksEditor(r.hooks || {});
+}
+
+function renderHooksEditor(hooks) {
+    const root = document.getElementById("hooks-editor");
+    if (!root) return;
+    root.innerHTML = "";
+    const events = [
+        ["run_completed", "Run Completed"],
+        ["run_failed", "Run Failed"],
+        ["run_rate_limited", "Rate Limited"],
+        ["budget_exceeded", "Budget Exceeded"],
+        ["workflow_skipped", "Workflow Skipped"],
+    ];
+    const actions = ["log", "retry", "pause_workflow", "notify"];
+    for (const [event, label] of events) {
+        const current = hooks[event] || ["log"];
+        const row = el("div", { style: "margin-bottom:0.4rem" },
+            el("span", { style: "font-size:0.82rem;font-weight:600" }, label + ": "),
+            ...actions.map((action) =>
+                el("label", { style: "font-size:0.8rem;margin-left:0.4rem" },
+                    el("input", {
+                        type: "checkbox",
+                        "data-event": event,
+                        "data-action": action,
+                        checked: current.includes(action) ? "checked" : undefined,
+                    }),
+                    " " + action,
+                ),
+            ),
+        );
+        root.append(row);
+    }
+}
+
+function readHooksForm() {
+    const root = document.getElementById("hooks-editor");
+    if (!root) return {};
+    const hooks = {};
+    for (const input of root.querySelectorAll("input[data-event]")) {
+        const event = input.dataset.event;
+        const action = input.dataset.action;
+        if (!hooks[event]) hooks[event] = [];
+        if (input.checked) hooks[event].push(action);
+    }
+    return hooks;
+}
+
+async function saveHooks() {
+    const hooks = readHooksForm();
+    const r = await api("POST", "/api/agent-hooks", { hooks });
+    const status = document.getElementById("hooks-status");
+    if (status) status.textContent = r.ok ? "saved" : "error";
+}
+
+async function resetHooks() {
+    const r = await api("POST", "/api/agent-hooks", {});
+    if (r.ok) renderHooksEditor(r.hooks || {});
+    const status = document.getElementById("hooks-status");
+    if (status) status.textContent = r.ok ? "reset to defaults" : "error";
+}
+
+async function loadNotifications() {
+    const r = await api("GET", "/api/agent-notifications");
+    if (!r.ok) return;
+    const wrap = document.getElementById("notifications-wrap");
+    const count = document.getElementById("notifications-count");
+    const root = document.getElementById("notifications-pane");
+    if (!root) return;
+    const notes = r.notifications || [];
+    if (count) count.textContent = String(notes.length);
+    if (wrap) wrap.hidden = notes.length === 0;
+    root.innerHTML = "";
+    for (const n of notes.reverse()) {
+        root.append(el("div", { class: "run-row" },
+            el("span", { class: "agent-status-badge s-" +
+                (n.event === "run_completed" ? "idle" : "error") },
+                (n.event || "").replace("run_", "").replace("_", " ")),
+            el("div", {},
+                el("div", {}, n.agent || "?"),
+                n.error ? el("div", { class: "run-row-meta" }, n.error) : el("span"),
+            ),
+            el("div", { class: "run-row-meta" },
+                agentLastActivity(n.ts)),
+        ));
+    }
+}
+

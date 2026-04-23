@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_budgets, agent_costs, agent_logs, agent_providers, agent_run_index
+from . import agent_budgets, agent_costs, agent_hooks, agent_logs, agent_providers, agent_run_index
 from .agent_runs import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -261,6 +261,10 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                 budget_check = agent_budgets.check_run_budget(
                     agent["name"], cumulative_usage, run_budget)
                 if budget_check["action"] == agent_budgets.ACTION_STOP:
+                    agent_hooks.execute(
+                        "budget_exceeded", agent["name"],
+                        run_id=run_id, prompt=prompt,
+                        error=budget_check["reason"])
                     raise TmuxFailed(budget_check["reason"])
             try:
                 action = _extract_json(raw)
@@ -311,6 +315,9 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                         model=agent.get("model", ""),
                         usage=cumulative_usage, origin=origin,
                     )
+                agent_hooks.execute(
+                    "run_completed", agent["name"],
+                    run_id=run_id, prompt=prompt)
                 return out
             if action.get("type") != "tool" or action.get("tool") != "tb_command":
                 raise UsageError("agent must return either a final action or a tb_command tool action")
@@ -354,4 +361,19 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                 model=agent.get("model", ""),
                 usage=cumulative_usage, origin=origin,
             )
+        event_type = "run_rate_limited" if status == STATUS_RATE_LIMITED else "run_failed"
+        hook_actions = agent_hooks.execute(
+            event_type, agent["name"],
+            run_id=run_id, prompt=prompt, error=str(e))
+        if "retry" in hook_actions and origin != "retry":
+            import threading
+            def _delayed_retry():
+                time.sleep(30)
+                try:
+                    run_agent(agent, prompt, repo_root=repo_root,
+                              max_steps=max_steps, request_timeout=request_timeout,
+                              origin="retry")
+                except Exception:
+                    pass
+            threading.Thread(target=_delayed_retry, daemon=True).start()
         raise

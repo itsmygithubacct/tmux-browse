@@ -139,6 +139,18 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-inline-messages" /><span>Inline status messages</span></label>
             </section>
             <section class="config-card">
+                <div class="config-card-title">Event Hooks</div>
+                <div class="dim" style="font-size:0.78rem;margin-bottom:0.5rem">
+                    Automatic actions when agent events occur. Per-agent overrides take precedence.
+                </div>
+                <div id="hooks-editor"></div>
+                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap">
+                    <button class="btn green" id="hooks-save-btn" type="button">Save Hooks</button>
+                    <button class="btn" id="hooks-reset-btn" type="button">Reset to Defaults</button>
+                    <span class="dim" id="hooks-status" style="font-size:0.82rem"></span>
+                </div>
+            </section>
+            <section class="config-card">
                 <div class="config-card-title">Agent</div>
                 <label class="field">
                     <span>Configured agent</span>
@@ -293,6 +305,12 @@ def render_index() -> str:
             <span class="dim" id="client-you-id" style="font-size:0.78rem"></span>
         </div>
         <div id="clients-pane" class="agent-grid"></div>
+    </div>
+</details>
+<details id="notifications-wrap" class="config-pane" hidden>
+    <summary>Notifications (<span id="notifications-count">0</span>)</summary>
+    <div class="config-body">
+        <div id="notifications-pane" class="agent-grid"></div>
     </div>
 </details>
 <div id="agent-steps-modal" class="modal-backdrop" hidden>

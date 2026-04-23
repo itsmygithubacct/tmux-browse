@@ -1287,6 +1287,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("phone-key-reset-btn").addEventListener("click", resetPhoneKeys);
     document.getElementById("cfg-lock-set-btn").addEventListener("click", setConfigLock);
     document.getElementById("cfg-lock-clear-btn").addEventListener("click", clearConfigLock);
+    document.getElementById("hooks-save-btn").addEventListener("click", saveHooks);
+    document.getElementById("hooks-reset-btn").addEventListener("click", resetHooks);
     document.getElementById("cfg-toggle-all-topbar").addEventListener("click", (e) => toggleAllSection(TOPBAR_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-summary").addEventListener("click", (e) => toggleAllSection(SUMMARY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-body").addEventListener("click", (e) => toggleAllSection(BODY_TOGGLE_KEYS, e.currentTarget));
@@ -1373,6 +1375,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await searchRuns();
     await loadTasks();
     await loadCostSummary();
+    await loadHooks();
+    await loadNotifications();
     await loadClients();
     scheduleRefreshLoop();
     setInterval(loadClients, 15000);
