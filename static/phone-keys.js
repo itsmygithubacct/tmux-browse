@@ -13,6 +13,7 @@ const DEFAULT_PHONE_KEYS = [
     { label: "Shift", keys: [] },
     { label: "PgUp", keys: ["PageUp"] },
     { label: "PgDn", keys: ["PageDown"] },
+    { label: "\u23CE", keys: ["Enter"] },
 ];
 
 function loadPhoneKeys() {
