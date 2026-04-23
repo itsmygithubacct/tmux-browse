@@ -1358,6 +1358,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("launch-codex-yolo-btn").addEventListener("click", () => launchCodingSession("codex-yolo", "codex --full-auto"));
     document.getElementById("launch-kimi-btn").addEventListener("click", () => launchCodingSession("kimi", "kimi-code"));
     document.getElementById("launch-kimi-yolo-btn").addEventListener("click", () => launchCodingSession("kimi-yolo", "kimi-code --yolo"));
+    document.getElementById("launch-monitor-btn").addEventListener("click", () => launchCodingSession("sysmon", "sysmon"));
+    document.getElementById("launch-top-btn").addEventListener("click", () => launchCodingSession("top", "systop"));
     document.getElementById("cfg-save-btn").addEventListener("click", saveDashboardConfig);
     document.getElementById("cfg-load-btn").addEventListener("click", reloadDashboardConfig);
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);

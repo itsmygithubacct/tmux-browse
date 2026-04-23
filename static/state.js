@@ -33,6 +33,8 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_launch_codex_yolo: false,
     show_launch_kimi: false,
     show_launch_kimi_yolo: false,
+    show_launch_monitor: false,
+    show_launch_top: false,
     launch_cwd: "",
     launch_ask_name: true,
     show_topbar_status: true,

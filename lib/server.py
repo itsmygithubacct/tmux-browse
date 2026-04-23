@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import sys
 import threading
@@ -535,9 +536,25 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json(ttyd.stop(name))
 
+    @staticmethod
+    def _resolve_launch_cmd(cmd: str | None) -> str | None:
+        if not cmd:
+            return None
+        if cmd == "sysmon":
+            return f"bash {config.PROJECT_DIR / 'bin' / 'sysmon.sh'}"
+        if cmd == "systop":
+            for tool in ("glances", "htop", "btop", "top"):
+                if shutil.which(tool):
+                    return tool
+            # Fallback: run sysmon with a message
+            return (f"echo 'No top/htop/glances found. "
+                    f"Install: apt install htop glances'; "
+                    f"bash {config.PROJECT_DIR / 'bin' / 'sysmon.sh'}")
+        return cmd
+
     def _h_session_new(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("name") or "").strip()
-        cmd = (body.get("cmd") or "").strip() or None
+        cmd = self._resolve_launch_cmd((body.get("cmd") or "").strip() or None)
         cwd = (body.get("cwd") or "").strip() or None
         ok, err = sessions.new_session(name, cwd=cwd, cmd=cmd)
         if not ok:
