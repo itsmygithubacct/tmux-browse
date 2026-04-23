@@ -134,19 +134,6 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-footer" /><span>Footer metadata</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-inline-messages" /><span>Inline status messages</span></label>
             </section>
-            <details class="config-card">
-                <summary class="config-card-title" style="cursor:pointer">Phone Keys</summary>
-                <div style="margin-top:0.5rem">
-                    <div id="phone-keys-preview" class="phone-keys" style="min-height:2rem"></div>
-                    <div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;align-items:center">
-                        <input type="text" id="phone-key-label" placeholder="Label (e.g. Tab)" style="width:5rem;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
-                        <input type="text" id="phone-key-tmux" placeholder="tmux key (e.g. Tab, C-a)" style="width:8rem;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
-                        <button class="btn green" id="phone-key-add-btn" type="button">Add Key</button>
-                        <button class="btn" id="phone-key-reset-btn" type="button">Reset to Defaults</button>
-                    </div>
-                    <div class="dim" style="margin-top:0.4rem;font-size:0.78rem">Drag buttons to reorder. Click a button to remove it. Changes save automatically.</div>
-                </div>
-            </details>
             <section class="config-card">
                 <div class="config-card-title">Agent</div>
                 <label class="field">
@@ -221,6 +208,19 @@ def render_index() -> str:
                 <span class="dim" id="cfg-lock-status" style="font-size:0.82rem"></span>
             </div>
         </details>
+    </div>
+</details>
+<details id="phone-keys-wrap" class="config-pane" hidden>
+    <summary>Phone Keys Config</summary>
+    <div class="config-body">
+        <div id="phone-keys-preview" class="phone-keys" style="min-height:2rem"></div>
+        <div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;align-items:center">
+            <input type="text" id="phone-key-label" placeholder="Label (e.g. Tab)" style="width:5rem;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+            <input type="text" id="phone-key-tmux" placeholder="tmux key (e.g. Tab, C-a)" style="width:8rem;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+            <button class="btn green" id="phone-key-add-btn" type="button">Add Key</button>
+            <button class="btn" id="phone-key-reset-btn" type="button">Reset to Defaults</button>
+        </div>
+        <div class="dim" style="margin-top:0.4rem;font-size:0.78rem">Drag buttons to reorder. Click a button to remove it. Changes save automatically.</div>
     </div>
 </details>
 <div id="qr-modal" class="modal-backdrop" hidden>
