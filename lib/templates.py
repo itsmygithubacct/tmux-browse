@@ -82,7 +82,21 @@ def render_index() -> str:
                 </label>
             </section>
             <section class="config-card">
+                <div class="config-card-title">Title Bar <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-topbar">All On</button></div>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar" /><span>Show title bar</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-title" /><span>Title text</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-count" /><span>Session count</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-new-session" /><span>New session field</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-raw-ttyd" /><span>Raw ttyd button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-refresh" /><span>Refresh button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-restart" /><span>Restart button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-status" /><span>Status text</span></label>
+            </section>
+            <section class="config-card">
                 <div class="config-card-title">Summary Row <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-summary">All On</button></div>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-row" /><span>Show summary row controls</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-name" /><span>Session name</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-arrow" /><span>Expand/collapse arrow</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-attached-badge" /><span>Attached clients badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-window-badge" /><span>Window count badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-port-badge" /><span>Running ttyd port badge</span></label>
@@ -97,6 +111,7 @@ def render_index() -> str:
             </section>
             <section class="config-card">
                 <div class="config-card-title">Expanded Pane <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-body">All On</button></div>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-actions" /><span>Show action buttons row</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-launch" /><span>Launch button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-stop" /><span>Stop ttyd button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-kill" /><span>Kill button</span></label>
@@ -106,8 +121,20 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-hot-loop-toggles" /><span>Hot-button loop toggles</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-footer" /><span>Footer metadata</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-inline-messages" /><span>Inline status messages</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-topbar-status" /><span>Top bar status text</span></label>
             </section>
+            <details class="config-card">
+                <summary class="config-card-title" style="cursor:pointer">Phone Keys</summary>
+                <div style="margin-top:0.5rem">
+                    <div id="phone-keys-preview" class="phone-keys" style="min-height:2rem"></div>
+                    <div style="display:flex;gap:0.4rem;margin-top:0.5rem;flex-wrap:wrap;align-items:center">
+                        <input type="text" id="phone-key-label" placeholder="Label (e.g. Tab)" style="width:5rem;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+                        <input type="text" id="phone-key-tmux" placeholder="tmux key (e.g. Tab, C-a)" style="width:8rem;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+                        <button class="btn green" id="phone-key-add-btn" type="button">Add Key</button>
+                        <button class="btn" id="phone-key-reset-btn" type="button">Reset to Defaults</button>
+                    </div>
+                    <div class="dim" style="margin-top:0.4rem;font-size:0.78rem">Drag buttons to reorder. Click a button to remove it. Changes save automatically.</div>
+                </div>
+            </details>
             <section class="config-card">
                 <div class="config-card-title">Agent</div>
                 <label class="field">
@@ -171,6 +198,15 @@ def render_index() -> str:
             <button class="btn" id="cfg-reset-btn">Defaults</button>
             <span class="dim" id="cfg-status">Saved to ~/.tmux-browse/dashboard-config.json</span>
         </div>
+        <details class="config-lock-section">
+            <summary class="dim" style="cursor:pointer;font-size:0.82rem">Lock config pane</summary>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
+                <input type="password" id="cfg-lock-password" placeholder="Set or change password" style="flex:1;min-width:140px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+                <button class="btn green" id="cfg-lock-set-btn" type="button">Set Lock</button>
+                <button class="btn red" id="cfg-lock-clear-btn" type="button">Remove Lock</button>
+                <span class="dim" id="cfg-lock-status" style="font-size:0.82rem"></span>
+            </div>
+        </details>
     </div>
 </details>
 <details id="agents-wrap" class="config-pane" hidden>

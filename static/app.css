@@ -92,6 +92,9 @@ details.session > summary::before {
     transition: transform 0.15s;
 }
 details.session[open] > summary::before { content: "▾"; }
+details.session.hide-arrow > summary::before { display: none; }
+details.session.hide-arrow > summary { pointer-events: none; }
+details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
 .sname   { font-weight: 600; color: var(--accent); }
 .sbadges { display: flex; gap: 0.4rem; margin-left: 0.4rem; }
 .badge   {

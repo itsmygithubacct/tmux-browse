@@ -4,8 +4,25 @@ from __future__ import annotations
 
 import argparse
 
-from .. import dashboard_config, output
+import hashlib
+import hmac
+import sys
+
+from .. import config, dashboard_config, output
 from ..errors import UsageError
+
+
+def _check_config_lock() -> None:
+    """Abort if the config is locked and no valid password is provided."""
+    if not config.CONFIG_LOCK_FILE.exists():
+        return
+    stored = config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
+    if not stored:
+        return
+    pw = input("Config is locked. Enter password: ").strip()
+    attempt = hashlib.sha256(pw.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(stored, attempt):
+        raise UsageError("wrong config password")
 
 
 class _Parser(argparse.ArgumentParser):
@@ -55,6 +72,7 @@ def cmd_config_get(args: argparse.Namespace) -> int:
 
 
 def cmd_config_set(args: argparse.Namespace) -> int:
+    _check_config_lock()
     key = _require_key(args.key)
     current = dashboard_config.load()
     current[key] = args.value
@@ -73,6 +91,7 @@ def cmd_config_set(args: argparse.Namespace) -> int:
 
 
 def cmd_config_reset(args: argparse.Namespace) -> int:
+    _check_config_lock()
     saved = dashboard_config.save({})
     if args.json:
         output.emit_json({"path": str(dashboard_config.config.DASHBOARD_CONFIG_FILE), "config": saved})

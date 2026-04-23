@@ -4,6 +4,7 @@ const ORDER_KEY  = "tmux-browse:order";
 const LAYOUT_KEY = "tmux-browse:layout";
 const HOT_KEY    = "tmux-browse:hot-buttons";
 const IDLE_KEY   = "tmux-browse:idle-alerts";
+const PHONE_KEYS_KEY = "tmux-browse:phone-keys";
 const AGENT_CONVERSATION_PREFIX = "agent-repl-";
 const IDLE_SOUND_CHOICES = ["beep", "chime", "knock", "bell", "blip", "ding"];
 const DASHBOARD_CONFIG_DEFAULTS = {
@@ -15,7 +16,18 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     default_ttyd_height_vh: 70,
     default_ttyd_min_height_px: 200,
     idle_sound: "beep",
+    show_topbar: true,
+    show_topbar_title: true,
+    show_topbar_count: true,
+    show_topbar_new_session: true,
+    show_topbar_raw_ttyd: true,
+    show_topbar_refresh: true,
+    show_topbar_restart: true,
     show_topbar_status: true,
+    show_summary_row: true,
+    show_summary_name: true,
+    show_summary_arrow: true,
+    show_body_actions: true,
     show_footer: true,
     show_inline_messages: true,
     show_attached_badge: true,
@@ -212,6 +224,17 @@ function configFieldMap() {
         default_ttyd_height_vh: document.getElementById("cfg-default-height"),
         default_ttyd_min_height_px: document.getElementById("cfg-min-height"),
         idle_sound: document.getElementById("cfg-idle-sound"),
+        show_topbar: document.getElementById("cfg-show-topbar"),
+        show_topbar_title: document.getElementById("cfg-show-topbar-title"),
+        show_topbar_count: document.getElementById("cfg-show-topbar-count"),
+        show_topbar_new_session: document.getElementById("cfg-show-topbar-new-session"),
+        show_topbar_raw_ttyd: document.getElementById("cfg-show-topbar-raw-ttyd"),
+        show_topbar_refresh: document.getElementById("cfg-show-topbar-refresh"),
+        show_topbar_restart: document.getElementById("cfg-show-topbar-restart"),
+        show_summary_row: document.getElementById("cfg-show-summary-row"),
+        show_summary_name: document.getElementById("cfg-show-summary-name"),
+        show_summary_arrow: document.getElementById("cfg-show-summary-arrow"),
+        show_body_actions: document.getElementById("cfg-show-body-actions"),
         show_attached_badge: document.getElementById("cfg-show-attached-badge"),
         show_window_badge: document.getElementById("cfg-show-window-badge"),
         show_port_badge: document.getElementById("cfg-show-port-badge"),
@@ -863,20 +886,63 @@ async function removeAgentConfig() {
     setAgentStatus(r.removed ? `removed agent ${name}` : `agent ${name} was not configured`, r.removed ? "ok" : "dim");
 }
 
-function updateTopbarStatus() {
+function applyTopbarConfig() {
     const cfg = state.config;
-    const node = document.getElementById("topbar-status");
-    if (!node) return;
-    const parts = [];
-    parts.push(cfg.auto_refresh ? `auto-refresh ${cfg.refresh_seconds}s` : "auto-refresh off");
-    parts.push(cfg.launch_on_expand ? "ttyd spawns on pane expand" : "manual ttyd launch");
-    parts.push(`hot loop wait ${cfg.hot_loop_idle_seconds}s`);
-    parts.push(`agent steps ${cfg.agent_max_steps}`);
-    parts.push(`default ttyd height ${cfg.default_ttyd_height_vh}vh`);
-    node.textContent = parts.join(" · ");
-    setVisible(node, cfg.show_topbar_status);
+    const bar = document.querySelector(".topbar");
+    if (!bar) return;
+    setVisible(bar, cfg.show_topbar, "flex");
+
+    // Title + count
+    const h1 = bar.querySelector("h1");
+    if (h1) setVisible(h1, cfg.show_topbar_title);
+    setVisible(document.getElementById("count"), cfg.show_topbar_count);
+
+    // New session input + button
+    setVisible(document.getElementById("new-name"), cfg.show_topbar_new_session);
+    setVisible(document.getElementById("new-btn"), cfg.show_topbar_new_session);
+
+    // Individual buttons
+    setVisible(document.getElementById("raw-btn"), cfg.show_topbar_raw_ttyd);
+    setVisible(document.getElementById("refresh-btn"), cfg.show_topbar_refresh);
+    setVisible(document.getElementById("restart-btn"), cfg.show_topbar_restart);
+
+    // Status text
+    const statusNode = document.getElementById("topbar-status");
+    if (statusNode) {
+        const parts = [];
+        parts.push(cfg.auto_refresh ? `auto-refresh ${cfg.refresh_seconds}s` : "auto-refresh off");
+        parts.push(cfg.launch_on_expand ? "ttyd spawns on pane expand" : "manual ttyd launch");
+        parts.push(`hot loop wait ${cfg.hot_loop_idle_seconds}s`);
+        parts.push(`agent steps ${cfg.agent_max_steps}`);
+        parts.push(`default ttyd height ${cfg.default_ttyd_height_vh}vh`);
+        statusNode.textContent = parts.join(" · ");
+        setVisible(statusNode, cfg.show_topbar_status);
+    }
 }
 
+function applySummaryRowConfig(rec) {
+    const cfg = state.config;
+    const summary = rec.details.querySelector("summary");
+    if (summary) {
+        const actions = summary.querySelector(".summary-actions");
+        if (actions) setVisible(actions, cfg.show_summary_row, "flex");
+        const sname = summary.querySelector(".sname");
+        if (sname) setVisible(sname, cfg.show_summary_name);
+    }
+    rec.details.classList.toggle("hide-arrow", !cfg.show_summary_arrow);
+}
+
+function applyBodyActionsConfig(rec) {
+    const cfg = state.config;
+    const actions = rec.details.querySelector(".pane-actions");
+    if (actions) setVisible(actions, cfg.show_body_actions, "flex");
+}
+
+const TOPBAR_TOGGLE_KEYS = [
+    "show_topbar_title", "show_topbar_count", "show_topbar_new_session",
+    "show_topbar_raw_ttyd", "show_topbar_refresh", "show_topbar_restart",
+    "show_topbar_status",
+];
 const SUMMARY_TOGGLE_KEYS = [
     "show_attached_badge", "show_window_badge", "show_port_badge",
     "show_idle_text", "show_idle_alert_button", "show_summary_open",
@@ -886,7 +952,7 @@ const SUMMARY_TOGGLE_KEYS = [
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
     "show_body_send_bar", "show_body_phone_keys", "show_body_hot_buttons", "show_hot_loop_toggles",
-    "show_footer", "show_inline_messages", "show_topbar_status",
+    "show_footer", "show_inline_messages",
 ];
 
 function toggleAllSection(keys, btn) {
@@ -902,8 +968,12 @@ function toggleAllSection(keys, btn) {
 
 function updateToggleAllButtons() {
     const fields = configFieldMap();
+    const topbarBtn = document.getElementById("cfg-toggle-all-topbar");
     const summaryBtn = document.getElementById("cfg-toggle-all-summary");
     const bodyBtn = document.getElementById("cfg-toggle-all-body");
+    if (topbarBtn) {
+        topbarBtn.textContent = TOPBAR_TOGGLE_KEYS.every((k) => fields[k] && fields[k].checked) ? "All Off" : "All On";
+    }
     if (summaryBtn) {
         summaryBtn.textContent = SUMMARY_TOGGLE_KEYS.every((k) => fields[k] && fields[k].checked) ? "All Off" : "All On";
     }
@@ -965,6 +1035,8 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.hotManageBtn, cfg.show_body_hot_buttons, "");
     setVisible(rec.msg, cfg.show_inline_messages, "");
     setVisible(rec.footer, cfg.show_footer, "flex");
+    applySummaryRowConfig(rec);
+    applyBodyActionsConfig(rec);
     // Defaults flow via CSS custom properties on :root (see applyDashboardConfig),
     // so they don't fight the browser's native resize handle's inline style.height.
     for (const pair of rec.hotPairs) {
@@ -987,7 +1059,7 @@ function applyDashboardConfigToPane(rec) {
 function applyDashboardConfig() {
     state.config = normalizeDashboardConfig(state.config);
     renderConfigForm();
-    updateTopbarStatus();
+    applyTopbarConfig();
     scheduleRefreshLoop();
     const root = document.documentElement.style;
     root.setProperty("--ttyd-default-height", `${state.config.default_ttyd_height_vh}vh`);
@@ -1032,6 +1104,139 @@ function resetDashboardConfig() {
     applyDashboardConfig();
     setConfigStatus("loaded defaults locally; save to persist", "dim");
     refresh();
+}
+
+// --- Phone keys config ---
+
+const DEFAULT_PHONE_KEYS = [
+    { label: "\u2191", keys: ["Up"] },
+    { label: "\u2193", keys: ["Down"] },
+    { label: "\u2190", keys: ["Left"] },
+    { label: "\u2192", keys: ["Right"] },
+    { label: "Esc", keys: ["Escape"] },
+    { label: "C-c", keys: ["C-c"] },
+    { label: "C-b", keys: ["C-b"] },
+    { label: "Shift", keys: [] },
+    { label: "PgUp", keys: ["PageUp"] },
+    { label: "PgDn", keys: ["PageDown"] },
+];
+
+function loadPhoneKeys() {
+    return loadJSON(PHONE_KEYS_KEY, null) || [...DEFAULT_PHONE_KEYS];
+}
+
+function savePhoneKeys(keys) {
+    saveJSON(PHONE_KEYS_KEY, keys);
+}
+
+function renderPhoneKeysPreview() {
+    const root = document.getElementById("phone-keys-preview");
+    if (!root) return;
+    root.innerHTML = "";
+    const keys = loadPhoneKeys();
+    keys.forEach((def, idx) => {
+        const btn = el("button", {
+            class: "phone-key", type: "button", draggable: "true",
+            title: `tmux: ${(def.keys || []).join(" ") || "(none)"} — click to remove`,
+            onclick: () => {
+                keys.splice(idx, 1);
+                savePhoneKeys(keys);
+                renderPhoneKeysPreview();
+            },
+        }, def.label);
+        btn.addEventListener("dragstart", (e) => {
+            e.dataTransfer.setData("text/x-phone-key-idx", String(idx));
+            e.dataTransfer.effectAllowed = "move";
+        });
+        btn.addEventListener("dragover", (e) => {
+            if (e.dataTransfer.types.includes("text/x-phone-key-idx")) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+            }
+        });
+        btn.addEventListener("drop", (e) => {
+            const fromIdx = parseInt(e.dataTransfer.getData("text/x-phone-key-idx"), 10);
+            if (isNaN(fromIdx) || fromIdx === idx) return;
+            e.preventDefault();
+            const [moved] = keys.splice(fromIdx, 1);
+            keys.splice(idx, 0, moved);
+            savePhoneKeys(keys);
+            renderPhoneKeysPreview();
+        });
+        root.append(btn);
+    });
+}
+
+function addPhoneKey() {
+    const labelInput = document.getElementById("phone-key-label");
+    const tmuxInput = document.getElementById("phone-key-tmux");
+    const label = (labelInput.value || "").trim();
+    const tmux = (tmuxInput.value || "").trim();
+    if (!label || !tmux) return;
+    const keys = loadPhoneKeys();
+    keys.push({ label, keys: [tmux] });
+    savePhoneKeys(keys);
+    labelInput.value = "";
+    tmuxInput.value = "";
+    renderPhoneKeysPreview();
+}
+
+function resetPhoneKeys() {
+    savePhoneKeys([...DEFAULT_PHONE_KEYS]);
+    renderPhoneKeysPreview();
+}
+
+// --- Config lock ---
+
+let configUnlocked = true;
+
+async function checkConfigLock() {
+    const r = await api("GET", "/api/config-lock");
+    if (r.ok && r.locked) {
+        configUnlocked = false;
+        const lockStatus = document.getElementById("cfg-lock-status");
+        if (lockStatus) lockStatus.textContent = "locked";
+    }
+}
+
+function guardConfigOpen(e) {
+    const wrap = document.getElementById("config-wrap");
+    if (!wrap) return;
+    if (configUnlocked) return;
+    if (wrap.open) return;
+    e.preventDefault();
+    const password = prompt("Enter config password:");
+    if (!password) return;
+    api("POST", "/api/config-lock/verify", { password }).then((r) => {
+        if (r.ok && r.unlocked) {
+            configUnlocked = true;
+            wrap.open = true;
+            const lockStatus = document.getElementById("cfg-lock-status");
+            if (lockStatus) lockStatus.textContent = "unlocked this session";
+        } else {
+            alert("Wrong password.");
+        }
+    });
+}
+
+async function setConfigLock() {
+    const pw = document.getElementById("cfg-lock-password").value.trim();
+    if (!pw) return;
+    const r = await api("POST", "/api/config-lock", { password: pw });
+    const lockStatus = document.getElementById("cfg-lock-status");
+    if (r.ok) {
+        document.getElementById("cfg-lock-password").value = "";
+        if (lockStatus) lockStatus.textContent = r.locked ? "lock set" : "lock cleared";
+    }
+}
+
+async function clearConfigLock() {
+    const r = await api("POST", "/api/config-lock", { password: "" });
+    const lockStatus = document.getElementById("cfg-lock-status");
+    if (r.ok && lockStatus) {
+        lockStatus.textContent = "lock removed";
+        configUnlocked = true;
+    }
 }
 
 function previewDashboardConfig() {
@@ -1974,23 +2179,11 @@ function createPane(s) {
     sendInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendToPane(s.name, sendInput); });
     const sendBar = el("div", { class: "send-bar" }, sendInput, sendBtn);
 
-    const phoneKeyDefs = [
-        { label: "\u2191", keys: ["Up"] },
-        { label: "\u2193", keys: ["Down"] },
-        { label: "\u2190", keys: ["Left"] },
-        { label: "\u2192", keys: ["Right"] },
-        { label: "Esc", keys: ["Escape"] },
-        { label: "C-c", keys: ["C-c"] },
-        { label: "C-b", keys: ["C-b"] },
-        { label: "Shift", keys: [] },
-        { label: "PgUp", keys: ["PageUp"] },
-        { label: "PgDn", keys: ["PageDown"] },
-    ];
     const phoneKeys = el("div", { class: "phone-keys" },
-        ...phoneKeyDefs.map((def) =>
+        ...loadPhoneKeys().map((def) =>
             el("button", {
                 class: "phone-key", type: "button",
-                onclick: () => { if (def.keys.length) sendKeysToPane(s.name, def.keys); },
+                onclick: () => { if (def.keys && def.keys.length) sendKeysToPane(s.name, def.keys); },
             }, def.label),
         ),
     );
@@ -2276,6 +2469,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("cfg-save-btn").addEventListener("click", saveDashboardConfig);
     document.getElementById("cfg-load-btn").addEventListener("click", reloadDashboardConfig);
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);
+    document.getElementById("config-wrap").addEventListener("click", guardConfigOpen);
+    document.getElementById("phone-key-add-btn").addEventListener("click", addPhoneKey);
+    document.getElementById("phone-key-reset-btn").addEventListener("click", resetPhoneKeys);
+    document.getElementById("cfg-lock-set-btn").addEventListener("click", setConfigLock);
+    document.getElementById("cfg-lock-clear-btn").addEventListener("click", clearConfigLock);
+    document.getElementById("cfg-toggle-all-topbar").addEventListener("click", (e) => toggleAllSection(TOPBAR_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-summary").addEventListener("click", (e) => toggleAllSection(SUMMARY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-body").addEventListener("click", (e) => toggleAllSection(BODY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-sound-test").addEventListener("click", () => {
@@ -2347,8 +2546,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (e.key === "Escape" && state.splitPicker.open) closeSplitPicker();
     });
     renderConfigForm();
-    updateTopbarStatus();
+    applyTopbarConfig();
     renderAgentSelectors();
+    renderPhoneKeysPreview();
+    await checkConfigLock();
     await loadDashboardConfig();
     await loadAgents();
     populateRunAgentFilter();
