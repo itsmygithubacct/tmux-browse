@@ -835,6 +835,17 @@ function createPane(s) {
         },
         title: "move to the hidden list at the bottom of the page",
     }, "Hide");
+    const hideIconBtn = el("button", {
+        class: "wc-btn wc-hide-icon",
+        type: "button",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleHidden(s.name);
+        },
+        title: "hide this session",
+    });
+    hideIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13 5c0-1-1.5-3-5-3S3 4 3 5c0 0-.5 0-1 .5S1.5 7 2 7h12c.5 0 .5-1 0-1.5S13 5 13 5zm-8.5 3a2.5 2.5 0 0 0-1.3 4.6c.3.2.7.4 1.3.4h7c.6 0 1-.2 1.3-.4A2.5 2.5 0 0 0 11.5 8h-7zM6 10.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm6 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg>';
     const splitBtn = el("button", {
         class: "btn blue split-btn",
         type: "button",
@@ -898,7 +909,7 @@ function createPane(s) {
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
-            summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad, wcControls),
+            summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
     );
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
@@ -1084,7 +1095,7 @@ function createPane(s) {
 
     return {
         details, sbadges, idle, idleWrap, idleAlertBtn,
-        summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad,
+        summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
