@@ -242,13 +242,6 @@ def render_index() -> str:
                             </select>
                         </label>
                         <label class="field">
-                            <span>Sandbox</span>
-                            <select id="cfg-agent-sandbox">
-                                <option value="host">host (default)</option>
-                                <option value="worktree">worktree (isolated)</option>
-                            </select>
-                        </label>
-                        <label class="field">
                             <span>Per-run token budget (0 = unlimited)</span>
                             <input type="number" id="cfg-agent-token-budget" min="0" step="1000" />
                         </label>

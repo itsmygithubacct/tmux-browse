@@ -139,6 +139,24 @@ class AgentHandlerTests(unittest.TestCase):
         self.assertFalse(fake.payload["ok"])
         self.assertEqual(fake.payload["error"], "bad agent")
 
+    def test_agents_post_rejects_invalid_token_budget(self):
+        fake = _FakeHandler()
+        with mock.patch("lib.server.agent_store.save_agent") as save_agent:
+            server.Handler._h_agents_post(fake, urlparse("/api/agents"), {
+                "agent": {
+                    "name": "gpt",
+                    "provider": "openai",
+                    "model": "gpt-5.4",
+                    "base_url": "https://api.openai.com/v1",
+                    "wire_api": "openai-chat",
+                    "token_budget": "not-a-number",
+                },
+            })
+        self.assertEqual(fake.status, 400)
+        self.assertFalse(fake.payload["ok"])
+        self.assertEqual(fake.payload["error"], "token_budget must be an integer")
+        save_agent.assert_not_called()
+
     def test_agents_remove_returns_removed_state(self):
         fake = _FakeHandler()
         with mock.patch("lib.server.agent_store.remove_agent", return_value=True) as remove_agent:

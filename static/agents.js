@@ -16,7 +16,6 @@ function agentFieldMap() {
         model: document.getElementById("cfg-agent-model"),
         base_url: document.getElementById("cfg-agent-base-url"),
         wire_api: document.getElementById("cfg-agent-wire-api"),
-        sandbox: document.getElementById("cfg-agent-sandbox"),
         token_budget: document.getElementById("cfg-agent-token-budget"),
         daily_token_budget: document.getElementById("cfg-agent-daily-budget"),
         api_key: document.getElementById("cfg-agent-api-key"),
@@ -302,7 +301,6 @@ function fillAgentForm(row, opts = {}) {
     fields.model.value = row.model || "";
     fields.base_url.value = row.base_url || "";
     fields.wire_api.value = row.wire_api || "openai-chat";
-    fields.sandbox.value = row.sandbox || "host";
     fields.token_budget.value = row.token_budget || 0;
     fields.daily_token_budget.value = row.daily_token_budget || 0;
     fields.api_key.value = "";
@@ -436,7 +434,6 @@ function readAgentForm() {
         model: fields.model.value.trim(),
         base_url: fields.base_url.value.trim(),
         wire_api: fields.wire_api.value,
-        sandbox: fields.sandbox.value,
         token_budget: parseInt(fields.token_budget.value) || 0,
         daily_token_budget: parseInt(fields.daily_token_budget.value) || 0,
     };
