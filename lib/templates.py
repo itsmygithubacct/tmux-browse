@@ -26,7 +26,7 @@ def render_index() -> str:
         auto-refresh off &middot; ttyd spawns on pane expand
     </span>
     <button class="btn red" id="restart-btn" title="restart the dashboard server process">Restart</button>
-    <button class="btn red" id="os-restart-btn" title="restart the dashboard server process" hidden>&#x23FB;</button>
+    <button class="btn red" id="os-restart-btn" title="restart the dashboard server process" style="margin-left:auto" hidden>&#x23FB;</button>
 </div>
 <div id="sessions"></div>
 <details id="hidden-wrap" class="hidden-list" hidden>

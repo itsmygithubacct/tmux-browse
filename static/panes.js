@@ -3,10 +3,12 @@
 async function resizePane(session, cols) {
     await api("POST", "/api/session/resize", { session, cols });
     const rec = state.nodes.get(session);
-    if (rec && rec.iframeWrap) {
-        const defaultH = state.config.default_ttyd_height_vh || 70;
-        rec.iframeWrap.style.height = `${defaultH}vh`;
-    }
+    if (!rec || !rec.iframeWrap) return;
+    const cur = rec.iframeWrap.style.height;
+    const maxH = "90vh";
+    const defaultH = `${state.config.default_ttyd_height_vh || 70}vh`;
+    // Toggle: if already at max, go to default; otherwise go to max
+    rec.iframeWrap.style.height = cur === maxH ? defaultH : maxH;
 }
 
 async function launch(session) {
