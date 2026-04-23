@@ -21,7 +21,7 @@ def render_index() -> str:
         <button class="tmux-help-btn" id="tmux-help-btn" type="button" title="tmux hot keys">?</button>
     </h1>
     <input type="text" id="new-name" placeholder="new session name" />
-    <button class="btn green" id="new-btn">New session</button>
+    <button class="btn green" id="new-btn">New</button>
     <button class="btn" id="launch-claude-btn" title="Launch Claude Code" hidden>Claude</button>
     <button class="btn" id="launch-claude-yolo-btn" title="Launch Claude --dangerously-skip-permissions" hidden>Claude YOLO</button>
     <button class="btn" id="launch-codex-btn" title="Launch Codex" hidden>Codex</button>
@@ -127,6 +127,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-monitor" /><span>System monitor launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-top" /><span>Top/htop/glances launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-launch-ask-name" /><span>Ask for session name on launch</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-launch-open-tab" /><span>Open tab on launch</span></label>
                 <label class="field">
                     <span>Launcher working directory</span>
                     <input type="text" id="cfg-launch-cwd" placeholder="e.g. ~/myproject" />
@@ -171,82 +172,6 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-footer" /><span>Footer metadata</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-inline-messages" /><span>Inline status messages</span></label>
             </section>
-            <section class="config-card">
-                <div class="config-card-title">Event Hooks</div>
-                <div class="dim" style="font-size:0.78rem;margin-bottom:0.5rem">
-                    Automatic actions when agent events occur. Per-agent overrides take precedence.
-                </div>
-                <div id="hooks-editor"></div>
-                <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap">
-                    <button class="btn green" id="hooks-save-btn" type="button">Save Hooks</button>
-                    <button class="btn" id="hooks-reset-btn" type="button">Reset to Defaults</button>
-                    <span class="dim" id="hooks-status" style="font-size:0.82rem"></span>
-                </div>
-            </section>
-            <section class="config-card">
-                <div class="config-card-title">Agent</div>
-                <label class="field">
-                    <span>Configured agent</span>
-                    <select id="cfg-agent-existing"></select>
-                </label>
-                <label class="field">
-                    <span>Preset</span>
-                    <select id="cfg-agent-preset"></select>
-                </label>
-                <label class="field">
-                    <span>Name</span>
-                    <input type="text" id="cfg-agent-name" placeholder="gpt" />
-                </label>
-                <label class="field">
-                    <span>Provider</span>
-                    <input type="text" id="cfg-agent-provider" placeholder="openai" />
-                </label>
-                <label class="field">
-                    <span>Model</span>
-                    <input type="text" id="cfg-agent-model" placeholder="gpt-5.4" />
-                </label>
-                <label class="field">
-                    <span>Base URL</span>
-                    <input type="url" id="cfg-agent-base-url" placeholder="https://api.openai.com/v1" />
-                </label>
-                <label class="field">
-                    <span>Wire API</span>
-                    <select id="cfg-agent-wire-api">
-                        <option value="openai-chat">openai-chat</option>
-                        <option value="anthropic-messages">anthropic-messages</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Sandbox</span>
-                    <select id="cfg-agent-sandbox">
-                        <option value="host">host (default)</option>
-                        <option value="worktree">worktree (isolated)</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Per-run token budget (0 = unlimited)</span>
-                    <input type="number" id="cfg-agent-token-budget" min="0" step="1000" />
-                </label>
-                <label class="field">
-                    <span>Daily token budget (0 = unlimited)</span>
-                    <input type="number" id="cfg-agent-daily-budget" min="0" step="10000" />
-                </label>
-                <label class="field">
-                    <span>API key</span>
-                    <input type="password" id="cfg-agent-api-key" placeholder="Leave blank to keep existing key" />
-                </label>
-                <div class="hot-editor-actions">
-                    <button class="btn green" id="cfg-agent-save-btn" type="button">Save Agent</button>
-                    <button class="btn blue" id="cfg-agent-reload-btn" type="button">Reload Agents</button>
-                    <button class="btn red" id="cfg-agent-remove-btn" type="button">Remove Agent</button>
-                </div>
-                <div class="dim config-card-note" id="cfg-agent-summary">
-                    Agents are stored separately from dashboard-config.json.
-                </div>
-                <div class="dim" id="cfg-agent-status">
-                    Load a preset or existing agent, then save to write ~/.tmux-browse/agents.json and the secret store.
-                </div>
-            </section>
         </div>
         <div class="config-actions">
             <button class="btn green" id="cfg-save-btn">Save Config</button>
@@ -263,6 +188,91 @@ def render_index() -> str:
                 <button class="btn green" id="cfg-lock-set-btn" type="button">Set Lock</button>
                 <button class="btn red" id="cfg-lock-clear-btn" type="button">Remove Lock</button>
                 <span class="dim" id="cfg-lock-status" style="font-size:0.82rem"></span>
+            </div>
+        </details>
+        <details style="margin-top:0.6rem">
+            <summary class="dim" style="cursor:pointer;font-size:0.85rem">Agent Config</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;margin-top:0.5rem">
+                <details class="config-card" open>
+                    <summary class="config-card-title" style="cursor:pointer">Event Hooks</summary>
+                    <div style="margin-top:0.4rem">
+                        <div class="dim" style="font-size:0.78rem;margin-bottom:0.5rem">
+                            Automatic actions when agent events occur. Per-agent overrides take precedence.
+                        </div>
+                        <div id="hooks-editor"></div>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap">
+                            <button class="btn green" id="hooks-save-btn" type="button">Save Hooks</button>
+                            <button class="btn" id="hooks-reset-btn" type="button">Reset to Defaults</button>
+                            <span class="dim" id="hooks-status" style="font-size:0.82rem"></span>
+                        </div>
+                    </div>
+                </details>
+                <details class="config-card" open>
+                    <summary class="config-card-title" style="cursor:pointer">Agent</summary>
+                    <div style="margin-top:0.4rem">
+                        <label class="field">
+                            <span>Configured agent</span>
+                            <select id="cfg-agent-existing"></select>
+                        </label>
+                        <label class="field">
+                            <span>Preset</span>
+                            <select id="cfg-agent-preset"></select>
+                        </label>
+                        <label class="field">
+                            <span>Name</span>
+                            <input type="text" id="cfg-agent-name" placeholder="gpt" />
+                        </label>
+                        <label class="field">
+                            <span>Provider</span>
+                            <input type="text" id="cfg-agent-provider" placeholder="openai" />
+                        </label>
+                        <label class="field">
+                            <span>Model</span>
+                            <input type="text" id="cfg-agent-model" placeholder="gpt-5.4" />
+                        </label>
+                        <label class="field">
+                            <span>Base URL</span>
+                            <input type="url" id="cfg-agent-base-url" placeholder="https://api.openai.com/v1" />
+                        </label>
+                        <label class="field">
+                            <span>Wire API</span>
+                            <select id="cfg-agent-wire-api">
+                                <option value="openai-chat">openai-chat</option>
+                                <option value="anthropic-messages">anthropic-messages</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Sandbox</span>
+                            <select id="cfg-agent-sandbox">
+                                <option value="host">host (default)</option>
+                                <option value="worktree">worktree (isolated)</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>Per-run token budget (0 = unlimited)</span>
+                            <input type="number" id="cfg-agent-token-budget" min="0" step="1000" />
+                        </label>
+                        <label class="field">
+                            <span>Daily token budget (0 = unlimited)</span>
+                            <input type="number" id="cfg-agent-daily-budget" min="0" step="10000" />
+                        </label>
+                        <label class="field">
+                            <span>API key</span>
+                            <input type="password" id="cfg-agent-api-key" placeholder="Leave blank to keep existing key" />
+                        </label>
+                        <div class="hot-editor-actions">
+                            <button class="btn green" id="cfg-agent-save-btn" type="button">Save Agent</button>
+                            <button class="btn blue" id="cfg-agent-reload-btn" type="button">Reload Agents</button>
+                            <button class="btn red" id="cfg-agent-remove-btn" type="button">Remove Agent</button>
+                        </div>
+                        <div class="dim config-card-note" id="cfg-agent-summary">
+                            Agents are stored separately from dashboard-config.json.
+                        </div>
+                        <div class="dim" id="cfg-agent-status">
+                            Load a preset or existing agent, then save.
+                        </div>
+                    </div>
+                </details>
             </div>
         </details>
     </div>

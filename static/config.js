@@ -29,6 +29,7 @@ function configFieldMap() {
         show_launch_monitor: document.getElementById("cfg-show-launch-monitor"),
         show_launch_top: document.getElementById("cfg-show-launch-top"),
         launch_ask_name: document.getElementById("cfg-launch-ask-name"),
+        launch_open_tab: document.getElementById("cfg-launch-open-tab"),
         launch_cwd: document.getElementById("cfg-launch-cwd"),
         show_summary_row: document.getElementById("cfg-show-summary-row"),
         show_summary_name: document.getElementById("cfg-show-summary-name"),
