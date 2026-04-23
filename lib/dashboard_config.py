@@ -33,6 +33,8 @@ DEFAULTS: dict[str, Any] = {
     "show_summary_row": True,
     "show_summary_name": True,
     "show_summary_arrow": True,
+    "furl_side_by_side": True,
+    "resize_row_together": True,
     "show_body_actions": True,
     "show_footer": True,
     "show_inline_messages": True,
