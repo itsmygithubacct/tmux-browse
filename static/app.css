@@ -128,6 +128,46 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
     padding: 0.15rem 0.5rem;
     line-height: 1;
 }
+.tmux-help-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.3rem; height: 1.3rem; border-radius: 50%;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--dim); font-size: 0.7rem; font-weight: 700;
+    cursor: pointer; vertical-align: middle; margin-left: 0.3rem;
+    transition: border-color 0.15s, color 0.15s;
+}
+.tmux-help-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tmux-help-body {
+    padding: 1rem 1.2rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+.tmux-help-body p { margin: 0 0 0.6rem; }
+.tmux-help-body h3 {
+    font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--accent);
+    margin: 0 0 0.3rem;
+}
+.tmux-help-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.8rem;
+}
+.tmux-help-section {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.7rem;
+    background: var(--card);
+}
+.hk { font-size: 0.82rem; margin-bottom: 0.15rem; }
+.hk kbd {
+    display: inline-block; padding: 0.1rem 0.35rem;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: var(--surface); font-family: inherit;
+    font-size: 0.78rem; min-width: 1.2rem; text-align: center;
+}
 .wc-controls {
     display: flex; gap: 0.3rem; margin-left: 0.4rem;
 }

@@ -42,8 +42,10 @@ function stopSummaryToggle(e) {
 }
 
 function syncModalChrome() {
-    const open = state.hotEditor.open || state.idleEditor.open || state.splitPicker.open || state.workflowEditor.open || state.stepViewer.open;
-    document.body.style.overflow = open ? "hidden" : "";
+    const stateOpen = state.hotEditor.open || state.idleEditor.open || state.splitPicker.open || state.workflowEditor.open || state.stepViewer.open;
+    const helpOpen = !document.getElementById("tmux-help-modal")?.hidden;
+    const qrOpen = !document.getElementById("qr-modal")?.hidden;
+    document.body.style.overflow = (stateOpen || helpOpen || qrOpen) ? "hidden" : "";
 }
 
 function setVisible(node, visible, display = "") {
