@@ -37,6 +37,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_launch_top: false,
     launch_cwd: "",
     launch_ask_name: true,
+    launch_open_tab: false,
     show_topbar_status: true,
     show_summary_row: true,
     show_summary_name: true,

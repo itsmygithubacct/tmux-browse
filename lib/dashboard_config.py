@@ -42,6 +42,7 @@ DEFAULTS: dict[str, Any] = {
     "show_launch_top": False,
     "launch_cwd": "",
     "launch_ask_name": True,
+    "launch_open_tab": False,
     "show_topbar_status": True,
     "show_summary_row": True,
     "show_summary_name": True,

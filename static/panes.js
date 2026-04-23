@@ -14,7 +14,9 @@ async function launchCodingSession(label, cmd) {
     const cwd = state.config.launch_cwd || undefined;
     const r = await api("POST", "/api/session/new", { name, cmd, cwd, launch_ttyd: true });
     if (r.ok && r.port) {
-        window.open(ttydUrl(r.port), "_blank", "noopener");
+        if (state.config.launch_open_tab) {
+            window.open(ttydUrl(r.port), "_blank", "noopener");
+        }
         await refresh();
     } else if (r.ok) {
         await refresh();
