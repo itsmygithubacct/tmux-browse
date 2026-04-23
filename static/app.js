@@ -27,6 +27,8 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_summary_row: true,
     show_summary_name: true,
     show_summary_arrow: true,
+    furl_side_by_side: true,
+    resize_row_together: true,
     show_body_actions: true,
     show_footer: true,
     show_inline_messages: true,
@@ -234,6 +236,8 @@ function configFieldMap() {
         show_summary_row: document.getElementById("cfg-show-summary-row"),
         show_summary_name: document.getElementById("cfg-show-summary-name"),
         show_summary_arrow: document.getElementById("cfg-show-summary-arrow"),
+        furl_side_by_side: document.getElementById("cfg-furl-side-by-side"),
+        resize_row_together: document.getElementById("cfg-resize-row-together"),
         show_body_actions: document.getElementById("cfg-show-body-actions"),
         show_attached_badge: document.getElementById("cfg-show-attached-badge"),
         show_window_badge: document.getElementById("cfg-show-window-badge"),
@@ -1475,16 +1479,22 @@ function putSessionBeside(targetName, sessionName, side) {
     if (!sessionName || !targetName || sessionName === targetName) return;
     if (state.hidden.has(targetName)) return;
     syncLayoutState();
+    const targetPos = findLayoutPosition(targetName);
+    if (!targetPos) return;
+    const row = state.layout[targetPos.row];
+    // Cap at 4 panes side-by-side
+    if (row.length >= 4 && !row.includes(sessionName)) return;
     if (state.hidden.has(sessionName)) {
         state.hidden.delete(sessionName);
         saveHidden(state.hidden);
     }
     removeFromLayout(sessionName);
-    const targetPos = findLayoutPosition(targetName);
-    if (!targetPos) return;
-    const row = state.layout[targetPos.row];
-    const insertAt = side === "left" ? targetPos.col : targetPos.col + 1;
-    row.splice(insertAt, 0, sessionName);
+    // Re-find after removal may have shifted indices
+    const pos = findLayoutPosition(targetName);
+    if (!pos) return;
+    const targetRow = state.layout[pos.row];
+    const insertAt = side === "left" ? pos.col : pos.col + 1;
+    targetRow.splice(insertAt, 0, sessionName);
     persistLayoutState();
     renderLayout();
 }
@@ -2117,7 +2127,7 @@ function createPane(s) {
         onclick: stopSummaryToggle,
     }, upBtn, downBtn);
 
-    const summary = el("summary", {},
+    const summary = el("summary", { draggable: "true" },
         sname, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
             summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad),
@@ -2171,6 +2181,24 @@ function createPane(s) {
     });
     const iframeWrap = el("div", { class: "ttyd-resize-wrap" }, iframe);
 
+    // Resize row together: when this pane's iframe wrapper is resized,
+    // propagate the height to all sibling panes in the same layout row.
+    let resizeSyncing = false;
+    new ResizeObserver(() => {
+        if (resizeSyncing || !state.config.resize_row_together) return;
+        const pos = findLayoutPosition(s.name);
+        if (!pos || !state.layout[pos.row] || state.layout[pos.row].length <= 1) return;
+        const h = iframeWrap.style.height;
+        if (!h) return;
+        resizeSyncing = true;
+        for (const peer of state.layout[pos.row]) {
+            if (peer === s.name) continue;
+            const peerRec = state.nodes.get(peer);
+            if (peerRec && peerRec.iframeWrap) peerRec.iframeWrap.style.height = h;
+        }
+        resizeSyncing = false;
+    }).observe(iframeWrap);
+
     const sendInput = el("input", {
         type: "text", class: "send-bar-input",
         placeholder: `Send to ${s.name}...`,
@@ -2199,10 +2227,39 @@ function createPane(s) {
         if (details.open && state.config.launch_on_expand && !state.openPanes.has(s.name)) {
             launch(s.name);
         }
+        // Furl side-by-side: when one pane in a row closes, close all in the row
+        if (!details.open && state.config.furl_side_by_side) {
+            const pos = findLayoutPosition(s.name);
+            if (pos && state.layout[pos.row] && state.layout[pos.row].length > 1) {
+                for (const peer of state.layout[pos.row]) {
+                    if (peer === s.name) continue;
+                    const peerRec = state.nodes.get(peer);
+                    if (peerRec && peerRec.details.open) peerRec.details.open = false;
+                }
+            }
+        }
+        if (details.open && state.config.furl_side_by_side) {
+            const pos = findLayoutPosition(s.name);
+            if (pos && state.layout[pos.row] && state.layout[pos.row].length > 1) {
+                for (const peer of state.layout[pos.row]) {
+                    if (peer === s.name) continue;
+                    const peerRec = state.nodes.get(peer);
+                    if (peerRec && !peerRec.details.open) peerRec.details.open = true;
+                }
+            }
+        }
     });
 
-    // Drag-and-drop: only the reorderPad initiates drags. Any <details> is a
-    // valid drop target — dropping on it inserts the dragged pane before it.
+    // Summary bar drag: dropping on left/right half of another session
+    // snaps side-by-side; dropping above (center) reorders.
+    summary.addEventListener("dragstart", (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/x-tmux-browse-split", s.name);
+        e.dataTransfer.setData("text/x-tmux-browse-session", s.name);
+    });
+
+    // Drag-and-drop: reorderPad, splitBtn, and summary all initiate drags.
+    // Any <details> is a valid drop target.
     const clearDropClasses = () => details.classList.remove("drag-over", "drop-left", "drop-right");
     details.addEventListener("dragover", (e) => {
         const splitDrag = e.dataTransfer.types.includes("text/x-tmux-browse-split");
