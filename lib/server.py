@@ -112,6 +112,56 @@ def _session_summary() -> list[dict]:
     return out
 
 
+# --- Connected client tracking ---
+
+_CLIENT_TIMEOUT = 60  # seconds before a client is considered gone
+_clients: dict[str, dict] = {}  # keyed by client_id
+_client_inbox: dict[str, list[dict]] = {}  # keyed by client_id
+
+
+def _client_id(ip: str, ua: str) -> str:
+    """Stable-ish fingerprint for a browser session."""
+    import hashlib
+    return hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:12]
+
+
+def _touch_client(handler: "Handler") -> str:
+    """Record a client heartbeat. Returns the client_id."""
+    ip = handler.client_address[0]
+    ua = handler.headers.get("User-Agent", "")
+    cid = _client_id(ip, ua)
+    now = int(time.time())
+    entry = _clients.get(cid, {})
+    entry["client_id"] = cid
+    entry["ip"] = ip
+    entry["user_agent"] = ua
+    entry["last_seen"] = now
+    entry.setdefault("first_seen", now)
+    entry.setdefault("nickname", "")
+    _clients[cid] = entry
+    return cid
+
+
+def _active_clients() -> list[dict]:
+    now = int(time.time())
+    result = []
+    for cid, entry in list(_clients.items()):
+        age = now - entry.get("last_seen", 0)
+        if age > _CLIENT_TIMEOUT:
+            _clients.pop(cid, None)
+            _client_inbox.pop(cid, None)
+            continue
+        result.append({
+            "client_id": cid,
+            "ip": entry["ip"],
+            "nickname": entry.get("nickname", ""),
+            "last_seen": entry["last_seen"],
+            "first_seen": entry.get("first_seen", 0),
+            "idle_seconds": age,
+        })
+    return sorted(result, key=lambda c: c["last_seen"], reverse=True)
+
+
 def _restart_self() -> None:
     """Re-exec the current dashboard process with its original argv."""
     time.sleep(0.15)
@@ -687,6 +737,49 @@ class Handler(BaseHTTPRequestHandler):
         except TBError as e:
             self._send_tb_error(e)
 
+    def _h_clients(self, _parsed: ParseResult) -> None:
+        my_id = _touch_client(self)
+        self._send_json({
+            "ok": True,
+            "clients": _active_clients(),
+            "you": my_id,
+        })
+
+    def _h_clients_nickname(self, _parsed: ParseResult, body: dict) -> None:
+        cid = _touch_client(self)
+        nickname = (body.get("nickname") or "").strip()[:30]
+        if cid in _clients:
+            _clients[cid]["nickname"] = nickname
+        self._send_json({"ok": True, "client_id": cid, "nickname": nickname})
+
+    def _h_clients_send_config(self, _parsed: ParseResult, body: dict) -> None:
+        my_id = _touch_client(self)
+        target_id = (body.get("target") or "").strip()
+        config_url = (body.get("config_url") or "").strip()
+        if not target_id or not config_url:
+            self._send_json({"ok": False, "error": "missing target or config_url"}, status=400)
+            return
+        if target_id not in _clients:
+            self._send_json({"ok": False, "error": "target client not connected"}, status=404)
+            return
+        inbox = _client_inbox.setdefault(target_id, [])
+        sender = _clients.get(my_id, {})
+        inbox.append({
+            "from": sender.get("nickname") or sender.get("ip", "unknown"),
+            "from_id": my_id,
+            "config_url": config_url,
+            "ts": int(time.time()),
+        })
+        # Keep inbox bounded
+        if len(inbox) > 10:
+            inbox[:] = inbox[-10:]
+        self._send_json({"ok": True, "sent": True})
+
+    def _h_clients_inbox(self, _parsed: ParseResult) -> None:
+        cid = _touch_client(self)
+        messages = _client_inbox.pop(cid, [])
+        self._send_json({"ok": True, "messages": messages})
+
     def _h_qr(self, parsed: ParseResult) -> None:
         query = parse_qs(parsed.query)
         data = (query.get("data", [""])[0] or "").strip()
@@ -839,6 +932,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
         if not self._auth_gate():
             return
+        _touch_client(self)
         parsed = urlparse(self.path)
         handler = self._GET_ROUTES.get(parsed.path)
         if handler is None:
@@ -849,6 +943,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if not self._auth_gate():
             return
+        _touch_client(self)
         parsed = urlparse(self.path)
         handler = self._POST_ROUTES.get(parsed.path)
         if handler is None:
@@ -880,6 +975,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
         "/api/agent-costs":        _h_agent_costs,
+        "/api/clients":            _h_clients,
+        "/api/clients/inbox":      _h_clients_inbox,
         "/api/qr":                 _h_qr,
         "/api/config-lock":        _h_config_lock_status,
         "/api/tasks":              _h_tasks_get,
@@ -899,6 +996,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-workflows":    _h_agent_workflows_post,
         "/api/agent-conversation":      _h_agent_conversation_open,
         "/api/agent-conversation-fork": _h_agent_conversation_fork,
+        "/api/clients/nickname":   _h_clients_nickname,
+        "/api/clients/send-config": _h_clients_send_config,
         "/api/config-lock":        _h_config_lock_set,
         "/api/config-lock/verify": _h_config_lock_verify,
         "/api/tasks":              _h_tasks_create,

@@ -21,6 +21,7 @@ DEFAULTS: dict[str, Any] = {
     "launch_on_expand": True,
     "default_ttyd_height_vh": 70,
     "default_ttyd_min_height_px": 200,
+    "day_mode": False,
     "idle_sound": "beep",
     "show_topbar": True,
     "show_topbar_title": True,
