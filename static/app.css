@@ -309,6 +309,26 @@ details.session.drop-right {
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 0.8rem;
 }
+.task-create-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+}
+.task-create-bar input[type="text"],
+.task-create-bar select {
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+.task-create-bar input[type="text"] { flex: 1; min-width: 140px; }
+.task-status-open     { color: var(--green); }
+.task-status-done     { color: var(--dim); }
+.task-status-archived { color: var(--dim); opacity: 0.6; }
 .runs-search-bar {
     display: flex;
     gap: 0.5rem;
