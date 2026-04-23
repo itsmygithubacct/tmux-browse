@@ -123,6 +123,20 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
 .summary-actions {
     margin-left: auto; display: flex; align-items: center; gap: 0.4rem;
 }
+.wc-controls {
+    display: flex; gap: 0.2rem; margin-left: 0.3rem;
+}
+.wc-btn {
+    width: 1.3rem; height: 1.3rem; border-radius: 50%;
+    border: none; cursor: pointer; font-size: 0.65rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; line-height: 1; padding: 0;
+    transition: opacity 0.15s;
+}
+.wc-btn:hover { opacity: 0.8; }
+.wc-close    { background: #f85149; color: #fff; }
+.wc-maximize { background: #3fb950; color: #fff; }
+.wc-minimize { background: #d29922; color: #fff; }
 .summary-idle-wrap {
     display: inline-flex;
     align-items: center;

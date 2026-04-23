@@ -570,3 +570,36 @@ async function loadNotifications() {
     }
 }
 
+// --- Pane Admin ---
+
+function renderPaneAdmin() {
+    const root = document.getElementById("pane-admin-list");
+    if (!root) return;
+    root.innerHTML = "";
+    for (const s of state.sessions) {
+        const name = s.name;
+        root.append(el("div", { class: "run-row" },
+            el("span", { style: "font-weight:700;font-size:0.85rem;color:var(--accent)" }, name),
+            el("div", { class: "run-row-meta" },
+                `${s.windows}w · ${s.attached} clients · idle ${fmtAgeSeconds(s.idle_seconds)}`),
+            el("div", { class: "agent-card-actions" },
+                el("button", { class: "btn red", type: "button",
+                    onclick: () => { killSession(name); } }, "Kill"),
+                el("button", { class: "btn", type: "button",
+                    onclick: () => { toggleHidden(name); } },
+                    state.hidden.has(name) ? "Unhide" : "Hide"),
+                el("a", { class: "btn", target: "_blank", rel: "noopener",
+                    href: `/api/session/log?session=${encodeURIComponent(name)}&lines=2000` }, "Log"),
+                el("button", { class: "btn blue", type: "button",
+                    onclick: () => openHotButtons(name) }, "Hot Buttons"),
+                el("button", { class: "btn orange", type: "button",
+                    onclick: () => enterCopyMode(name) }, "Scroll"),
+                s.ttyd_running
+                    ? el("button", { class: "btn orange", type: "button",
+                        onclick: () => stopTtyd(name) }, "Stop ttyd")
+                    : el("button", { class: "btn green", type: "button",
+                        onclick: () => launch(name) }, "Launch"),
+            ),
+        ));
+    }
+}
