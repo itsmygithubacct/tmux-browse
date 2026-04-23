@@ -40,6 +40,7 @@ DEFAULTS: dict[str, Any] = {
     "show_body_stop": False,
     "show_body_kill": False,
     "show_body_send_bar": False,
+    "show_body_phone_keys": False,
     "show_body_hot_buttons": True,
     "show_hot_loop_toggles": True,
 }

@@ -177,6 +177,34 @@ details.session[open] > summary::before { content: "▾"; }
 }
 .summary-link:hover { background: rgba(88, 166, 255, 0.12); }
 .summary-link.disabled { color: var(--dim); pointer-events: none; }
+.phone-keys {
+    display: flex;
+    gap: 0.3rem;
+    padding: 0.35rem 0;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.phone-key {
+    min-width: 2.2rem;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.78rem;
+    font-family: inherit;
+    font-weight: 600;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--fg);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+.phone-key:active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+}
 .send-bar {
     display: flex; gap: 0.4rem; padding: 0.4rem 0; align-items: center;
 }

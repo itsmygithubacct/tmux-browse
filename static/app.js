@@ -33,6 +33,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_body_stop: false,
     show_body_kill: false,
     show_body_send_bar: false,
+    show_body_phone_keys: false,
     show_body_hot_buttons: true,
     show_hot_loop_toggles: true,
 };
@@ -226,6 +227,7 @@ function configFieldMap() {
         show_body_stop: document.getElementById("cfg-show-body-stop"),
         show_body_kill: document.getElementById("cfg-show-body-kill"),
         show_body_send_bar: document.getElementById("cfg-show-body-send-bar"),
+        show_body_phone_keys: document.getElementById("cfg-show-body-phone-keys"),
         show_body_hot_buttons: document.getElementById("cfg-show-body-hot-buttons"),
         show_hot_loop_toggles: document.getElementById("cfg-show-hot-loop-toggles"),
         show_footer: document.getElementById("cfg-show-footer"),
@@ -763,7 +765,7 @@ const SUMMARY_TOGGLE_KEYS = [
 ];
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
-    "show_body_send_bar", "show_body_hot_buttons", "show_hot_loop_toggles",
+    "show_body_send_bar", "show_body_phone_keys", "show_body_hot_buttons", "show_hot_loop_toggles",
     "show_footer", "show_inline_messages", "show_topbar_status",
 ];
 
@@ -839,6 +841,7 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.stopBtn, cfg.show_body_stop, "");
     setVisible(rec.killBtn, cfg.show_body_kill, "");
     setVisible(rec.sendBar, cfg.show_body_send_bar, "flex");
+    setVisible(rec.phoneKeys, cfg.show_body_phone_keys, "flex");
     setVisible(rec.hotManageBtn, cfg.show_body_hot_buttons, "");
     setVisible(rec.msg, cfg.show_inline_messages, "");
     setVisible(rec.footer, cfg.show_footer, "flex");
@@ -1025,6 +1028,10 @@ async function sendToPane(session, inputEl) {
     if (!text) return;
     const r = await api("POST", "/api/session/type", { session, text });
     if (r.ok) inputEl.value = "";
+}
+
+async function sendKeysToPane(session, keys) {
+    await api("POST", "/api/session/key", { session, keys });
 }
 
 async function openRawTtyd() {
@@ -1847,11 +1854,32 @@ function createPane(s) {
     sendInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendToPane(s.name, sendInput); });
     const sendBar = el("div", { class: "send-bar" }, sendInput, sendBtn);
 
+    const phoneKeyDefs = [
+        { label: "\u2191", keys: ["Up"] },
+        { label: "\u2193", keys: ["Down"] },
+        { label: "\u2190", keys: ["Left"] },
+        { label: "\u2192", keys: ["Right"] },
+        { label: "Esc", keys: ["Escape"] },
+        { label: "C-c", keys: ["C-c"] },
+        { label: "C-b", keys: ["C-b"] },
+        { label: "Shift", keys: [] },
+        { label: "PgUp", keys: ["PageUp"] },
+        { label: "PgDn", keys: ["PageDown"] },
+    ];
+    const phoneKeys = el("div", { class: "phone-keys" },
+        ...phoneKeyDefs.map((def) =>
+            el("button", {
+                class: "phone-key", type: "button",
+                onclick: () => { if (def.keys.length) sendKeysToPane(s.name, def.keys); },
+            }, def.label),
+        ),
+    );
+
     const fPort = el("span"), fPid = el("span"), fCreated = el("span");
     const footer = el("div", { class: "pane-footer" }, fPort, fPid, fCreated);
 
     const details = el("details", { class: "session", "data-session": s.name },
-        summary, el("div", { class: "pane-body" }, actions, iframeWrap, sendBar, footer),
+        summary, el("div", { class: "pane-body" }, actions, iframeWrap, sendBar, phoneKeys, footer),
     );
 
     details.addEventListener("toggle", () => {
@@ -1900,7 +1928,7 @@ function createPane(s) {
         summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
-        iframe, iframeWrap, sendBar, fPort, fPid, fCreated, footer,
+        iframe, iframeWrap, sendBar, phoneKeys, fPort, fPid, fCreated, footer,
         hotPairs,
     };
 }
