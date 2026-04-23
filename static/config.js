@@ -26,6 +26,8 @@ function configFieldMap() {
         show_launch_codex_yolo: document.getElementById("cfg-show-launch-codex-yolo"),
         show_launch_kimi: document.getElementById("cfg-show-launch-kimi"),
         show_launch_kimi_yolo: document.getElementById("cfg-show-launch-kimi-yolo"),
+        show_launch_monitor: document.getElementById("cfg-show-launch-monitor"),
+        show_launch_top: document.getElementById("cfg-show-launch-top"),
         launch_ask_name: document.getElementById("cfg-launch-ask-name"),
         launch_cwd: document.getElementById("cfg-launch-cwd"),
         show_summary_row: document.getElementById("cfg-show-summary-row"),
@@ -99,6 +101,8 @@ function applyTopbarConfig() {
     setVisible(document.getElementById("launch-codex-yolo-btn"), cfg.show_launch_codex_yolo);
     setVisible(document.getElementById("launch-kimi-btn"), cfg.show_launch_kimi);
     setVisible(document.getElementById("launch-kimi-yolo-btn"), cfg.show_launch_kimi_yolo);
+    setVisible(document.getElementById("launch-monitor-btn"), cfg.show_launch_monitor);
+    setVisible(document.getElementById("launch-top-btn"), cfg.show_launch_top);
 
     // Status text
     const statusNode = document.getElementById("topbar-status");
@@ -140,6 +144,7 @@ const TOPBAR_TOGGLE_KEYS = [
     "show_launch_claude", "show_launch_claude_yolo",
     "show_launch_codex", "show_launch_codex_yolo",
     "show_launch_kimi", "show_launch_kimi_yolo",
+    "show_launch_monitor", "show_launch_top",
     "show_topbar_status",
 ];
 const SUMMARY_TOGGLE_KEYS = [

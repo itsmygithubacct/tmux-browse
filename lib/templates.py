@@ -28,6 +28,8 @@ def render_index() -> str:
     <button class="btn" id="launch-codex-yolo-btn" title="Launch Codex --full-auto" hidden>Codex YOLO</button>
     <button class="btn" id="launch-kimi-btn" title="Launch Kimi Code" hidden>Kimi</button>
     <button class="btn" id="launch-kimi-yolo-btn" title="Launch Kimi Code --yolo" hidden>Kimi YOLO</button>
+    <button class="btn" id="launch-monitor-btn" title="Launch lightweight system monitor" hidden>Monitor</button>
+    <button class="btn" id="launch-top-btn" title="Launch top/htop/glances" hidden>Top</button>
     <button class="btn blue" id="raw-btn" title="open a standalone ttyd shell not attached to tmux">Raw ttyd</button>
     <button class="btn blue" id="refresh-btn">Refresh</button>
     <span class="dim" id="topbar-status" style="margin-left:auto;font-size:0.8rem">
@@ -122,6 +124,8 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-codex-yolo" /><span>Codex YOLO launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi" /><span>Kimi launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi-yolo" /><span>Kimi YOLO launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-monitor" /><span>System monitor launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-top" /><span>Top/htop/glances launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-launch-ask-name" /><span>Ask for session name on launch</span></label>
                 <label class="field">
                     <span>Launcher working directory</span>

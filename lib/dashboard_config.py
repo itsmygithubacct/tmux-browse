@@ -38,6 +38,8 @@ DEFAULTS: dict[str, Any] = {
     "show_launch_codex_yolo": False,
     "show_launch_kimi": False,
     "show_launch_kimi_yolo": False,
+    "show_launch_monitor": False,
+    "show_launch_top": False,
     "launch_cwd": "",
     "launch_ask_name": True,
     "show_topbar_status": True,
