@@ -142,6 +142,13 @@ def render_index() -> str:
                     </select>
                 </label>
                 <label class="field">
+                    <span>Sandbox</span>
+                    <select id="cfg-agent-sandbox">
+                        <option value="host">host (default)</option>
+                        <option value="worktree">worktree (isolated)</option>
+                    </select>
+                </label>
+                <label class="field">
                     <span>API key</span>
                     <input type="password" id="cfg-agent-api-key" placeholder="Leave blank to keep existing key" />
                 </label>
@@ -170,6 +177,7 @@ def render_index() -> str:
     <summary>Agents (<span id="agents-count">0</span>)</summary>
     <div class="config-body">
         <div id="agents-pane" class="agent-grid"></div>
+        <div id="cost-summary" class="dim" style="margin-top:0.6rem;font-size:0.82rem"></div>
     </div>
 </details>
 <details id="runs-wrap" class="config-pane" hidden>

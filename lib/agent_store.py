@@ -20,6 +20,7 @@ CATALOG_OVERRIDE_FILE = config.STATE_DIR / "agent-catalog.json"
 
 
 SUPPORTED_WIRE_APIS = {"openai-chat", "anthropic-messages"}
+SUPPORTED_SANDBOX_MODES = {"host", "worktree"}
 
 
 # Built-in fallback. Model names in here will rot — users can override per
@@ -180,6 +181,8 @@ def _normalize_agent_meta(name: str, meta: dict[str, Any]) -> dict[str, Any]:
         wire_api = catalog[name].get("wire_api", "openai-chat")
     out["wire_api"] = wire_api or "openai-chat"
     out["base_url"] = base_url
+    sandbox = (out.get("sandbox") or "").strip().lower()
+    out["sandbox"] = sandbox if sandbox in SUPPORTED_SANDBOX_MODES else "host"
     return out
 
 
@@ -216,7 +219,8 @@ def save_agent(name: str, *, api_key: str | None = None,
                model: str | None = None,
                base_url: str | None = None,
                provider: str | None = None,
-               wire_api: str | None = None) -> dict[str, Any]:
+               wire_api: str | None = None,
+               sandbox: str | None = None) -> dict[str, Any]:
     name = _validate_name(name)
     defaults = load_catalog().get(name, {})
     agents = _load_json(AGENTS_FILE, default={})
@@ -228,6 +232,7 @@ def save_agent(name: str, *, api_key: str | None = None,
         "model": model or existing.get("model") or defaults.get("model"),
         "base_url": (base_url or existing.get("base_url") or defaults.get("base_url") or "").rstrip("/"),
         "wire_api": wire_api or existing.get("wire_api") or defaults.get("wire_api", "openai-chat"),
+        "sandbox": sandbox or existing.get("sandbox") or "host",
     }
     entry = _apply_builtin_constraints(name, entry)
     if not entry["model"]:
