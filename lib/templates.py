@@ -204,6 +204,8 @@ def render_index() -> str:
             <button class="btn green" id="cfg-save-btn">Save Config</button>
             <button class="btn blue" id="cfg-load-btn">Load From File</button>
             <button class="btn" id="cfg-reset-btn">Defaults</button>
+            <button class="btn" id="cfg-qr-show-btn" title="Generate QR code of current view config">Show QR</button>
+            <button class="btn" id="cfg-qr-scan-btn" title="Scan QR code from another device's camera">Read QR</button>
             <span class="dim" id="cfg-status">Saved to ~/.tmux-browse/dashboard-config.json</span>
         </div>
         <details class="config-lock-section">
@@ -217,6 +219,19 @@ def render_index() -> str:
         </details>
     </div>
 </details>
+<div id="qr-modal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:480px">
+        <div class="modal-head">
+            <h2 id="qr-modal-title">Config QR</h2>
+            <button class="btn" id="qr-close-btn">Close</button>
+        </div>
+        <div style="padding:1rem;text-align:center">
+            <div id="qr-display" style="margin:0 auto"></div>
+            <video id="qr-video" style="display:none;width:100%;max-width:360px;border-radius:8px;margin:0.5rem auto" autoplay playsinline></video>
+            <div class="dim" id="qr-status" style="margin-top:0.6rem;font-size:0.82rem"></div>
+        </div>
+    </div>
+</div>
 <details id="agents-wrap" class="config-pane" hidden>
     <summary>Agents (<span id="agents-count">0</span>)</summary>
     <div class="config-body">
