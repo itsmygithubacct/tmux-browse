@@ -15,6 +15,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     launch_on_expand: true,
     default_ttyd_height_vh: 70,
     default_ttyd_min_height_px: 200,
+    day_mode: false,
     idle_sound: "beep",
     show_topbar: true,
     show_topbar_title: true,
@@ -225,6 +226,7 @@ function configFieldMap() {
         launch_on_expand: document.getElementById("cfg-launch-on-expand"),
         default_ttyd_height_vh: document.getElementById("cfg-default-height"),
         default_ttyd_min_height_px: document.getElementById("cfg-min-height"),
+        day_mode: document.getElementById("cfg-day-mode"),
         idle_sound: document.getElementById("cfg-idle-sound"),
         show_topbar: document.getElementById("cfg-show-topbar"),
         show_topbar_title: document.getElementById("cfg-show-topbar-title"),
@@ -1065,6 +1067,7 @@ function applyDashboardConfig() {
     renderConfigForm();
     applyTopbarConfig();
     scheduleRefreshLoop();
+    document.documentElement.classList.toggle("day-mode", !!state.config.day_mode);
     const root = document.documentElement.style;
     root.setProperty("--ttyd-default-height", `${state.config.default_ttyd_height_vh}vh`);
     root.setProperty("--ttyd-default-min-height", `${state.config.default_ttyd_min_height_px}px`);
@@ -1240,6 +1243,85 @@ async function clearConfigLock() {
     if (r.ok && lockStatus) {
         lockStatus.textContent = "lock removed";
         configUnlocked = true;
+    }
+}
+
+// --- Connected endpoints ---
+
+let myClientId = "";
+
+async function loadClients() {
+    const r = await api("GET", "/api/clients");
+    if (!r.ok) return;
+    myClientId = r.you || "";
+    const youLabel = document.getElementById("client-you-id");
+    if (youLabel) youLabel.textContent = `you: ${myClientId}`;
+    renderClientsPane(r.clients || []);
+}
+
+function renderClientsPane(clients) {
+    const count = document.getElementById("clients-count");
+    const root = document.getElementById("clients-pane");
+    if (!root) return;
+    if (count) count.textContent = String(clients.length);
+    root.innerHTML = "";
+    for (const c of clients) {
+        const isMe = c.client_id === myClientId;
+        const label = c.nickname || c.ip;
+        root.append(el("div", { class: "run-row" },
+            el("span", { style: `font-weight:700;font-size:0.85rem;color:${isMe ? "var(--green)" : "var(--fg)"}` },
+                label + (isMe ? " (you)" : "")),
+            el("div", {},
+                el("div", { class: "run-row-meta" },
+                    `idle ${fmtAgeSeconds(c.idle_seconds)} · connected ${fmtAgeSeconds(Math.max(0, Math.floor(Date.now() / 1000) - c.first_seen))} ago`),
+                el("div", { class: "run-row-meta" }, c.client_id),
+            ),
+            isMe
+                ? el("span")
+                : el("button", {
+                    class: "btn blue", type: "button",
+                    onclick: () => shareConfigTo(c.client_id, label),
+                  }, "Share Config"),
+        ));
+    }
+}
+
+async function setClientNickname() {
+    const input = document.getElementById("client-nickname");
+    const nick = (input.value || "").trim();
+    if (!nick) return;
+    await api("POST", "/api/clients/nickname", { nickname: nick });
+    input.value = "";
+    await loadClients();
+}
+
+async function shareConfigTo(targetId, targetLabel) {
+    const cfg = collectViewConfig();
+    const json = JSON.stringify(cfg);
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    const configUrl = `${location.origin}/?import-cfg=${b64}`;
+    const r = await api("POST", "/api/clients/send-config", { target: targetId, config_url: configUrl });
+    if (r.ok) {
+        setConfigStatus(`config sent to ${targetLabel}`, "ok");
+    } else {
+        setConfigStatus(`failed to send: ${r.error || "unknown"}`, "err");
+    }
+}
+
+async function checkClientInbox() {
+    const r = await api("GET", "/api/clients/inbox");
+    if (!r.ok || !r.messages || !r.messages.length) return;
+    for (const msg of r.messages) {
+        const accept = confirm(`${msg.from} shared their config with you. Apply it?`);
+        if (accept) {
+            const match = msg.config_url.match(/[?&]import-cfg=([A-Za-z0-9+/=]+)/);
+            if (match) {
+                const json = decodeURIComponent(escape(atob(match[1])));
+                const cfg = JSON.parse(json);
+                applyViewConfig(cfg);
+                setConfigStatus(`applied config from ${msg.from}`, "ok");
+            }
+        }
     }
 }
 
@@ -2691,6 +2773,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("cfg-save-btn").addEventListener("click", saveDashboardConfig);
     document.getElementById("cfg-load-btn").addEventListener("click", reloadDashboardConfig);
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);
+    document.getElementById("client-nick-btn").addEventListener("click", setClientNickname);
     document.getElementById("config-wrap").addEventListener("click", guardConfigOpen);
     document.getElementById("cfg-qr-show-btn").addEventListener("click", showConfigQR);
     document.getElementById("cfg-qr-scan-btn").addEventListener("click", scanConfigQR);
@@ -2786,5 +2869,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await searchRuns();
     await loadTasks();
     await loadCostSummary();
+    await loadClients();
     scheduleRefreshLoop();
+    setInterval(loadClients, 15000);
+    setInterval(checkClientInbox, 10000);
 });

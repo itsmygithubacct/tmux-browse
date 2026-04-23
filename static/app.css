@@ -12,6 +12,22 @@
     --orange: #f0883e;
     --card: #161b22;
     --card-2: #11161d;
+    --surface: #161b22;
+}
+:root.day-mode {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --dim: #656d76;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --blue: #0969da;
+    --green: #1a7f37;
+    --yellow: #9a6700;
+    --red: #cf222e;
+    --orange: #bc4c00;
+    --card: #f6f8fa;
+    --card-2: #eef1f5;
+    --surface: #f6f8fa;
 }
 * { box-sizing: border-box; }
 body {

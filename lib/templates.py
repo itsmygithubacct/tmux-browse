@@ -39,6 +39,10 @@ def render_index() -> str:
             <section class="config-card">
                 <div class="config-card-title">Behavior</div>
                 <label class="check-row">
+                    <input type="checkbox" id="cfg-day-mode" />
+                    <span>Day mode (light theme)</span>
+                </label>
+                <label class="check-row">
                     <input type="checkbox" id="cfg-auto-refresh" />
                     <span>Enable auto refresh</span>
                 </label>
@@ -266,6 +270,17 @@ def render_index() -> str:
             <button class="btn green" id="task-create-btn" type="button">Create</button>
         </div>
         <div id="tasks-pane" class="agent-grid"></div>
+    </div>
+</details>
+<details id="clients-wrap" class="config-pane">
+    <summary>Connected Endpoints (<span id="clients-count">0</span>)</summary>
+    <div class="config-body">
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center;flex-wrap:wrap">
+            <input type="text" id="client-nickname" placeholder="Set your nickname" style="flex:1;min-width:120px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+            <button class="btn green" id="client-nick-btn" type="button">Set</button>
+            <span class="dim" id="client-you-id" style="font-size:0.78rem"></span>
+        </div>
+        <div id="clients-pane" class="agent-grid"></div>
     </div>
 </details>
 <div id="agent-steps-modal" class="modal-backdrop" hidden>
