@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 — Agent operations platform
+## 0.6.0 — Agent operations platform
 
 ### Agent runtime foundations (Phase 0)
 
