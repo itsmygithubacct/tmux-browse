@@ -18,6 +18,7 @@ from pathlib import Path
 
 from . import (
     agent_budgets,
+    agent_hooks,
     agent_runner,
     agent_scheduler_lock,
     agent_store,
@@ -91,9 +92,15 @@ class Scheduler:
             # Check daily budgets before running any workflows
             daily = agent_budgets.check_daily_budget(agent_name)
             if daily["action"] == agent_budgets.ACTION_STOP:
+                agent_hooks.execute(
+                    "workflow_skipped", agent_name,
+                    error="daily budget exceeded")
                 continue
             global_d = agent_budgets.check_global_daily_budget()
             if global_d["action"] == agent_budgets.ACTION_STOP:
+                agent_hooks.execute(
+                    "workflow_skipped", agent_name,
+                    error="global daily budget exceeded")
                 continue
             workflows = spec.get("workflows") or []
             for idx, wf in enumerate(workflows):
@@ -141,3 +148,6 @@ class Scheduler:
                 interval_seconds=interval,
                 error=str(e),
             )
+            agent_hooks.execute(
+                "run_failed", agent_name,
+                run_id=run_id, prompt=prompt, error=str(e))

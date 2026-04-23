@@ -19,6 +19,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 from . import (
     agent_budgets,
     agent_costs,
+    agent_hooks,
     qr,
     agent_logs,
     agent_run_index,
@@ -716,6 +717,28 @@ class Handler(BaseHTTPRequestHandler):
             "port": ttyd_result.get("port"),
         })
 
+    def _h_agent_hooks_get(self, _parsed: ParseResult) -> None:
+        self._send_json({"ok": True, "hooks": agent_hooks.load()})
+
+    def _h_agent_hooks_post(self, _parsed: ParseResult, body: dict) -> None:
+        try:
+            saved = agent_hooks.save(body.get("hooks", body))
+            self._send_json({"ok": True, "hooks": saved})
+        except TBError as e:
+            self._send_tb_error(e)
+
+    def _h_agent_notifications(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        try:
+            limit = int(query.get("limit", ["50"])[0])
+        except (ValueError, TypeError):
+            limit = 50
+        self._send_json({
+            "ok": True,
+            "notifications": agent_hooks.read_notifications(
+                limit=max(1, min(200, limit))),
+        })
+
     def _h_agent_costs(self, parsed: ParseResult) -> None:
         q = parse_qs(parsed.query)
 
@@ -983,6 +1006,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
         "/api/agent-costs":        _h_agent_costs,
+        "/api/agent-hooks":        _h_agent_hooks_get,
+        "/api/agent-notifications": _h_agent_notifications,
         "/api/clients":            _h_clients,
         "/api/clients/inbox":      _h_clients_inbox,
         "/api/qr":                 _h_qr,
@@ -1002,6 +1027,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agents":             _h_agents_post,
         "/api/agents/remove":      _h_agents_remove,
         "/api/agent-workflows":    _h_agent_workflows_post,
+        "/api/agent-hooks":        _h_agent_hooks_post,
         "/api/agent-conversation":      _h_agent_conversation_open,
         "/api/agent-conversation-fork": _h_agent_conversation_fork,
         "/api/clients/nickname":   _h_clients_nickname,
