@@ -41,7 +41,7 @@ from . import (
     tls as tls_mod,
     ttyd,
 )
-from .errors import TBError
+from .errors import TBError, UsageError
 from .targeting import Target
 
 
@@ -648,6 +648,16 @@ class Handler(BaseHTTPRequestHandler):
             api_key = None
         elif not api_key.strip():
             api_key = None
+
+        def _optional_int(field: str) -> int | None:
+            value = payload.get(field)
+            if value is None:
+                return None
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                raise UsageError(f"{field} must be an integer")
+
         try:
             row = agent_store.save_agent(
                 name,
@@ -657,8 +667,8 @@ class Handler(BaseHTTPRequestHandler):
                 provider=(payload.get("provider") or "").strip() or None,
                 wire_api=(payload.get("wire_api") or "").strip() or None,
                 sandbox=(payload.get("sandbox") or "").strip() or None,
-                token_budget=int(payload["token_budget"]) if payload.get("token_budget") is not None else None,
-                daily_token_budget=int(payload["daily_token_budget"]) if payload.get("daily_token_budget") is not None else None,
+                token_budget=_optional_int("token_budget"),
+                daily_token_budget=_optional_int("daily_token_budget"),
             )
         except TBError as e:
             self._send_tb_error(e)

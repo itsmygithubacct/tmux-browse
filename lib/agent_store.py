@@ -59,7 +59,7 @@ _BUILTIN_CATALOG: dict[str, dict[str, str]] = {
         "label": "MiniMax",
         "provider": "minimax",
         "model": "MiniMax-M2.7",
-        "base_url": "https://api.minimaxi.com/v1",
+        "base_url": "https://api.minimaxi.chat/v1",
         "wire_api": "openai-chat",
     },
 }
