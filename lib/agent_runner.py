@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_costs, agent_logs, agent_providers, agent_run_index
+from . import agent_budgets, agent_costs, agent_logs, agent_providers, agent_run_index
 from .agent_runs import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -255,6 +255,13 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                 for key, val in result.usage.items():
                     if isinstance(val, (int, float)):
                         cumulative_usage[key] = cumulative_usage.get(key, 0) + int(val)
+            # Per-run budget enforcement
+            run_budget = int(agent.get("token_budget") or 0)
+            if run_budget > 0:
+                budget_check = agent_budgets.check_run_budget(
+                    agent["name"], cumulative_usage, run_budget)
+                if budget_check["action"] == agent_budgets.ACTION_STOP:
+                    raise TmuxFailed(budget_check["reason"])
             try:
                 action = _extract_json(raw)
             except UsageError as e:

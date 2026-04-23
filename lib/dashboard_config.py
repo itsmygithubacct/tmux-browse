@@ -18,6 +18,7 @@ DEFAULTS: dict[str, Any] = {
     "refresh_seconds": 5,
     "hot_loop_idle_seconds": 5,
     "agent_max_steps": 20,
+    "global_daily_token_budget": 0,
     "launch_on_expand": True,
     "default_ttyd_height_vh": 70,
     "default_ttyd_min_height_px": 200,
@@ -69,6 +70,7 @@ _INT_RANGES = {
     "agent_max_steps": (1, 1000),
     "default_ttyd_height_vh": (20, 95),
     "default_ttyd_min_height_px": (120, 900),
+    "global_daily_token_budget": (0, 100_000_000),
 }
 
 

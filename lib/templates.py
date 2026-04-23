@@ -58,6 +58,10 @@ def render_index() -> str:
                     <span>Default agent step budget</span>
                     <input type="number" id="cfg-agent-max-steps" min="1" max="1000" step="1" />
                 </label>
+                <label class="field">
+                    <span>Global daily token budget (0 = unlimited)</span>
+                    <input type="number" id="cfg-global-daily-budget" min="0" step="100000" />
+                </label>
                 <label class="check-row">
                     <input type="checkbox" id="cfg-launch-on-expand" />
                     <span>Launch ttyd when a pane opens</span>
@@ -173,6 +177,14 @@ def render_index() -> str:
                         <option value="host">host (default)</option>
                         <option value="worktree">worktree (isolated)</option>
                     </select>
+                </label>
+                <label class="field">
+                    <span>Per-run token budget (0 = unlimited)</span>
+                    <input type="number" id="cfg-agent-token-budget" min="0" step="1000" />
+                </label>
+                <label class="field">
+                    <span>Daily token budget (0 = unlimited)</span>
+                    <input type="number" id="cfg-agent-daily-budget" min="0" step="10000" />
                 </label>
                 <label class="field">
                     <span>API key</span>

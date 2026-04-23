@@ -17,6 +17,7 @@ import traceback
 from pathlib import Path
 
 from . import (
+    agent_budgets,
     agent_runner,
     agent_scheduler_lock,
     agent_store,
@@ -86,6 +87,13 @@ class Scheduler:
             if self._stop.is_set():
                 return
             if not spec.get("enabled"):
+                continue
+            # Check daily budgets before running any workflows
+            daily = agent_budgets.check_daily_budget(agent_name)
+            if daily["action"] == agent_budgets.ACTION_STOP:
+                continue
+            global_d = agent_budgets.check_global_daily_budget()
+            if global_d["action"] == agent_budgets.ACTION_STOP:
                 continue
             workflows = spec.get("workflows") or []
             for idx, wf in enumerate(workflows):
