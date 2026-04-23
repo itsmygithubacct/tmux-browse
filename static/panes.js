@@ -1,5 +1,19 @@
 // panes.js — session panes, layout, hot buttons, idle alerts, modals, refresh
 
+async function launchCodingSession(label, cmd) {
+    const ts = Date.now().toString(36);
+    const name = `${label.toLowerCase().replace(/\s+/g, "-")}-${ts}`;
+    const cwd = state.config.launch_cwd || undefined;
+    const r = await api("POST", "/api/session/new", { name, cmd, cwd, launch_ttyd: true });
+    if (r.ok && r.port) {
+        window.open(ttydUrl(r.port), "_blank", "noopener");
+    } else if (r.ok) {
+        await refresh();
+    } else {
+        alert(r.error || "launch failed");
+    }
+}
+
 async function resizePane(session, cols) {
     await api("POST", "/api/session/resize", { session, cols });
     const rec = state.nodes.get(session);
@@ -1305,6 +1319,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("raw-btn").addEventListener("click", openRawTtyd);
     document.getElementById("restart-btn").addEventListener("click", restartDashboard);
     document.getElementById("os-restart-btn").addEventListener("click", restartDashboard);
+    document.getElementById("launch-claude-btn").addEventListener("click", () => launchCodingSession("claude", "claude"));
+    document.getElementById("launch-claude-yolo-btn").addEventListener("click", () => launchCodingSession("claude-yolo", "claude --dangerously-skip-permissions"));
+    document.getElementById("launch-codex-btn").addEventListener("click", () => launchCodingSession("codex", "codex"));
+    document.getElementById("launch-codex-yolo-btn").addEventListener("click", () => launchCodingSession("codex-yolo", "codex --full-auto"));
+    document.getElementById("launch-kimi-btn").addEventListener("click", () => launchCodingSession("kimi", "kimi-code"));
+    document.getElementById("launch-kimi-yolo-btn").addEventListener("click", () => launchCodingSession("kimi-yolo", "kimi-code --yolo"));
     document.getElementById("cfg-save-btn").addEventListener("click", saveDashboardConfig);
     document.getElementById("cfg-load-btn").addEventListener("click", reloadDashboardConfig);
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);

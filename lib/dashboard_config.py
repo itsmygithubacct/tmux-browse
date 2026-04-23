@@ -32,6 +32,13 @@ DEFAULTS: dict[str, Any] = {
     "show_topbar_refresh": True,
     "show_topbar_restart": True,
     "show_topbar_os_restart": False,
+    "show_launch_claude": False,
+    "show_launch_claude_yolo": False,
+    "show_launch_codex": False,
+    "show_launch_codex_yolo": False,
+    "show_launch_kimi": False,
+    "show_launch_kimi_yolo": False,
+    "launch_cwd": "",
     "show_topbar_status": True,
     "show_summary_row": True,
     "show_summary_name": True,
@@ -115,6 +122,7 @@ def normalize(raw: Any) -> dict[str, Any]:
     for key, (lo, hi) in _INT_RANGES.items():
         out[key] = _coerce_int(raw.get(key), DEFAULTS[key], lo, hi)
     out["idle_sound"] = _coerce_choice(raw.get("idle_sound"), DEFAULTS["idle_sound"], IDLE_SOUND_CHOICES)
+    out["launch_cwd"] = str(raw.get("launch_cwd") or "").strip()
     return out
 
 

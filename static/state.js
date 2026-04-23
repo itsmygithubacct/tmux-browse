@@ -27,6 +27,13 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_topbar_refresh: true,
     show_topbar_restart: true,
     show_topbar_os_restart: false,
+    show_launch_claude: false,
+    show_launch_claude_yolo: false,
+    show_launch_codex: false,
+    show_launch_codex_yolo: false,
+    show_launch_kimi: false,
+    show_launch_kimi_yolo: false,
+    launch_cwd: "",
     show_topbar_status: true,
     show_summary_row: true,
     show_summary_name: true,
@@ -142,6 +149,7 @@ function normalizeDashboardConfig(value) {
     }
     cfg.idle_sound = IDLE_SOUND_CHOICES.includes(raw.idle_sound)
         ? raw.idle_sound : DASHBOARD_CONFIG_DEFAULTS.idle_sound;
+    cfg.launch_cwd = typeof raw.launch_cwd === "string" ? raw.launch_cwd.trim() : "";
     return cfg;
 }
 

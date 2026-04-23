@@ -20,6 +20,13 @@ function configFieldMap() {
         show_topbar_refresh: document.getElementById("cfg-show-topbar-refresh"),
         show_topbar_restart: document.getElementById("cfg-show-topbar-restart"),
         show_topbar_os_restart: document.getElementById("cfg-show-topbar-os-restart"),
+        show_launch_claude: document.getElementById("cfg-show-launch-claude"),
+        show_launch_claude_yolo: document.getElementById("cfg-show-launch-claude-yolo"),
+        show_launch_codex: document.getElementById("cfg-show-launch-codex"),
+        show_launch_codex_yolo: document.getElementById("cfg-show-launch-codex-yolo"),
+        show_launch_kimi: document.getElementById("cfg-show-launch-kimi"),
+        show_launch_kimi_yolo: document.getElementById("cfg-show-launch-kimi-yolo"),
+        launch_cwd: document.getElementById("cfg-launch-cwd"),
         show_summary_row: document.getElementById("cfg-show-summary-row"),
         show_summary_name: document.getElementById("cfg-show-summary-name"),
         show_summary_arrow: document.getElementById("cfg-show-summary-arrow"),
@@ -83,6 +90,14 @@ function applyTopbarConfig() {
     setVisible(document.getElementById("restart-btn"), cfg.show_topbar_restart);
     setVisible(document.getElementById("os-restart-btn"), cfg.show_topbar_os_restart);
 
+    // Launcher buttons
+    setVisible(document.getElementById("launch-claude-btn"), cfg.show_launch_claude);
+    setVisible(document.getElementById("launch-claude-yolo-btn"), cfg.show_launch_claude_yolo);
+    setVisible(document.getElementById("launch-codex-btn"), cfg.show_launch_codex);
+    setVisible(document.getElementById("launch-codex-yolo-btn"), cfg.show_launch_codex_yolo);
+    setVisible(document.getElementById("launch-kimi-btn"), cfg.show_launch_kimi);
+    setVisible(document.getElementById("launch-kimi-yolo-btn"), cfg.show_launch_kimi_yolo);
+
     // Status text
     const statusNode = document.getElementById("topbar-status");
     if (statusNode) {
@@ -119,7 +134,11 @@ function applyBodyActionsConfig(rec) {
 const TOPBAR_TOGGLE_KEYS = [
     "show_topbar_title", "show_topbar_count", "show_topbar_new_session",
     "show_topbar_raw_ttyd", "show_topbar_refresh", "show_topbar_restart",
-    "show_topbar_os_restart", "show_topbar_status",
+    "show_topbar_os_restart",
+    "show_launch_claude", "show_launch_claude_yolo",
+    "show_launch_codex", "show_launch_codex_yolo",
+    "show_launch_kimi", "show_launch_kimi_yolo",
+    "show_topbar_status",
 ];
 const SUMMARY_TOGGLE_KEYS = [
     "show_attached_badge", "show_window_badge", "show_port_badge",

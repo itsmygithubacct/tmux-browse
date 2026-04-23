@@ -20,6 +20,12 @@ def render_index() -> str:
     <h1>tmux sessions <span class="dim" id="count" style="font-size:0.85rem"></span></h1>
     <input type="text" id="new-name" placeholder="new session name" />
     <button class="btn green" id="new-btn">New session</button>
+    <button class="btn" id="launch-claude-btn" title="Launch Claude Code" hidden>Claude</button>
+    <button class="btn" id="launch-claude-yolo-btn" title="Launch Claude --dangerously-skip-permissions" hidden>Claude YOLO</button>
+    <button class="btn" id="launch-codex-btn" title="Launch Codex" hidden>Codex</button>
+    <button class="btn" id="launch-codex-yolo-btn" title="Launch Codex --full-auto" hidden>Codex YOLO</button>
+    <button class="btn" id="launch-kimi-btn" title="Launch Kimi Code" hidden>Kimi</button>
+    <button class="btn" id="launch-kimi-yolo-btn" title="Launch Kimi Code --yolo" hidden>Kimi YOLO</button>
     <button class="btn blue" id="raw-btn" title="open a standalone ttyd shell not attached to tmux">Raw ttyd</button>
     <button class="btn blue" id="refresh-btn">Refresh</button>
     <span class="dim" id="topbar-status" style="margin-left:auto;font-size:0.8rem">
@@ -108,6 +114,16 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-refresh" /><span>Refresh button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-restart" /><span>Restart button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-os-restart" /><span>Restart icon (&#x23FB;)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-claude" /><span>Claude launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-claude-yolo" /><span>Claude YOLO launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-codex" /><span>Codex launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-codex-yolo" /><span>Codex YOLO launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi" /><span>Kimi launcher</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi-yolo" /><span>Kimi YOLO launcher</span></label>
+                <label class="field">
+                    <span>Launcher working directory</span>
+                    <input type="text" id="cfg-launch-cwd" placeholder="e.g. ~/myproject" />
+                </label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-status" /><span>Status text</span></label>
             </section>
             <section class="config-card">
