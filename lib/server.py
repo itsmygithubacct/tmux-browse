@@ -686,6 +686,47 @@ class Handler(BaseHTTPRequestHandler):
         except TBError as e:
             self._send_tb_error(e)
 
+    def _h_config_lock_status(self, _parsed: ParseResult) -> None:
+        has_lock = config.CONFIG_LOCK_FILE.exists() and config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
+        self._send_json({"ok": True, "locked": bool(has_lock)})
+
+    def _h_config_lock_set(self, _parsed: ParseResult, body: dict) -> None:
+        password = (body.get("password") or "").strip()
+        if not password:
+            # Clear the lock
+            try:
+                config.CONFIG_LOCK_FILE.unlink(missing_ok=True)
+            except OSError:
+                pass
+            self._send_json({"ok": True, "locked": False})
+            return
+        import hashlib
+        hashed = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        config.ensure_dirs()
+        config.CONFIG_LOCK_FILE.write_text(hashed + "\n", encoding="utf-8")
+        try:
+            config.CONFIG_LOCK_FILE.chmod(0o600)
+        except OSError:
+            pass
+        self._send_json({"ok": True, "locked": True})
+
+    def _h_config_lock_verify(self, _parsed: ParseResult, body: dict) -> None:
+        password = (body.get("password") or "").strip()
+        if not config.CONFIG_LOCK_FILE.exists():
+            self._send_json({"ok": True, "unlocked": True})
+            return
+        stored = config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
+        if not stored:
+            self._send_json({"ok": True, "unlocked": True})
+            return
+        import hashlib
+        attempt = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        import hmac
+        if hmac.compare_digest(stored, attempt):
+            self._send_json({"ok": True, "unlocked": True})
+        else:
+            self._send_json({"ok": False, "error": "wrong password"}, status=403)
+
     def _h_tasks_get(self, _parsed: ParseResult) -> None:
         try:
             self._send_json({
@@ -819,6 +860,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
         "/api/agent-costs":        _h_agent_costs,
+        "/api/config-lock":        _h_config_lock_status,
         "/api/tasks":              _h_tasks_get,
         "/health":                 _h_health,
     })
@@ -836,6 +878,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-workflows":    _h_agent_workflows_post,
         "/api/agent-conversation":      _h_agent_conversation_open,
         "/api/agent-conversation-fork": _h_agent_conversation_fork,
+        "/api/config-lock":        _h_config_lock_set,
+        "/api/config-lock/verify": _h_config_lock_verify,
         "/api/tasks":              _h_tasks_create,
         "/api/tasks/update":       _h_tasks_update,
         "/api/tasks/launch":       _h_tasks_launch,
