@@ -251,6 +251,7 @@ tmux-browse/
 │   ├── agent_scheduler.py / agent_scheduler_lock.py  # background workflow engine
 │   ├── agent_workflows.py / agent_workflow_runs.py   # workflow config + history
 │   ├── tasks.py / worktrees.py                     # optional task/worktree mode
+│   ├── qr.py                                       # pure-Python QR code generator
 │   ├── ttyd_installer.py
 │   ├── targeting.py / errors.py / output.py       # tb primitives
 │   ├── exec_runner.py                             # tb exec strategies
@@ -258,8 +259,11 @@ tmux-browse/
 │       ├── agent.py                               # tb agent subcommands
 │       ├── web.py / bulk.py / lifecycle.py
 │       └── read.py / write.py / observe.py
-├── static/
-│   ├── app.css / app.js / favicon.svg             # dashboard frontend assets
+├── static/                                        # dashboard frontend assets
+│   ├── app.css / favicon.svg
+│   ├── util.js / state.js / config.js / audio.js  # core JS modules
+│   ├── agents.js / tasks.js / runs.js             # feature JS modules
+│   ├── phone-keys.js / sharing.js / panes.js      # UI JS modules
 ├── bin/
 │   └── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
 ├── tests/                    # 304 stdlib unittest tests
