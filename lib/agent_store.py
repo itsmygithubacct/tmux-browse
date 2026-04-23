@@ -183,6 +183,14 @@ def _normalize_agent_meta(name: str, meta: dict[str, Any]) -> dict[str, Any]:
     out["base_url"] = base_url
     sandbox = (out.get("sandbox") or "").strip().lower()
     out["sandbox"] = sandbox if sandbox in SUPPORTED_SANDBOX_MODES else "host"
+    try:
+        out["token_budget"] = max(0, int(out.get("token_budget") or 0))
+    except (TypeError, ValueError):
+        out["token_budget"] = 0
+    try:
+        out["daily_token_budget"] = max(0, int(out.get("daily_token_budget") or 0))
+    except (TypeError, ValueError):
+        out["daily_token_budget"] = 0
     return out
 
 
@@ -220,7 +228,9 @@ def save_agent(name: str, *, api_key: str | None = None,
                base_url: str | None = None,
                provider: str | None = None,
                wire_api: str | None = None,
-               sandbox: str | None = None) -> dict[str, Any]:
+               sandbox: str | None = None,
+               token_budget: int | None = None,
+               daily_token_budget: int | None = None) -> dict[str, Any]:
     name = _validate_name(name)
     defaults = load_catalog().get(name, {})
     agents = _load_json(AGENTS_FILE, default={})
@@ -233,6 +243,10 @@ def save_agent(name: str, *, api_key: str | None = None,
         "base_url": (base_url or existing.get("base_url") or defaults.get("base_url") or "").rstrip("/"),
         "wire_api": wire_api or existing.get("wire_api") or defaults.get("wire_api", "openai-chat"),
         "sandbox": sandbox or existing.get("sandbox") or "host",
+        "token_budget": token_budget if token_budget is not None
+            else existing.get("token_budget", 0),
+        "daily_token_budget": daily_token_budget if daily_token_budget is not None
+            else existing.get("daily_token_budget", 0),
     }
     entry = _apply_builtin_constraints(name, entry)
     if not entry["model"]:

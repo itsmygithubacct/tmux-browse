@@ -6,6 +6,7 @@ function configFieldMap() {
         refresh_seconds: document.getElementById("cfg-refresh-seconds"),
         hot_loop_idle_seconds: document.getElementById("cfg-hot-loop-idle-seconds"),
         agent_max_steps: document.getElementById("cfg-agent-max-steps"),
+        global_daily_token_budget: document.getElementById("cfg-global-daily-budget"),
         launch_on_expand: document.getElementById("cfg-launch-on-expand"),
         default_ttyd_height_vh: document.getElementById("cfg-default-height"),
         default_ttyd_min_height_px: document.getElementById("cfg-min-height"),

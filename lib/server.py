@@ -17,6 +17,7 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
+    agent_budgets,
     agent_costs,
     qr,
     agent_logs,
@@ -352,6 +353,9 @@ class Handler(BaseHTTPRequestHandler):
                     row["status"] = st["status"]
                     row["status_reason"] = st["reason"]
                     row["last_activity_ts"] = st["last_ts"]
+                budget = agent_budgets.get_budget_status(name)
+                row["budget_status"] = budget["worst_action"]
+                row["budget_daily"] = budget["daily"]
             self._send_json({
                 "ok": True,
                 "agents": agents,
@@ -605,6 +609,8 @@ class Handler(BaseHTTPRequestHandler):
                 provider=(payload.get("provider") or "").strip() or None,
                 wire_api=(payload.get("wire_api") or "").strip() or None,
                 sandbox=(payload.get("sandbox") or "").strip() or None,
+                token_budget=int(payload["token_budget"]) if payload.get("token_budget") is not None else None,
+                daily_token_budget=int(payload["daily_token_budget"]) if payload.get("daily_token_budget") is not None else None,
             )
         except TBError as e:
             self._send_tb_error(e)
@@ -727,12 +733,14 @@ class Handler(BaseHTTPRequestHandler):
                 return None
 
         try:
+            cfg = dashboard_config.load()
             self._send_json({
                 "ok": True,
                 "per_agent": agent_costs.per_agent_totals(
                     since=_int("since"), until=_int("until")),
                 "daily": agent_costs.daily_totals(
                     since=_int("since"), until=_int("until")),
+                "global_daily_budget": int(cfg.get("global_daily_token_budget") or 0),
             })
         except TBError as e:
             self._send_tb_error(e)

@@ -125,6 +125,8 @@ class AgentHandlerTests(unittest.TestCase):
             provider="openai",
             wire_api="openai-chat",
             sandbox=None,
+            token_budget=None,
+            daily_token_budget=None,
         )
 
     def test_agents_post_maps_usage_error_to_400(self):
