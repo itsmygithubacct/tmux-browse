@@ -511,6 +511,21 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True})
 
+    def _h_session_key(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        keys = body.get("keys")
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        if not isinstance(keys, list) or not keys:
+            self._send_json({"ok": False, "error": "missing 'keys' (list of tmux key names)"}, status=400)
+            return
+        ok, err = sessions.send_keys(Target(session=name), *[str(k) for k in keys])
+        if not ok:
+            self._send_json({"ok": False, "error": err}, status=400)
+            return
+        self._send_json({"ok": True})
+
     def _h_dashboard_config_post(self, _parsed: ParseResult, body: dict) -> None:
         payload = body.get("config", body)
         saved = dashboard_config.save(payload)
@@ -678,6 +693,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/session/new":        _h_session_new,
         "/api/session/scroll":     _h_session_scroll,
         "/api/session/type":       _h_session_type,
+        "/api/session/key":        _h_session_key,
         "/api/dashboard-config":   _h_dashboard_config_post,
         "/api/agents":             _h_agents_post,
         "/api/agents/remove":      _h_agents_remove,

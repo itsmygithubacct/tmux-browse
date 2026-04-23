@@ -101,6 +101,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-stop" /><span>Stop ttyd button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-kill" /><span>Kill button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-send-bar" /><span>Send bar</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-body-phone-keys" /><span>Phone keyboard addons</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-body-hot-buttons" /><span>Hot Buttons manager</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-hot-loop-toggles" /><span>Hot-button loop toggles</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-footer" /><span>Footer metadata</span></label>
