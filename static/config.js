@@ -52,6 +52,7 @@ function configFieldMap() {
         show_wc_minimize: document.getElementById("cfg-show-wc-minimize"),
         show_wc_hide_icon: document.getElementById("cfg-show-wc-hide-icon"),
         show_wc_log_icon: document.getElementById("cfg-show-wc-log-icon"),
+        show_wc_idle_icon: document.getElementById("cfg-show-wc-idle-icon"),
         show_body_launch: document.getElementById("cfg-show-body-launch"),
         show_body_stop: document.getElementById("cfg-show-body-stop"),
         show_body_kill: document.getElementById("cfg-show-body-kill"),
@@ -153,7 +154,7 @@ const SUMMARY_TOGGLE_KEYS = [
     "show_idle_text", "show_idle_alert_button", "show_summary_open",
     "show_summary_log", "show_summary_scroll", "show_summary_split",
     "show_summary_hide", "show_summary_reorder",
-    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon",
+    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon",
 ];
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
@@ -226,10 +227,11 @@ function scheduleWorkflowLoop() {
 
 function applyDashboardConfigToPane(rec) {
     const cfg = state.config;
-    const idleVisible = cfg.show_idle_text || cfg.show_idle_alert_button;
+    const idleVisible = cfg.show_idle_text || cfg.show_idle_alert_button || cfg.show_wc_idle_icon;
     setVisible(rec.idleWrap, idleVisible, "inline-flex");
     setVisible(rec.idle, cfg.show_idle_text, "");
     setVisible(rec.idleAlertBtn, cfg.show_idle_alert_button, "");
+    setVisible(rec.idleIconBtn, cfg.show_wc_idle_icon, "inline-flex");
     setVisible(rec.summaryTabLink, cfg.show_summary_open && rec.summaryTabLink.dataset.available === "1", "");
     setVisible(rec.logLink, cfg.show_summary_log, "");
     setVisible(rec.scrollBtn, cfg.show_summary_scroll, "");

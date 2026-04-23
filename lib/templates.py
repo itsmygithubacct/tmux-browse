@@ -142,6 +142,14 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-window-badge" /><span>Window count badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-port-badge" /><span>Running ttyd port badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-idle-text" /><span>Idle text</span></label>
+                <div class="dim" style="font-size:0.72rem;margin:0.3rem 0 0.1rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent)">Icon style pane controls</div>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-close" /><span>Close (x)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-maximize" /><span>Maximize</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-minimize" /><span>Minimize</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-hide-icon" /><span>Hide (incognito)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-log-icon" /><span>Log (document)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-idle-icon" /><span>Idle alert (eye)</span></label>
+                <div class="dim" style="font-size:0.72rem;margin:0.3rem 0 0.1rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent)">Textual pane controls</div>
                 <label class="check-row"><input type="checkbox" id="cfg-show-idle-alert-button" /><span>Idle Alert button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-open" /><span>Open button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-log" /><span>Log button</span></label>
@@ -149,11 +157,6 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-split" /><span>Side-by-side button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-hide" /><span>Hide button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-reorder" /><span>Reorder pad</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-wc-close" /><span>Close button (x)</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-wc-maximize" /><span>Maximize button</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-wc-minimize" /><span>Minimize button</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-wc-hide-icon" /><span>Hide icon button</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-wc-log-icon" /><span>Log icon button</span></label>
             </section>
             <section class="config-card">
                 <div class="config-card-title">Expanded Pane <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-body">All On</button></div>
