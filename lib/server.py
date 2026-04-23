@@ -18,6 +18,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
     agent_costs,
+    qr,
     agent_logs,
     agent_run_index,
     agent_scheduler,
@@ -686,6 +687,25 @@ class Handler(BaseHTTPRequestHandler):
         except TBError as e:
             self._send_tb_error(e)
 
+    def _h_qr(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        data = (query.get("data", [""])[0] or "").strip()
+        if not data:
+            self._send_json({"ok": False, "error": "missing 'data'"}, status=400)
+            return
+        try:
+            svg = qr.generate_svg(data)
+        except ValueError as e:
+            self._send_json({"ok": False, "error": str(e)}, status=400)
+            return
+        body = svg.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _h_config_lock_status(self, _parsed: ParseResult) -> None:
         has_lock = config.CONFIG_LOCK_FILE.exists() and config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
         self._send_json({"ok": True, "locked": bool(has_lock)})
@@ -860,6 +880,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
         "/api/agent-costs":        _h_agent_costs,
+        "/api/qr":                 _h_qr,
         "/api/config-lock":        _h_config_lock_status,
         "/api/tasks":              _h_tasks_get,
         "/health":                 _h_health,
