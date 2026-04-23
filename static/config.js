@@ -19,6 +19,7 @@ function configFieldMap() {
         show_topbar_raw_ttyd: document.getElementById("cfg-show-topbar-raw-ttyd"),
         show_topbar_refresh: document.getElementById("cfg-show-topbar-refresh"),
         show_topbar_restart: document.getElementById("cfg-show-topbar-restart"),
+        show_topbar_os_restart: document.getElementById("cfg-show-topbar-os-restart"),
         show_summary_row: document.getElementById("cfg-show-summary-row"),
         show_summary_name: document.getElementById("cfg-show-summary-name"),
         show_summary_arrow: document.getElementById("cfg-show-summary-arrow"),
@@ -80,6 +81,7 @@ function applyTopbarConfig() {
     setVisible(document.getElementById("raw-btn"), cfg.show_topbar_raw_ttyd);
     setVisible(document.getElementById("refresh-btn"), cfg.show_topbar_refresh);
     setVisible(document.getElementById("restart-btn"), cfg.show_topbar_restart);
+    setVisible(document.getElementById("os-restart-btn"), cfg.show_topbar_os_restart);
 
     // Status text
     const statusNode = document.getElementById("topbar-status");
@@ -117,7 +119,7 @@ function applyBodyActionsConfig(rec) {
 const TOPBAR_TOGGLE_KEYS = [
     "show_topbar_title", "show_topbar_count", "show_topbar_new_session",
     "show_topbar_raw_ttyd", "show_topbar_refresh", "show_topbar_restart",
-    "show_topbar_status",
+    "show_topbar_os_restart", "show_topbar_status",
 ];
 const SUMMARY_TOGGLE_KEYS = [
     "show_attached_badge", "show_window_badge", "show_port_badge",
