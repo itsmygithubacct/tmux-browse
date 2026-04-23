@@ -191,9 +191,9 @@ def render_index() -> str:
             </div>
         </details>
         <details style="margin-top:0.6rem">
-            <summary class="dim" style="cursor:pointer;font-size:0.85rem">Agent Config</summary>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;margin-top:0.5rem">
-                <details class="config-card" open>
+            <summary class="dim" style="cursor:pointer;font-size:0.85rem">Agent Settings</summary>
+            <div style="display:grid;gap:0.5rem;margin-top:0.5rem">
+                <details class="config-card">
                     <summary class="config-card-title" style="cursor:pointer">Event Hooks</summary>
                     <div style="margin-top:0.4rem">
                         <div class="dim" style="font-size:0.78rem;margin-bottom:0.5rem">
@@ -207,7 +207,7 @@ def render_index() -> str:
                         </div>
                     </div>
                 </details>
-                <details class="config-card" open>
+                <details class="config-card">
                     <summary class="config-card-title" style="cursor:pointer">Agent</summary>
                     <div style="margin-top:0.4rem">
                         <label class="field">
