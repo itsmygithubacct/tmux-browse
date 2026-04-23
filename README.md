@@ -13,7 +13,7 @@ Both share the same Python library. Stdlib-only (`http.server`, `urllib`,
 `subprocess`, `ssl`) — no pip dependencies; the only external is `ttyd`
 itself, which the CLI can install for you.
 
-![tmux-browse dashboard](tmux_browse.png)
+![tmux-browse dashboard](docs/images/tmux_browse.png)
 
 [ttyd]: https://github.com/tsl0922/ttyd
 
@@ -61,7 +61,7 @@ useful once at least one tmux session exists.
 
 ## Drive an agent from the terminal, watch it in the browser
 
-![Driving a coding agent from one pane, output in another](tmux_browse_2.png)
+![Driving a coding agent from one pane, output in another](docs/images/tmux_browse_2.png)
 
 Because `tb` exposes tmux as a CLI, an agent can use it as a tool: you run
 the agent in one session and tell it to drive a coding session (claude,
@@ -142,6 +142,30 @@ Phones will warn about the self-signed cert — accept once and it's pinned.
 For a stricter setup (public network, multiple users, untrusted devices),
 front the dashboard with an authenticating reverse proxy or reach it over
 a VPN / SSH port-forward instead.
+
+## Completely configurable look
+
+![Config pane with visibility toggles](docs/images/config.png)
+
+Every button, badge, and metadata element in the dashboard can be toggled
+on or off from the **Config** pane — no code changes, no restart. Two
+groups of checkboxes control what appears:
+
+- **Summary Row** — attached-clients badge, window count, port badge,
+  idle text, idle alert button, Open/Log/Scroll/Split/Hide buttons,
+  reorder pad
+- **Expanded Pane** — Launch, Stop ttyd, Kill buttons, send bar, phone
+  keyboard addons, hot buttons, loop toggles, footer metadata, inline
+  status messages, top-bar status text
+
+Each group has an **All On / All Off** toggle in the top right corner.
+Changes preview live and persist to
+`~/.tmux-browse/dashboard-config.json` when you hit **Save Config**.
+The same file is editable from the CLI with `tmux-browse config`.
+
+The defaults ship with a clean, minimal view — most action buttons
+hidden, auto-refresh off — so a fresh install isn't cluttered. Turn on
+exactly what you need.
 
 ## Ports
 

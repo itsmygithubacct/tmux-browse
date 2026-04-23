@@ -4,7 +4,7 @@ Why the project is shaped the way it is. Everything here is a deliberate
 choice driven by the scope: "a single-host tmux toolkit that stays out of
 the way."
 
-![tmux-browse architecture overview](../tmux_browse_arch.png)
+![tmux-browse architecture overview](images/tmux_browse_arch.png)
 
 ## Principles
 
