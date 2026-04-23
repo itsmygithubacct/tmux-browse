@@ -189,6 +189,18 @@ def render_index() -> str:
         <div id="runs-pane" class="agent-grid"></div>
     </div>
 </details>
+<details id="tasks-wrap" class="config-pane">
+    <summary>Tasks (<span id="tasks-count">0</span>)</summary>
+    <div class="config-body">
+        <div class="task-create-bar">
+            <input type="text" id="task-title" placeholder="Task title" />
+            <input type="text" id="task-repo" placeholder="Repo path (e.g. ~/myrepo)" />
+            <select id="task-agent"><option value="">No agent</option></select>
+            <button class="btn green" id="task-create-btn" type="button">Create</button>
+        </div>
+        <div id="tasks-pane" class="agent-grid"></div>
+    </div>
+</details>
 <div id="agent-steps-modal" class="modal-backdrop" hidden>
     <div class="modal-card hot-modal" role="dialog" aria-modal="true" aria-labelledby="agent-steps-modal-title">
         <div class="modal-head">
