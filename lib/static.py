@@ -33,5 +33,19 @@ def _load(name: str) -> str:
 
 
 CSS: str = _load("app.css")
-JS: str = _load("app.js")
+
+_JS_FILES = [
+    "util.js",
+    "state.js",
+    "config.js",
+    "audio.js",
+    "agents.js",
+    "tasks.js",
+    "runs.js",
+    "phone-keys.js",
+    "sharing.js",
+    "panes.js",
+]
+JS: str = "\n".join(_load(f) for f in _JS_FILES)
+
 FAVICON_SVG: str = _load("favicon.svg")
