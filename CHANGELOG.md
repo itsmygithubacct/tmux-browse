@@ -1,5 +1,113 @@
 # Changelog
 
+## 0.5.0 — Agent operations platform
+
+### Agent runtime foundations (Phase 0)
+
+- **`run_id` on every agent run.** Each `run_agent` call gets a unique,
+  time-sortable identifier (8-hex epoch + 12-hex random).
+- **Structured provider results.** `ProviderResult` dataclass replaces
+  bare-string returns from provider adapters — carries `content`,
+  `usage` (token counts), and `raw_model`.
+- **Lifecycle log entries.** Every run emits `run_started`,
+  `run_completed`, `run_failed`, or `run_rate_limited` to the agent log
+  with schema version tagging.
+- **Persistent conversations.** REPL sessions now write turns to
+  append-only JSONL files under `~/.tmux-browse/agent-conversations/`.
+  Resume on restart; `/history`, `/clear`, `/new` commands in the REPL.
+
+### Live agent status (Phase 1)
+
+- **Status derivation engine.** New `agent_status.py` infers per-agent
+  status (running / idle / error / rate\_limited / workflow\_paused)
+  from the latest log entry and workflow config.
+- **Dashboard badges.** Each agent card in the Agents pane shows a
+  colored status badge, reason text, and relative last-activity time.
+- **Status in API.** `GET /api/agents` now includes `status`,
+  `status_reason`, and `last_activity_ts` per agent.
+
+### Server-side workflow scheduler (Phase 2)
+
+- **Background scheduler.** A daemon thread in the dashboard server
+  evaluates due workflows every 10 s and runs them via `run_agent`.
+  Browser no longer drives workflow execution — it observes only.
+- **Scheduler lock.** PID-based file lock prevents duplicate dashboard
+  processes from both executing workflows.
+- **Workflow history.** Append-only JSONL run log plus atomic per-workflow
+  state file (last run, next run, failure count).
+- **New endpoints.** `GET /api/agent-workflow-state`,
+  `GET /api/agent-workflow-runs`.
+
+### Searchable run index (Phase 3)
+
+- **Run index.** Completed and failed runs are indexed in
+  `~/.tmux-browse/agent-run-index.jsonl` with prompt/message previews,
+  step counts, duration, and tool verbs used.
+- **Filtered search.** `GET /api/agent-runs` supports query params:
+  `agent`, `status`, `since`, `until`, `q` (text), `tool`, `limit`.
+- **Single-run lookup.** `GET /api/agent-run?run_id=X`.
+- **Dashboard Runs section.** Search bar with agent/status dropdowns and
+  result cards showing status badges, metrics, and relative timestamps.
+
+### Conversation forking (Phase 4)
+
+- **Fork conversations.** `agent_conversations.fork()` copies all turns
+  into a new conversation with `parent_id` linkage. Original and fork
+  diverge independently.
+- **REPL support.** `/fork` command and `--fork` CLI flag on
+  `tb agent repl`.
+- **Dashboard button.** "Fork REPL" on each agent card creates a forked
+  conversation and opens it in a new tmux session.
+- **Server endpoint.** `POST /api/agent-conversation-fork`.
+
+### Task / worktree mode (Phase 5)
+
+- **Task abstraction.** Optional tasks with title, repo path, worktree
+  path, assigned agent, linked tmux session, and status
+  (open/done/archived). Persisted at `~/.tmux-browse/tasks.json`.
+- **Git worktree management.** Auto-creates worktrees under
+  `~/.tmux-browse/worktrees/` with `tb-task/<slug>` branches.
+- **Task CRUD.** `GET /api/tasks`, `POST /api/tasks` (create),
+  `POST /api/tasks/update`, `POST /api/tasks/launch`.
+- **Dashboard Tasks section.** Create form with title/repo/agent fields,
+  task cards with Launch and Done buttons.
+
+### Cost accounting (Phase 6)
+
+- **Per-run cost tracking.** Token usage from `ProviderResult` is
+  recorded in `~/.tmux-browse/agent-costs.jsonl` on every run.
+- **Aggregation.** `agent_costs.per_agent_totals()` and
+  `daily_totals()` for dashboard and API consumers.
+- **Endpoint.** `GET /api/agent-costs` returns per-agent and daily
+  token totals.
+- **Dashboard summary.** Token usage line below agent cards.
+
+### Sandbox profiles (Phase 7)
+
+- **Sandbox field on agents.** Optional `sandbox` (host / worktree) in
+  agent config, normalized with validation, defaults to `host`.
+- **Dashboard selector.** Sandbox dropdown in the agent config form.
+
+### Other features
+
+- **Phone keyboard addons.** Floating row of touch-friendly buttons
+  below each ttyd iframe: arrow keys, Esc, C-c, C-b, Shift, PgUp,
+  PgDn. Disabled by default; enable via Config > Expanded Pane >
+  "Phone keyboard addons". New `POST /api/session/key` endpoint sends
+  tmux key sequences.
+- **Send bar.** Text input below each pane to send commands to the tmux
+  session. Disabled by default; enable in Config.
+- **Config section toggle buttons.** "All On" / "All Off" buttons on
+  Summary Row and Expanded Pane config cards.
+
+### Tests
+
+304 tests (up from 168 at the start of 0.5.0 work). New test files:
+`test_agent_runs`, `test_agent_conversations`, `test_agent_status`,
+`test_agent_scheduler`, `test_agent_scheduler_lock`,
+`test_agent_workflow_runs`, `test_agent_run_index`, `test_agent_costs`,
+`test_tasks`, `test_worktrees`, `test_agent_runtime`, `test_agent_logs`.
+
 ## 0.4.1 — Dashboard agent editor + default tweaks
 
 ### Features

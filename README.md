@@ -217,7 +217,16 @@ tmux-browse/
 │   ├── server.py / templates.py / static.py        # dashboard internals
 │   ├── auth.py / tls.py                            # optional auth + HTTPS
 │   ├── dashboard_config.py                         # saved dashboard settings
-│   ├── agent_store.py / agent_runner.py           # tb agent persistence + runtime
+│   ├── agent_store.py / agent_providers.py        # agent config + wire adapters
+│   ├── agent_runner.py / agent_runtime.py         # execution loop + session mgmt
+│   ├── agent_logs.py / agent_run_index.py         # per-agent logs + searchable index
+│   ├── agent_conversations.py                      # persistent REPL turn history
+│   ├── agent_status.py                             # live status derivation
+│   ├── agent_costs.py                              # per-run token tracking
+│   ├── agent_runs.py                               # run_id + lifecycle constants
+│   ├── agent_scheduler.py / agent_scheduler_lock.py  # background workflow engine
+│   ├── agent_workflows.py / agent_workflow_runs.py   # workflow config + history
+│   ├── tasks.py / worktrees.py                     # optional task/worktree mode
 │   ├── ttyd_installer.py
 │   ├── targeting.py / errors.py / output.py       # tb primitives
 │   ├── exec_runner.py                             # tb exec strategies
@@ -225,8 +234,11 @@ tmux-browse/
 │       ├── agent.py                               # tb agent subcommands
 │       ├── web.py / bulk.py / lifecycle.py
 │       └── read.py / write.py / observe.py
+├── static/
+│   ├── app.css / app.js / favicon.svg             # dashboard frontend assets
 ├── bin/
 │   └── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
+├── tests/                    # 304 stdlib unittest tests
 ├── docs/
 │   ├── dashboard.md
 │   ├── tb.md

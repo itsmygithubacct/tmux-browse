@@ -25,23 +25,38 @@ the way."
 ## Module map
 
 ```
-lib/config.py         ports + paths (one place to tune)
-lib/dashboard_config.py validated dashboard UI config file helpers
-lib/agent_store.py     secure agent metadata + API-key persistence
-lib/agent_runner.py    LLM loop that acts through tb.py only
-lib/ports.py          JSON+flock registry: session name → stable port
-lib/sessions.py       everything tmux-related (enumerate, capture, send)
-lib/ttyd.py           spawn/stop/track per-session ttyd, PID files, port probes
-lib/ttyd_installer.py fetch the ttyd static binary from GitHub releases
-lib/server.py         http.server handler + JSON API
-lib/templates.py      dashboard HTML
-lib/static.py         dashboard CSS + JS (embedded as Python strings)
-lib/targeting.py      Target dataclass + parser for session[:window[.pane]]
-lib/errors.py         typed exceptions → stable exit codes
-lib/output.py         table/JSON emitters with TTY-aware colour
-lib/exec_runner.py    `tb exec` sentinel + idle strategies
-lib/tls.py            optional TLS: cert/key resolve, SSLContext builder
-lib/tb_cmds/          one module per tb verb group (read/write/lifecycle/agent/…)
+lib/config.py              ports + paths (one place to tune)
+lib/dashboard_config.py    validated dashboard UI config file helpers
+lib/ports.py               JSON+flock registry: session name → stable port
+lib/sessions.py            everything tmux-related (enumerate, capture, send)
+lib/ttyd.py                spawn/stop/track per-session ttyd, PID files, port probes
+lib/ttyd_installer.py      fetch the ttyd static binary from GitHub releases
+lib/server.py              http.server handler + JSON API + scheduler lifecycle
+lib/templates.py           dashboard HTML
+lib/static.py              asset loader for static/app.css + static/app.js
+lib/targeting.py           Target dataclass + parser for session[:window[.pane]]
+lib/errors.py              typed exceptions → stable exit codes
+lib/output.py              table/JSON emitters with TTY-aware colour
+lib/exec_runner.py         `tb exec` sentinel + idle strategies
+lib/auth.py                optional Bearer-token auth
+lib/tls.py                 optional TLS: cert/key resolve, SSLContext builder
+lib/agent_store.py         secure agent metadata + API-key + sandbox persistence
+lib/agent_providers.py     wire-API adapters (openai-chat, anthropic-messages)
+lib/agent_runner.py        LLM tool-use loop with run_id, lifecycle events, cost tracking
+lib/agent_runtime.py       conversation session management (create, load, fork, clear)
+lib/agent_conversations.py append-only JSONL conversation turn storage
+lib/agent_logs.py          per-agent execution log with schema versioning
+lib/agent_run_index.py     searchable run index (agent, status, time, text, tool)
+lib/agent_runs.py          run_id generation + lifecycle status constants
+lib/agent_status.py        live status derivation from logs + workflow config
+lib/agent_costs.py         per-run token/cost tracking with per-agent + daily totals
+lib/agent_scheduler.py     background daemon thread for server-side workflow execution
+lib/agent_scheduler_lock.py PID-based file lock for single-owner scheduling
+lib/agent_workflows.py     workflow schedule config (load/save/normalize)
+lib/agent_workflow_runs.py workflow execution history + per-workflow runtime state
+lib/tasks.py               optional task abstraction (title, repo, worktree, agent)
+lib/worktrees.py           git worktree create/list/remove helpers
+lib/tb_cmds/               one module per tb verb group (read/write/lifecycle/agent/…)
 ```
 
 Entry points:
@@ -236,16 +251,16 @@ To add a new tb verb:
 
 To add a new HTTP route:
 
-1. Extend the handler in `lib/server.py`'s `do_GET` / `do_POST`.
-2. Delegate to a helper in `lib/sessions.py` or `lib/ttyd.py` rather than
-   shelling out inline.
-3. Return via `_send_json` / `_send_text` / `_send_html` so the
+1. Add a `_h_*` method in `lib/server.py`'s `Handler` class.
+2. Register it in `_GET_ROUTES` or `_POST_ROUTES` (`MappingProxyType` dicts).
+3. Delegate to a helper module rather than shelling out inline.
+4. Return via `_send_json` / `_send_text` / `_send_html` so the
    Content-Type and envelope stay consistent.
 
 To change dashboard behaviour:
 
-- CSS → `lib/static.py::CSS`
-- JS → `lib/static.py::JS`
+- CSS → `static/app.css`
+- JS → `static/app.js`
 - HTML skeleton → `lib/templates.py`
 
 No build step; restart the server to see changes.
