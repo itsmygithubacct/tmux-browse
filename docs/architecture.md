@@ -56,7 +56,24 @@ lib/agent_workflows.py     workflow schedule config (load/save/normalize)
 lib/agent_workflow_runs.py workflow execution history + per-workflow runtime state
 lib/tasks.py               optional task abstraction (title, repo, worktree, agent)
 lib/worktrees.py           git worktree create/list/remove helpers
+lib/qr.py                  pure-Python QR code generator (Reed-Solomon, no deps)
 lib/tb_cmds/               one module per tb verb group (read/write/lifecycle/agent/…)
+```
+
+Frontend JS is split into 10 focused modules under `static/`, concatenated
+at import time by `lib/static.py` into one inlined `<script>` block:
+
+```
+static/util.js             DOM helpers, formatting, API wrapper
+static/state.js            constants, normalizers, global state object
+static/config.js           config form, apply, load/save, lock
+static/audio.js            idle alert sound synthesis
+static/agents.js           agent CRUD, status badges, steps, workflows
+static/tasks.js            task CRUD
+static/runs.js             run search and display
+static/phone-keys.js       mobile key customization with drag-to-reorder
+static/sharing.js          QR config transfer, connected endpoints
+static/panes.js            pane builder, layout, drag-drop, modals, refresh, init
 ```
 
 Entry points:

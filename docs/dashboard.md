@@ -217,22 +217,41 @@ and an agent editor backed by the agent store under `~/.tmux-browse/`.
 
 It covers:
 
-- Auto-refresh enable/seconds
-- Hot-loop idle wait seconds
-- Default agent step budget
-- Launch-on-expand behavior
-- Default ttyd iframe height and min height
-- Agent setup: load a built-in preset or existing agent, edit provider/model/
-  base URL/wire API, and save or remove the stored definition
-- Visibility toggles for summary buttons, expanded-pane buttons, badges,
-  footer metadata, inline status messages, and top-bar status text
+- **Behavior:** day/night mode, auto-refresh enable/seconds, hot-loop
+  idle wait, default agent step budget, launch-on-expand, furl side-by-
+  side panes together, resize row of panes together, default ttyd
+  height/min-height, idle alert sound
+- **Title Bar** (with All On/All Off): master toggle for the whole bar,
+  plus individual toggles for title text, session count, new session
+  field, Raw ttyd button, Refresh button, Restart button, status text
+- **Summary Row** (with All On/All Off): master toggle for all summary
+  controls, plus session name, expand/collapse arrow, badges (attached,
+  windows, port), idle text, idle alert button, Open/Log/Scroll/Split/
+  Hide buttons, reorder pad
+- **Expanded Pane** (with All On/All Off): master toggle for the action
+  buttons row, plus Launch, Stop ttyd, Kill, send bar, phone keyboard
+  addons, Hot Buttons manager, hot-button loop toggles, footer, inline
+  messages
+- **Phone Keys** (furled subsection): live draggable preview of the
+  current mobile key layout. Add custom keys via label + tmux key name
+  (e.g. `Tab`, `C-a`, `F5`). Click to remove, drag to reorder, reset
+  to defaults. Stored in localStorage.
+- **Agent:** load a built-in preset or existing agent, edit provider/
+  model/base URL/wire API/sandbox mode, and save or remove the stored
+  definition
+- **Lock config pane:** optional password that gates the Config pane.
+  Password stored as SHA-256 hash at `~/.tmux-browse/config-lock-secret`
+  (outside the repo, 0600 permissions). CLI `tb config set/reset` also
+  requires the password when set.
 
-Use **Save Config** to write the file, **Load From File** to discard unsaved
-changes and reload it, and **Defaults** to preview the built-in defaults
-before saving them. Agent actions are separate: **Save Agent**, **Reload
-Agents**, and **Remove Agent** write `~/.tmux-browse/agents.json` plus the
-private `~/.tmux-browse/agent-secrets.json` secret store. The same
-dashboard config file can now also be inspected and edited from the CLI via
+Action buttons: **Save Config**, **Load From File**, **Defaults**,
+**Show QR** (generate QR code of current view config), **Read QR**
+(scan QR code from camera to import config from another device).
+
+Agent actions are separate: **Save Agent**, **Reload Agents**, and
+**Remove Agent** write `~/.tmux-browse/agents.json` plus the private
+`~/.tmux-browse/agent-secrets.json` secret store. The same dashboard
+config file can also be inspected and edited from the CLI via
 `tb config show|get|set|reset`.
 
 ## Agents section
@@ -278,6 +297,19 @@ assigned agent. Creating a task with a worktree provisions a git
 worktree under `~/.tmux-browse/worktrees/` with a `tb-task/<slug>`
 branch. The **Launch** button opens the assigned agent's REPL in the
 task's worktree directory. Tasks can be marked done or archived.
+
+## Connected Endpoints section
+
+Shows all browser clients currently connected to the dashboard (seen
+within the last 60 seconds). Each entry shows IP address, optional
+nickname, idle time, and connection age. Features:
+
+- **Set nickname** so other devices see a friendly name
+- **Share Config** button pushes your full view config (layout, hidden
+  panes, hot buttons, phone keys, theme, idle alerts) to another
+  connected client. The recipient gets a `confirm()` prompt.
+- Client list refreshes every 15 seconds; config inbox polled every
+  10 seconds.
 
 ## Hidden section
 
@@ -333,6 +365,10 @@ All JSON responses use a stable `{ok, …}` envelope.
 | GET    | `/api/agent-run`    | `?run_id=X` | `{ok, run}` — single run detail |
 | GET    | `/api/agent-costs`  | `?agent=&since=&until=` | `{ok, per_agent, daily}` — token usage totals |
 | GET    | `/api/tasks`        | — | `{ok, tasks}` — task list (excludes archived) |
+| GET    | `/api/clients`      | — | `{ok, clients, you}` — connected browser endpoints |
+| GET    | `/api/clients/inbox` | — | `{ok, messages}` — pending config shares for this client |
+| GET    | `/api/qr`           | `?data=TEXT` | `image/svg+xml` — QR code SVG for the given text |
+| GET    | `/api/config-lock`  | — | `{ok, locked}` — whether config pane is password-locked |
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
 | GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
 | POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
@@ -352,6 +388,11 @@ All JSON responses use a stable `{ok, …}` envelope.
 | POST   | `/api/session/scroll` | `{session}` | `{ok}` — equivalent to `C-b [` |
 | POST   | `/api/session/type` | `{session, text}` | `{ok}` — sends `text` to the active pane and presses Enter |
 | POST   | `/api/session/key`  | `{session, keys: [...]}` | `{ok}` — sends tmux key names (e.g. `Up`, `C-c`, `Escape`) |
+| POST   | `/api/clients/nickname` | `{nickname}` | `{ok, client_id, nickname}` |
+| POST   | `/api/clients/send-config` | `{target, config_url}` | `{ok, sent}` — push config to another client |
+| POST   | `/api/config-lock`  | `{password}` | `{ok, locked}` — set or clear (empty password = clear) |
+| POST   | `/api/config-lock/verify` | `{password}` | `{ok, unlocked}` or 403 |
+| POST   | `/api/server/restart` | `{}` | `{ok, restarting}` — re-exec the server process |
 
 ## CLI companion
 

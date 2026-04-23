@@ -88,21 +88,62 @@
   agent config, normalized with validation, defaults to `host`.
 - **Dashboard selector.** Sandbox dropdown in the agent config form.
 
-### Other features
+### Dashboard UI features
 
+- **Day / night mode.** Light theme toggle in Config > Behavior.
+  Default: dark (night mode). Shares via QR/config transfer.
+- **Granular title bar config.** Master toggle hides the entire bar;
+  individual toggles for title text, session count, new session field,
+  Raw ttyd, Refresh, Restart buttons, and status text. All On/All Off
+  button per section.
+- **Granular summary row config.** Master toggle hides all summary
+  controls. Individual toggles for session name and expand/collapse
+  arrow. Hiding the arrow prevents pane furl/unfurl.
+- **Granular expanded pane config.** Master toggle hides the action
+  buttons row. Individual toggles for each button.
 - **Phone keyboard addons.** Floating row of touch-friendly buttons
-  below each ttyd iframe: arrow keys, Esc, C-c, C-b, Shift, PgUp,
-  PgDn. Disabled by default; enable via Config > Expanded Pane >
-  "Phone keyboard addons". New `POST /api/session/key` endpoint sends
-  tmux key sequences.
+  below each ttyd iframe. Fully customizable: add any key via label +
+  tmux key name, drag to reorder, click to remove. Own furled config
+  subsection with live preview. Stored in localStorage.
 - **Send bar.** Text input below each pane to send commands to the tmux
   session. Disabled by default; enable in Config.
+- **Drag summary bar to snap side-by-side.** Tap the summary bar to
+  furl/unfurl (unchanged); drag it onto another session's left/right
+  half to snap side-by-side (up to 4 panes per row). Drag to center
+  to reorder above.
+- **Furl side-by-side together.** When one pane in a row is furled, all
+  siblings furl too (and vice versa). Config toggle, default on.
+- **Resize row together.** Dragging one iframe's resize handle
+  propagates the height to all siblings in the row via ResizeObserver.
+  Config toggle, default on.
 - **Config section toggle buttons.** "All On" / "All Off" buttons on
-  Summary Row and Expanded Pane config cards.
+  Title Bar, Summary Row, and Expanded Pane config cards.
+- **Config pane lock.** Optional password stored as SHA-256 hash at
+  `~/.tmux-browse/config-lock-secret`. When locked, Config pane
+  prompts for password. CLI `tb config set/reset` also checks the
+  lock. Prevents agents from modifying their own step budget.
+- **QR code config transfer.** Export full view config (layout, hidden,
+  hot buttons, phone keys, theme, etc.) as a QR code. Scan from
+  phone camera using BarcodeDetector API. Also works as a URL with
+  `?import-cfg=BASE64` parameter. Server-side QR generation via pure-
+  Python encoder (`lib/qr.py`).
+- **Connected Endpoints pane.** Shows all browser clients connected to
+  the dashboard with IP, nickname, and idle time. "Share Config"
+  button pushes your view config to another client. Recipients get a
+  confirm prompt. Endpoints: `GET /api/clients`,
+  `POST /api/clients/nickname`, `POST /api/clients/send-config`,
+  `GET /api/clients/inbox`.
+
+### Internal
+
+- **JS module split.** `static/app.js` (2,876 lines) split into 10
+  focused modules under `static/`. Concatenated at import time by
+  `lib/static.py` — browser still gets one inlined `<script>` block.
+  No build step, no ES modules, no behavioral changes.
 
 ### Tests
 
-304 tests (up from 168 at the start of 0.5.0 work). New test files:
+304 tests (up from 168 at the start of 0.6.0 work). New test files:
 `test_agent_runs`, `test_agent_conversations`, `test_agent_status`,
 `test_agent_scheduler`, `test_agent_scheduler_lock`,
 `test_agent_workflow_runs`, `test_agent_run_index`, `test_agent_costs`,
