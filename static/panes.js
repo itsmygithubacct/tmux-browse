@@ -817,6 +817,14 @@ function createPane(s) {
         href: `/api/session/log?session=${encodeURIComponent(s.name)}`,
         style: "text-decoration:none",
     }, "Log");
+    const logIconBtn = el("a", {
+        class: "wc-btn wc-log-icon",
+        target: "_blank", rel: "noopener",
+        title: "tmux scrollback",
+        onclick: stopSummaryToggle,
+        href: `/api/session/log?session=${encodeURIComponent(s.name)}`,
+    });
+    logIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2 1h8l4 4v10H2V1zm8 0v4h4M4 8h8M4 11h6"/><path d="M2 1h8l4 4v10H2V1z" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1"/><line x1="4" y1="10.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/><line x1="4" y1="6" x2="8" y2="6" stroke="currentColor" stroke-width="1"/></svg>';
     const scrollBtn = el("button", {
         class: "btn orange summary-scroll",
         onclick: (e) => {
@@ -909,7 +917,7 @@ function createPane(s) {
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
-            summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
+            summaryTabLink, logLink, logIconBtn, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
     );
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
@@ -1095,7 +1103,7 @@ function createPane(s) {
 
     return {
         details, sbadges, idle, idleWrap, idleAlertBtn,
-        summaryTabLink, logLink, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
+        summaryTabLink, logLink, logIconBtn, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
