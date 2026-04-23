@@ -193,6 +193,11 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
 .wc-maximize:hover, .wc-minimize:hover {
     color: var(--accent);
 }
+.wc-hide-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
 .summary-idle-wrap {
     display: inline-flex;
     align-items: center;
