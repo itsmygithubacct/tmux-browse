@@ -148,6 +148,29 @@ def list_conversations(agent_name: str | None = None) -> list[dict[str, Any]]:
     return results
 
 
+def fork(conversation_id: str, *, agent_name: str | None = None) -> str:
+    """Create a new conversation by copying all turns from an existing one.
+
+    The new conversation gets a fresh id with ``parent_id`` pointing to
+    the source.  If *agent_name* is not provided it is read from the
+    source header.  Returns the new conversation_id.
+    """
+    header = load_header(conversation_id)
+    if header is None:
+        raise StateError(f"cannot fork: conversation {conversation_id} not found")
+    name = agent_name or header.get("agent_name", "unknown")
+    turns = load_turns(conversation_id)
+    new_cid = create(name, parent_id=conversation_id)
+    for turn in turns:
+        append_turn(
+            new_cid,
+            role=turn["role"],
+            content=turn["content"],
+            run_id=turn.get("run_id"),
+        )
+    return new_cid
+
+
 def clear(conversation_id: str) -> bool:
     """Delete a conversation file. Returns True if it existed."""
     path = conversation_path(conversation_id)

@@ -84,6 +84,8 @@ def _parse_repl(argv: list[str]) -> argparse.Namespace:
     p.add_argument("name")
     p.add_argument("--steps", type=int, default=None)
     p.add_argument("--timeout", type=float, default=90.0)
+    p.add_argument("--fork", action="store_true",
+                   help="fork the current conversation into a new branch")
     return p.parse_args(argv)
 
 
@@ -95,15 +97,21 @@ def _run_steps(value: int | None) -> int:
     return max(1, value if value is not None else _default_agent_steps())
 
 
-def _run_repl(name: str, *, steps: int, timeout: float) -> int:
+def _run_repl(name: str, *, steps: int, timeout: float, fork: bool = False) -> int:
     agent = agent_store.get_agent(name)
     repo_root = Path(__file__).resolve().parents[2]
-    cid = agent_runtime.get_or_create_conversation(name)
-    prior = agent_runtime.load_context(name)
-    print(f"Agent REPL for {agent['name']} ({agent['model']})")
-    if prior:
-        print(f"  Resumed conversation ({len(prior)} prior messages)")
-    print("Commands: /exit  /help  /history  /clear  /new")
+    if fork:
+        cid = agent_runtime.fork_conversation(name)
+        prior = agent_runtime.load_context(name)
+        print(f"Agent REPL for {agent['name']} ({agent['model']})")
+        print(f"  Forked conversation ({len(prior)} inherited messages)")
+    else:
+        cid = agent_runtime.get_or_create_conversation(name)
+        prior = agent_runtime.load_context(name)
+        print(f"Agent REPL for {agent['name']} ({agent['model']})")
+        if prior:
+            print(f"  Resumed conversation ({len(prior)} prior messages)")
+    print("Commands: /exit  /help  /history  /clear  /new  /fork")
     while True:
         try:
             prompt = input(f"{agent['name']}> ").strip()
@@ -122,6 +130,7 @@ def _run_repl(name: str, *, steps: int, timeout: float) -> int:
             print("  /history  — show conversation turns")
             print("  /clear    — delete conversation and start fresh")
             print("  /new      — start a new conversation (keeps old one)")
+            print("  /fork     — branch into a new conversation with copied history")
             print("  /exit     — quit the REPL")
             continue
         if prompt == "/history":
@@ -146,6 +155,11 @@ def _run_repl(name: str, *, steps: int, timeout: float) -> int:
             cid = agent_runtime.start_new_conversation(name)
             prior = []
             print("Started new conversation.")
+            continue
+        if prompt == "/fork":
+            cid = agent_runtime.fork_conversation(name)
+            prior = agent_runtime.load_context(name)
+            print(f"Forked conversation ({len(prior)} inherited messages).")
             continue
 
         context = agent_runtime.load_context(name)
@@ -252,7 +266,8 @@ def cmd_agent(args: argparse.Namespace) -> int:
 
     if mode == "repl":
         ns = _parse_repl(rest)
-        return _run_repl(ns.name, steps=_run_steps(ns.steps), timeout=ns.timeout)
+        return _run_repl(ns.name, steps=_run_steps(ns.steps), timeout=ns.timeout,
+                         fork=getattr(ns, "fork", False))
 
     run = _parse_run(mode, rest)
     agent = agent_store.get_agent(mode)

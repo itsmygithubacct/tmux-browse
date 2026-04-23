@@ -77,6 +77,19 @@ def record_turn(agent_name: str, *, role: str, content: str,
     agent_conversations.append_turn(cid, role=role, content=content, run_id=run_id)
 
 
+def fork_conversation(agent_name: str) -> str:
+    """Fork the active conversation for *agent_name* into a new one.
+
+    The original conversation is preserved; the new one becomes the
+    active conversation.  Returns the new conversation_id.
+    """
+    name = (agent_name or "").strip().lower()
+    source_cid = get_or_create_conversation(name)
+    new_cid = agent_conversations.fork(source_cid, agent_name=name)
+    _active[name] = new_cid
+    return new_cid
+
+
 def list_sessions(agent_name: str | None = None) -> list[dict[str, Any]]:
     """Return conversation headers, optionally filtered."""
     return agent_conversations.list_conversations(agent_name=agent_name)

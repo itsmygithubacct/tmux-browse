@@ -351,6 +351,11 @@ function renderAgentsPane() {
                         type: "button",
                         onclick: () => openAgentConversation(row.name),
                     }, live ? "Open REPL" : "Start REPL"),
+                    el("button", {
+                        class: "btn",
+                        type: "button",
+                        onclick: () => forkAgentConversation(row.name),
+                    }, "Fork REPL"),
                 ),
             ),
             el("div", { class: "agent-card-status" },
@@ -694,6 +699,17 @@ async function openAgentConversation(name) {
     }
     await refresh();
     window.open(ttydUrl(r.port), "_blank", "noopener");
+}
+
+async function forkAgentConversation(name) {
+    const r = await api("POST", "/api/agent-conversation-fork", { name });
+    if (!r.ok) {
+        setAgentStatus("error forking conversation: " + (r.error || "unknown"), "err");
+        return;
+    }
+    setAgentStatus(`forked ${name} conversation into ${r.session}`, "ok");
+    await refresh();
+    if (r.port) window.open(ttydUrl(r.port), "_blank", "noopener");
 }
 
 function readAgentForm() {
