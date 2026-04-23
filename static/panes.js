@@ -800,7 +800,15 @@ function createPane(s) {
         },
         title: "configure idle detection for this session",
     }, "Idle Alert");
-    const idleWrap = el("span", { class: "summary-idle-wrap" }, idle, idleAlertBtn);
+    const idleIconBtn = el("button", {
+        class: "wc-btn wc-idle-icon",
+        type: "button",
+        onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); },
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); openIdleEditor(s.name); },
+        title: "configure idle detection",
+    });
+    idleIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="8" rx="6.5" ry="4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>';
+    const idleWrap = el("span", { class: "summary-idle-wrap" }, idle, idleAlertBtn, idleIconBtn);
     const summaryTabLink = el("a", {
         class: "btn green summary-open",
         target: "_blank", rel: "noopener",
@@ -1102,7 +1110,7 @@ function createPane(s) {
     });
 
     return {
-        details, sbadges, idle, idleWrap, idleAlertBtn,
+        details, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
         summaryTabLink, logLink, logIconBtn, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize,
@@ -1140,6 +1148,7 @@ function updatePane(rec, s) {
     rec.idleAlertBtn.title = idleCfg.enabled
         ? `enabled: ${idleCfg.sound ? "sound" : ""}${idleCfg.sound && idleCfg.prompt ? " + " : ""}${idleCfg.prompt ? "prompt" : ""}`
         : "configure idle detection for this session";
+    rec.idleIconBtn.style.color = idleCfg.enabled ? "var(--green)" : "";
 
     // Summary "Open" button: hidden entirely until ttyd is running.
     const url = s.ttyd_running ? ttydUrl(s.port) : "#";
