@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased — 0.8.0
+
+Ships the five research proposals tracked in
+`~/research/tmux-browse/plans/plan_*.md`. Phase A (config-lock
+enforcement, pane groups, Move-to, broader QR share) landed earlier
+in this line; this section adds Phase B (conductor) and Phase C
+(structured REPL primitives).
+
+### Conductor rule engine (Phase B)
+
+A thin rule engine sits above the existing event hooks with three
+capabilities hooks can't express on their own:
+
+- **State across events** — rolling-window counters
+  (`within_last` + `count_at_least`), keyed by (rule_id, agent), so
+  a rule can require "three failures in one hour."
+- **Cross-agent routing** — new `run_agent` action spawns a run on
+  a target agent with `$.original_prompt` substitution, for
+  scenarios like "on sonnet rate-limit, try opus."
+- **Decision log** — every fired rule appends a JSONL record to
+  `~/.tmux-browse/agent-conductor.jsonl` so operators can answer
+  "why did this happen?".
+
+Rules live in `~/.tmux-browse/agent-conductor.json`. Editor sits in
+Config > Agent Settings alongside Event Hooks; per-agent "Conductor: N"
+badges on each card open an activity view. Runs search gains an
+origin filter (`cli / scheduler / conductor / retry`). QR share
+carries the rule set.
+
+A runaway-loop guard drops same-(rule, agent) re-entry within 5 s,
+so rules whose actions might re-cause the triggering event can't
+fork-bomb.
+
+### Structured REPL primitives (Phase C)
+
+MVP of the tmuxai-style REPL shape. Per-agent context (exec target,
+observed panes, mode, tick) persists at
+`~/.tmux-browse/agent-contexts/<agent>.json`. A per-agent knowledge
+base holds small text files under `~/.tmux-browse/agent-kb/<agent>/`
+with a 128 KiB total cap; contents prepend to the system prompt on
+every turn.
+
+New `tb agent repl` slash-commands: `/exec`, `/watch`, `/unwatch`,
+`/mode`, `/tick`, `/kb add|rm|ls`, `/context`. Each agent card in the
+dashboard gains a **Context** button that opens a read-only summary.
+
+Explicitly deferred to a follow-up: watch-mode auto-turn loop
+(observed-pane hash change → auto invocation) and `/squash`
+compaction. Current slash-commands thread the mode value through
+the context but don't enforce observe/act/watch at the loop layer
+yet.
+
 ## Unreleased — 0.8.0 Phase A
 
 ### Server-side config-lock enforcement

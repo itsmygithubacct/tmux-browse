@@ -145,6 +145,12 @@ function renderAgentsPane() {
                         type: "button",
                         onclick: () => forkAgentConversation(row.name),
                     }, "Fork REPL"),
+                    el("button", {
+                        class: "btn",
+                        type: "button",
+                        onclick: () => openAgentContext(row.name),
+                        title: "View REPL context (exec target, observed panes, KB)",
+                    }, "Context"),
                 ),
             ),
             el("div", { class: "agent-card-status" },
@@ -166,6 +172,32 @@ function renderAgentsPane() {
             ),
         ));
     }
+}
+
+// Lazy-loaded REPL context view. Called when the user clicks the
+// "Context" badge on an agent card.
+async function openAgentContext(agentName) {
+    const r = await api("GET",
+        `/api/agent-repl-context?name=${encodeURIComponent(agentName)}`);
+    if (!r.ok) {
+        alert("failed to load context: " + (r.error || "unknown"));
+        return;
+    }
+    const ctx = r.context || {};
+    const kb = r.kb || [];
+    const lines = [
+        `REPL context · ${agentName}`,
+        "",
+        `  exec target:    ${ctx.exec_target || "(unset)"}`,
+        `  observed panes: ${(ctx.observed_panes || []).join(", ") || "(none)"}`,
+        `  mode:           ${ctx.mode || "observe"}`,
+        `  tick_sec:       ${ctx.tick_sec || 10}`,
+        "",
+        `  KB files: ${kb.length} (${r.kb_total_bytes || 0} / ${r.kb_cap_bytes} bytes)`,
+    ];
+    for (const f of kb) lines.push(`    ${f.name}  ${f.size} bytes`);
+    lines.push("", "Edit via `tb agent repl " + agentName + "` (/exec, /watch, /kb, etc.)");
+    alert(lines.join("\n"));
 }
 
 // Simple lazy-loaded activity view: fetch the decision log filtered to
