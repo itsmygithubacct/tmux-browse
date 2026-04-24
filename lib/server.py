@@ -23,7 +23,6 @@ from . import (
     tasks as tasks_mod,
     config,
     dashboard_config,
-    docker_sandbox,
     session_logs,
     extensions,
     ports,
@@ -892,8 +891,8 @@ class Handler(BaseHTTPRequestHandler):
                 title=(body.get("title") or "").strip(),
                 repo_path=(body.get("repo_path") or "").strip(),
                 agent=(body.get("agent") or "").strip() or None,
-                branch=(body.get("branch") or "").strip() or None,
-                use_worktree=body.get("use_worktree", True),
+                worktree_path=(body.get("worktree_path") or "").strip(),
+                branch=(body.get("branch") or "").strip(),
             )
             self._send_json({"ok": True, "task": task})
         except TBError as e:
