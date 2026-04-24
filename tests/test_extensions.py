@@ -77,15 +77,17 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaises(manifest_mod.ManifestError):
             m.validate(core_version="0.7.0.4")
 
-    def test_validate_requires_at_least_one_entry_point(self):
+    def test_validate_accepts_library_only_manifest(self):
+        # An extension with no entry points is a pure library: the
+        # loader prepends its dir to ``sys.path`` and other extensions
+        # ``import`` it. The sandbox extension is this shape.
         with tempfile.TemporaryDirectory() as d:
             path = self._write(Path(d), {
                 "name": "x", "version": "1", "module": "x",
                 "min_tmux_browse": "0.1.0",
             })
             m = manifest_mod.Manifest.load(path)
-        with self.assertRaises(manifest_mod.ManifestError):
-            m.validate(core_version="0.7.0.4")
+        m.validate(core_version="0.7.0.4")  # must not raise
 
 
 class UiBlocksTests(unittest.TestCase):

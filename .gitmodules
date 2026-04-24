@@ -2,3 +2,11 @@
 	path = extensions/agent
 	url = https://github.com/itsmygithubacct/tmux-browse-agent.git
 	branch = main
+[submodule "extensions/sandbox"]
+	path = extensions/sandbox
+	url = https://github.com/itsmygithubacct/tmux-browse-sandbox.git
+	branch = main
+[submodule "extensions/qr"]
+	path = extensions/qr
+	url = https://github.com/itsmygithubacct/tmux-browse-qr.git
+	branch = main

@@ -20,11 +20,13 @@ from . import static
 # silently landing nothing on the page.
 _SLOTS: tuple[str, ...] = (
     "topbar_extras",
+    "config_actions_extras",
     "config_extras",
     "config_agent",
     "agents_section",
     "notifications_section",
     "agent_modals",
+    "qr_modal",
 )
 
 _SLOT_RE = re.compile(r"<!--slot:([a-z_][a-z0-9_]*)-->")
@@ -249,8 +251,7 @@ def _render(js: str) -> str:
             <button class="btn green" id="cfg-save-btn">Save Config</button>
             <button class="btn blue" id="cfg-load-btn">Load From File</button>
             <button class="btn" id="cfg-reset-btn">Defaults</button>
-            <button class="btn" id="cfg-qr-show-btn" title="Generate QR code of current view config">Show QR</button>
-            <button class="btn" id="cfg-qr-scan-btn" title="Scan QR code from another device's camera">Read QR</button>
+            <!--slot:config_actions_extras-->
             <button class="btn red" id="cfg-clear-cache-btn" title="Wipe this browser's tmux-browse settings (hidden, order, layout, hot buttons, idle alerts, phone keys) and reload">Clear Local Cache</button>
             <span class="dim" id="cfg-status">Saved to ~/.tmux-browse/dashboard-config.json</span>
         </div>
@@ -300,19 +301,7 @@ def _render(js: str) -> str:
         <div class="dim" style="margin-top:0.4rem;font-size:0.78rem">Drag buttons to reorder. Click a button to remove it. Changes save automatically.</div>
     </div>
 </details>
-<div id="qr-modal" class="modal-backdrop" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:480px">
-        <div class="modal-head">
-            <h2 id="qr-modal-title">Config QR</h2>
-            <button class="btn" id="qr-close-btn">Close</button>
-        </div>
-        <div style="padding:1rem;text-align:center">
-            <div id="qr-display" style="margin:0 auto"></div>
-            <video id="qr-video" style="display:none;width:100%;max-width:360px;border-radius:8px;margin:0.5rem auto" autoplay playsinline></video>
-            <div class="dim" id="qr-status" style="margin-top:0.6rem;font-size:0.82rem"></div>
-        </div>
-    </div>
-</div>
+<!--slot:qr_modal-->
 <!--slot:agents_section-->
 <!--slot:notifications_section-->
 <div id="tmux-help-modal" class="modal-backdrop" hidden>

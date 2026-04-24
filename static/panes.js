@@ -1597,15 +1597,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("cfg-reset-btn").addEventListener("click", resetDashboardConfig);
     document.getElementById("client-nick-btn").addEventListener("click", setClientNickname);
     document.getElementById("config-wrap").addEventListener("click", guardConfigOpen);
-    document.getElementById("cfg-qr-show-btn").addEventListener("click", showConfigQR);
-    document.getElementById("cfg-qr-scan-btn").addEventListener("click", scanConfigQR);
     document.getElementById("cfg-clear-cache-btn").addEventListener("click", clearLocalCache);
     document.getElementById("pane-group-add-btn").addEventListener("click", addPaneGroup);
     document.getElementById("pane-group-new-name").addEventListener("keydown", (e) => {
         if (e.key === "Enter") { e.preventDefault(); addPaneGroup(); }
     });
-    document.getElementById("qr-close-btn").addEventListener("click", closeQRModal);
-    document.getElementById("qr-modal").addEventListener("click", (e) => { if (e.target.id === "qr-modal") closeQRModal(); });
     document.getElementById("phone-key-add-btn").addEventListener("click", addPhoneKey);
     document.getElementById("phone-key-reset-btn").addEventListener("click", resetPhoneKeys);
     document.getElementById("cfg-lock-set-btn").addEventListener("click", setConfigLock);

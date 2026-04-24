@@ -51,7 +51,7 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
 
     def test_fresh_install_has_no_extension_surface(self):
         # Opt-in: with no extensions.json, load_enabled returns empty.
-        reg = extensions.load_enabled(core_version_override="0.7.1")
+        reg = extensions.load_enabled(core_version_override="0.7.1.3")
         self.assertEqual(reg.get_routes, {})
         self.assertEqual(reg.post_routes, {})
         self.assertEqual(reg.ui_blocks, {})
@@ -61,15 +61,14 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
 
     def test_agent_shows_as_installed_but_not_enabled(self):
         # Status reflects "submodule present on disk, not turned on".
-        rows = extensions.status()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["name"], "agent")
-        self.assertTrue(rows[0]["installed"])
-        self.assertFalse(rows[0]["enabled"])
+        rows = {r["name"]: r for r in extensions.status()}
+        self.assertIn("agent", rows)
+        self.assertTrue(rows["agent"]["installed"])
+        self.assertFalse(rows["agent"]["enabled"])
 
     def test_enable_then_load_registers_full_agent_surface(self):
         extensions.enable("agent")
-        reg = extensions.load_enabled(core_version_override="0.7.1")
+        reg = extensions.load_enabled(core_version_override="0.7.1.3")
         # Routes from server/routes.py
         self.assertIn("/api/agents", reg.get_routes)
         self.assertIn("/api/agents", reg.post_routes)
@@ -91,7 +90,7 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
     def test_disable_removes_agent_surface(self):
         extensions.enable("agent")
         extensions.disable("agent")
-        reg = extensions.load_enabled(core_version_override="0.7.1")
+        reg = extensions.load_enabled(core_version_override="0.7.1.3")
         self.assertEqual(reg.get_routes, {})
         self.assertEqual(reg.post_routes, {})
         self.assertEqual(reg.ui_blocks, {})
