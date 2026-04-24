@@ -1587,6 +1587,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("cfg-lock-clear-btn").addEventListener("click", clearConfigLock);
     document.getElementById("hooks-save-btn").addEventListener("click", saveHooks);
     document.getElementById("hooks-reset-btn").addEventListener("click", resetHooks);
+    document.getElementById("conductor-save-btn").addEventListener("click", saveConductor);
+    document.getElementById("conductor-reload-btn").addEventListener("click", loadConductor);
     document.getElementById("cfg-toggle-all-topbar").addEventListener("click", (e) => toggleAllSection(TOPBAR_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-summary").addEventListener("click", (e) => toggleAllSection(SUMMARY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-body").addEventListener("click", (e) => toggleAllSection(BODY_TOGGLE_KEYS, e.currentTarget));
@@ -1674,6 +1676,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadTasks();
     await loadCostSummary();
     await loadHooks();
+    await loadConductor();
     await loadNotifications();
     await loadClients();
     scheduleRefreshLoop();

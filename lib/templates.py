@@ -224,6 +224,24 @@ def render_index() -> str:
                     </div>
                 </details>
                 <details class="config-card">
+                    <summary class="config-card-title" style="cursor:pointer">Conductor</summary>
+                    <div style="margin-top:0.4rem">
+                        <div class="dim" style="font-size:0.78rem;margin-bottom:0.5rem">
+                            Composite rules above event hooks. Supports rolling-window counters
+                            (three failures in 1h) and cross-agent routing. See
+                            <code>plans/plan_conductor_layer.md</code> in the research tree for
+                            the rule DSL.
+                        </div>
+                        <textarea id="conductor-editor" rows="10" spellcheck="false"
+                                  style="width:100%;box-sizing:border-box;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;font-family:inherit;font-size:0.82rem;min-height:7rem"></textarea>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;align-items:center">
+                            <button class="btn green" id="conductor-save-btn" type="button">Save Rules</button>
+                            <button class="btn" id="conductor-reload-btn" type="button">Reload</button>
+                            <span class="dim" id="conductor-status" style="font-size:0.82rem"></span>
+                        </div>
+                    </div>
+                </details>
+                <details class="config-card">
                     <summary class="config-card-title" style="cursor:pointer">Agent</summary>
                     <div style="margin-top:0.4rem">
                         <label class="field">
@@ -353,6 +371,13 @@ def render_index() -> str:
                         <option value="run_completed">Completed</option>
                         <option value="run_failed">Failed</option>
                         <option value="run_rate_limited">Rate Limited</option>
+                    </select>
+                    <select id="runs-filter-origin">
+                        <option value="">All origins</option>
+                        <option value="cli">CLI</option>
+                        <option value="scheduler">Scheduler</option>
+                        <option value="conductor">Conductor</option>
+                        <option value="retry">Retry</option>
                     </select>
                     <button class="btn blue" id="runs-search-btn" type="button">Search</button>
                 </div>

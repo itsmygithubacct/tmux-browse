@@ -219,6 +219,7 @@ const state = {
     idleAlerts: loadJSON(IDLE_KEY, {}),
     groups: normalizeGroups(loadJSON(GROUPS_KEY, {})),
     agentHooksForShare: null,
+    conductorRules: [],
     idleRuntime: {},
     idleEditor: { open: false, session: "" },
     splitPicker: { open: false, session: "", filter: "" },
