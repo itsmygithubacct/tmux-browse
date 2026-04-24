@@ -39,6 +39,7 @@ from . import (
     dashboard_config,
     docker_sandbox,
     session_logs,
+    extensions,
     ports,
     sessions,
     static,
@@ -46,6 +47,7 @@ from . import (
     tls as tls_mod,
     ttyd,
 )
+from .extensions import MergedRegistry, RegistryConflict
 from .errors import TBError, UsageError
 from .targeting import Target
 
@@ -71,6 +73,9 @@ class DashboardServer(ThreadingHTTPServer):
         self.tls_paths = tls_paths
         self.ttyd_bind_addr = ttyd_bind_addr
         self.scheduler: agent_scheduler.Scheduler | None = None
+        # Extensions load once at server start; Handler reads their
+        # routes / slots / JS off ``self.server.extension_registry``.
+        self.extension_registry: MergedRegistry = MergedRegistry()
 
 
 # Redact ``?token=…`` / ``&token=…`` from request lines before the stdlib
@@ -384,7 +389,11 @@ class Handler(BaseHTTPRequestHandler):
     # means: write a _handle_* method, add one line to the table.
 
     def _h_index(self, _parsed: ParseResult) -> None:
-        self._send_html(templates.render_index())
+        reg = self.server.extension_registry
+        self._send_html(templates.render_index(
+            ui_blocks=reg.ui_blocks,
+            extension_js=reg.static_js,
+        ))
 
     def _h_favicon(self, _parsed: ParseResult) -> None:
         body = static.FAVICON_SVG.encode("utf-8")
@@ -1180,6 +1189,67 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send_json({"ok": False, "error": "wrong password"}, status=403)
 
+    # --- Extensions --------------------------------------------------------
+    # E0 ships status + enable/disable as real; install/uninstall return 501
+    # until E3/E4 land. The ``/api/extensions/available`` catalog is also
+    # stubbed — the known-extensions list arrives with E3's install UI.
+
+    def _h_extensions_status(self, _parsed: ParseResult) -> None:
+        self._send_json({"ok": True, "extensions": extensions.status()})
+
+    def _h_extensions_available(self, _parsed: ParseResult) -> None:
+        # Real catalog lands with E3 — return an empty list for now so
+        # clients can code against the endpoint shape.
+        self._send_json({"ok": True, "available": []})
+
+    def _h_extensions_install(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        self._send_json({
+            "ok": False,
+            "error": "install endpoint ships in a later phase (E3); "
+                     "place the extension under extensions/<name>/ and "
+                     "enable it via /api/extensions/enable for now.",
+        }, status=501)
+
+    def _h_extensions_uninstall(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        self._send_json({
+            "ok": False,
+            "error": "uninstall endpoint ships in a later phase (E4).",
+        }, status=501)
+
+    def _h_extensions_enable(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        name = (body.get("name") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"},
+                            status=400)
+            return
+        entry = extensions.enable(name)
+        self._send_json({
+            "ok": True, "name": name, "entry": entry,
+            "restart_required": True,
+            "note": ("restart the dashboard to activate the extension's "
+                     "routes and UI"),
+        })
+
+    def _h_extensions_disable(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        name = (body.get("name") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"},
+                            status=400)
+            return
+        entry = extensions.disable(name)
+        self._send_json({
+            "ok": True, "name": name, "entry": entry,
+            "restart_required": True,
+        })
+
     def _h_tasks_get(self, _parsed: ParseResult) -> None:
         try:
             self._send_json({
@@ -1280,6 +1350,12 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         handler = self._GET_ROUTES.get(parsed.path)
         if handler is None:
+            # Extension routes land here — server.extension_registry is
+            # populated at startup via ``extensions.load_enabled()``.
+            ext_handler = self.server.extension_registry.get_routes.get(parsed.path)
+            if ext_handler is not None:
+                ext_handler(self, parsed)
+                return
             self._send_json({"ok": False, "error": "not found"}, status=404)
             return
         handler(self, parsed)
@@ -1291,6 +1367,11 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         handler = self._POST_ROUTES.get(parsed.path)
         if handler is None:
+            ext_handler = self.server.extension_registry.post_routes.get(parsed.path)
+            if ext_handler is not None:
+                body = self._read_json()
+                ext_handler(self, parsed, body)
+                return
             self._send_json({"ok": False, "error": "not found"}, status=404)
             return
         body = self._read_json()
@@ -1328,6 +1409,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/clients/inbox":      _h_clients_inbox,
         "/api/qr":                 _h_qr,
         "/api/config-lock":        _h_config_lock_status,
+        "/api/extensions":         _h_extensions_status,
+        "/api/extensions/available": _h_extensions_available,
         "/api/tasks":              _h_tasks_get,
         "/health":                 _h_health,
     })
@@ -1355,6 +1438,10 @@ class Handler(BaseHTTPRequestHandler):
         "/api/clients/nickname":   _h_clients_nickname,
         "/api/clients/send-config": _h_clients_send_config,
         "/api/config-lock":        _h_config_lock_set,
+        "/api/extensions/install":   _h_extensions_install,
+        "/api/extensions/uninstall": _h_extensions_uninstall,
+        "/api/extensions/enable":    _h_extensions_enable,
+        "/api/extensions/disable":   _h_extensions_disable,
         "/api/config-lock/verify": _h_config_lock_verify,
         "/api/tasks":              _h_tasks_create,
         "/api/tasks/update":       _h_tasks_update,
@@ -1406,6 +1493,32 @@ def serve(bind: str, port: int, verbose: bool = False,
         print("  auth: ENABLED (Bearer token required — see docs/dashboard.md)")
     else:
         print("  auth: disabled (any reachable client can access the dashboard)")
+
+    # Load optional extensions. A failing extension is logged and
+    # skipped; a route / verb / slot collision with core is fatal.
+    core_get = set(Handler._GET_ROUTES)
+    core_post = set(Handler._POST_ROUTES)
+    try:
+        httpd.extension_registry = extensions.load_enabled(
+            core_get_routes=core_get,
+            core_post_routes=core_post,
+        )
+    except RegistryConflict as e:
+        print(f"  extensions: FATAL — {e}")
+        raise
+    loaded_names = sorted(
+        e["name"] for e in extensions.status()
+        if e["enabled"] and e["installed"] and not e["last_error"]
+    )
+    if loaded_names:
+        print(f"  extensions: loaded {', '.join(loaded_names)}")
+    else:
+        print("  extensions: none enabled")
+    for name, fn in httpd.extension_registry.startup:
+        try:
+            fn(httpd)
+        except Exception as exc:  # noqa: broad — per-extension isolation
+            extensions.record_error(name, f"startup failed: {exc}")
 
     # Start the background workflow scheduler.
     sched = agent_scheduler.Scheduler(repo_root=config.PROJECT_DIR)

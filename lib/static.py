@@ -46,6 +46,34 @@ _JS_FILES = [
     "sharing.js",
     "panes.js",
 ]
+
+# One init footer sits between core JS and extension JS so extensions
+# can register init callbacks without racing the core bootstrap.
+_EXT_INIT_FOOTER = "window.__tbExtensions = window.__tbExtensions || [];"
+
+# Core-only bundle; extensions layer on top via :func:`build_js`.
 JS: str = "\n".join(_load(f) for f in _JS_FILES)
+
+
+def build_js(extension_js: list[Path] | None = None) -> str:
+    """Return the concatenated client bundle.
+
+    Core JS first, then the ``window.__tbExtensions`` footer, then each
+    extension's static JS file contents in the order given. Extension
+    code sees core globals by the time it runs.
+    """
+    if not extension_js:
+        return JS
+    ext_blobs: list[str] = []
+    for p in extension_js:
+        try:
+            ext_blobs.append(p.read_text(encoding="utf-8"))
+        except OSError:
+            # Missing JS file is skipped rather than fatal — the
+            # extension's manifest said it had one but the disk
+            # disagrees. Don't take down the dashboard over it.
+            continue
+    return JS + "\n" + _EXT_INIT_FOOTER + "\n" + "\n".join(ext_blobs)
+
 
 FAVICON_SVG: str = _load("favicon.svg")
