@@ -988,9 +988,8 @@ def serve(bind: str, port: int, verbose: bool = False,
 
     # Load optional extensions. A failing extension is logged and
     # skipped; a route / verb / slot collision with core is fatal.
-    # First-boot bootstrap auto-enables every bundled extension so the
-    # post-split dashboard matches the pre-split monolith out of the box.
-    extensions.bootstrap_default_enabled()
+    # Post-split, extensions are opt-in: ``~/.tmux-browse/extensions.json``
+    # is only written when the operator clicks Enable in the Config pane.
     core_get = set(Handler._GET_ROUTES)
     core_post = set(Handler._POST_ROUTES)
     try:

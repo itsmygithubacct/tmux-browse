@@ -52,7 +52,6 @@ __all__ = [
     "enable",
     "disable",
     "record_error",
-    "bootstrap_default_enabled",
 ]
 
 
@@ -81,35 +80,6 @@ def _read_enabled() -> dict[str, dict[str, Any]]:
         if isinstance(name, str) and isinstance(entry, dict):
             out[name] = dict(entry)
     return out
-
-
-def bootstrap_default_enabled() -> dict[str, dict[str, Any]]:
-    """Create ``extensions.json`` with bundled extensions pre-enabled.
-
-    First boot after install — or on a machine that hasn't seen the
-    extension loader before — picks up every extension shipping in
-    ``extensions/`` as enabled, so behavior matches the pre-split
-    monolith. Later phases may ship extensions disabled-by-default;
-    for E1 the only bundled extension is ``agent``.
-
-    Called from the server at start. If ``extensions.json`` already
-    exists, the file is left untouched so operator decisions persist.
-    """
-    if ENABLED_FILE.exists():
-        return _read_enabled()
-    defaults: dict[str, dict[str, Any]] = {}
-    for path in discover():
-        defaults[path.name] = {
-            "enabled": True,
-            "source": "monorepo",
-            "enabled_ts": int(time.time()),
-        }
-    if defaults:
-        try:
-            _write_enabled(defaults)
-        except OSError:
-            pass
-    return defaults
 
 
 def _write_enabled(data: dict[str, dict[str, Any]]) -> None:
