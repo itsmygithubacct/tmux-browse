@@ -279,7 +279,15 @@ It covers:
   config-lock gated. Failures surface verbatim in the card with a
   stage tag (`clone` / `submodule_init` / `validate`) so you can
   tell whether it's a network problem, a pin problem, or a core-
-  version mismatch.
+  version mismatch. Once installed, each row grows a **Manage…**
+  button that opens a modal exposing **Update to pinned ref**,
+  **Disable** (or **Enable**), and **Uninstall**. State files under
+  `~/.tmux-browse/` are kept by default — flip the *Also remove*
+  checkbox before Uninstall to delete them. That path takes a
+  `confirm()` prompt; no way to destroy state with one stray click.
+  Headless hosts can drive the same actions from the repo root via
+  `make install-agent`, `make update-agent`, `make disable-agent`,
+  `make uninstall-agent`, or `make uninstall-agent-with-state`.
 
 Action buttons: **Save Config**, **Load From File**, **Defaults**,
 **Show QR** (generate QR code of current view config), **Read QR**
