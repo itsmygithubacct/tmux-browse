@@ -112,6 +112,18 @@ class MutationGateTests(_LockedConfigMixin, unittest.TestCase):
             fake, urlparse("/api/config-lock"), {"password": ""})
         self.assertEqual(fake.status, 403)
 
+    def test_extensions_install_gated(self):
+        fake = _FakeHandler(headers={})
+        server.Handler._h_extensions_install(
+            fake, urlparse("/api/extensions/install"), {"name": "agent"})
+        self.assertEqual(fake.status, 403)
+
+    def test_extensions_enable_gated(self):
+        fake = _FakeHandler(headers={})
+        server.Handler._h_extensions_enable(
+            fake, urlparse("/api/extensions/enable"), {"name": "agent"})
+        self.assertEqual(fake.status, 403)
+
 
 # Agent-endpoint lock coverage lives in
 # ``extensions/agent/tests/test_config_lock_agent_endpoints.py`` and runs

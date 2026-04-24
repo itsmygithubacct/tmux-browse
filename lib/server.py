@@ -220,6 +220,12 @@ from . import __version__
 _UNLOCK_TOKEN_TTL_SEC = 12 * 3600
 _unlock_tokens: dict[str, int] = {}  # token -> expiry epoch
 
+# Extensions installed or enabled since this server started but not yet
+# running live routes / UI. The Config pane surfaces a restart banner
+# while this is non-empty. Cleared on server restart (it's in-memory by
+# design — the real source of truth is whether the extension is loaded).
+_extensions_pending_restart: dict[str, bool] = {}
+
 
 def _issue_unlock_token(now: int | None = None) -> str:
     import secrets
@@ -706,27 +712,78 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"ok": False, "error": "wrong password"}, status=403)
 
     # --- Extensions --------------------------------------------------------
-    # E0 ships status + enable/disable as real; install/uninstall return 501
-    # until E3/E4 land. The ``/api/extensions/available`` catalog is also
-    # stubbed — the known-extensions list arrives with E3's install UI.
+    # Status + enable/disable landed in E0 as real; install landed in E3.
+    # Uninstall stays stubbed until E4's manage modal lands.
 
     def _h_extensions_status(self, _parsed: ParseResult) -> None:
-        self._send_json({"ok": True, "extensions": extensions.status()})
+        rows = extensions.status()
+        catalog = extensions.CATALOG
+        # Decorate each row with catalog metadata and submodule flag so
+        # the Config pane's Extensions card has everything it needs in
+        # one response (label, description, repo URL, submodule hint).
+        by_name = {r["name"]: r for r in rows}
+        for name, entry in catalog.items():
+            row = by_name.get(name)
+            if row is None:
+                row = {
+                    "name": name,
+                    "installed": False,
+                    "enabled": False,
+                    "path": None,
+                    "version": None,
+                    "last_error": None,
+                }
+                rows.append(row)
+                by_name[name] = row
+            row["label"] = entry["label"]
+            row["description"] = entry["description"]
+            row["repo"] = entry["repo"]
+            row["submodule"] = extensions.submodule.is_submodule_path(name)
+            row["restart_pending"] = bool(
+                _extensions_pending_restart.get(name))
+        self._send_json({"ok": True, "extensions": rows})
 
     def _h_extensions_available(self, _parsed: ParseResult) -> None:
-        # Real catalog lands with E3 — return an empty list for now so
-        # clients can code against the endpoint shape.
-        self._send_json({"ok": True, "available": []})
+        # Catalog entries rendered as a simple install-target list for
+        # clients that want just "what could I install" without mingling
+        # with on-disk status.
+        available = [dict(v) for v in extensions.CATALOG.values()]
+        self._send_json({"ok": True, "available": available})
 
     def _h_extensions_install(self, _parsed: ParseResult, body: dict) -> None:
         if not self._check_unlock():
             return
+        name = (body.get("name") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"},
+                            status=400)
+            return
+        if name not in extensions.CATALOG:
+            self._send_json(
+                {"ok": False,
+                 "error": f"unknown extension {name!r}",
+                 "stage": "unknown"},
+                status=400)
+            return
+        try:
+            result = extensions.install(name)
+        except extensions.InstallError as e:
+            self._send_json(
+                {"ok": False, "error": e.msg, "stage": e.stage},
+                status=500)
+            return
+        # Flip the enabled bit so the next restart activates the surface.
+        extensions.enable(name)
+        _extensions_pending_restart[name] = True
         self._send_json({
-            "ok": False,
-            "error": "install endpoint ships in a later phase (E3); "
-                     "place the extension under extensions/<name>/ and "
-                     "enable it via /api/extensions/enable for now.",
-        }, status=501)
+            "ok": True,
+            "name": name,
+            "version": result.version,
+            "via": result.via,
+            "restart_required": True,
+            "message": ("Installed and enabled. Restart the dashboard to "
+                        "activate the extension's routes and UI."),
+        })
 
     def _h_extensions_uninstall(self, _parsed: ParseResult, body: dict) -> None:
         if not self._check_unlock():
@@ -745,6 +802,7 @@ class Handler(BaseHTTPRequestHandler):
                             status=400)
             return
         entry = extensions.enable(name)
+        _extensions_pending_restart[name] = True
         self._send_json({
             "ok": True, "name": name, "entry": entry,
             "restart_required": True,
@@ -761,6 +819,7 @@ class Handler(BaseHTTPRequestHandler):
                             status=400)
             return
         entry = extensions.disable(name)
+        _extensions_pending_restart[name] = True
         self._send_json({
             "ok": True, "name": name, "entry": entry,
             "restart_required": True,
