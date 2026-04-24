@@ -1207,7 +1207,14 @@ function sortedSessionNames(names) {
 }
 
 function placePane(rec, name) {
-    rec.hideBtn.textContent = state.hidden.has(name) ? "Unhide" : "Hide";
+    const hidden = state.hidden.has(name);
+    rec.hideBtn.textContent = hidden ? "Unhide" : "Hide";
+    rec.hideBtn.title = hidden
+        ? "unhide this session"
+        : "move to the hidden list at the bottom of the page";
+    if (rec.hideIconBtn) {
+        rec.hideIconBtn.title = hidden ? "unhide this session" : "hide this session";
+    }
 }
 
 function reappendInOrder() {
