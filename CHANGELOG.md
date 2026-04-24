@@ -1,5 +1,68 @@
 # Changelog
 
+## Unreleased — Extension Manage modal + CLI (E4)
+
+Completes the extension-management surface. After install (E3), the
+only way out was to hand-edit `extensions.json` or delete the
+submodule tree manually. E4 fills the remaining verbs:
+
+- **Update** — advances an installed extension to its catalog-
+  pinned ref. Submodule path uses `git submodule update --remote`;
+  fresh-clone path uses `git fetch` + `git checkout`. Post-update
+  manifest is validated against the current core version so a
+  bumped extension that now requires a newer core surfaces
+  cleanly instead of silently activating.
+- **Disable** — flips the enabled bit off (was already available
+  from E0; E4 wires it into the Manage modal). Code stays on disk.
+- **Uninstall** — removes the extension's code. Submodule path
+  calls `git submodule deinit -f`; fresh-clone path `rmtree`s the
+  directory. State files under `~/.tmux-browse/` are **kept by
+  default** so an uninstall/reinstall round-trip doesn't lose
+  agent history. Opt-in state removal is a three-step gate:
+  a Manage-modal checkbox, a `confirm()` dialog, and the
+  `--remove-state` flag on the CLI.
+
+### UI
+
+- Config > Extensions rows now include a **Manage…** button once
+  the extension is installed. It opens a modal showing installed
+  version, source (submodule vs clone), and current status,
+  with three actions (Update, Disable/Enable, Uninstall) and the
+  opt-in state-removal checkbox.
+
+### Headless CLI
+
+- `python3 -m lib.extensions {list,install,update,enable,disable,
+  uninstall}` drives the same functions as the HTTP endpoints.
+- Makefile targets at the repo root: `make install-agent`,
+  `update-agent`, `enable-agent`, `disable-agent`,
+  `uninstall-agent`, `uninstall-agent-with-state`, plus
+  `list-extensions` and `test`.
+- Intentionally *not* gated by the dashboard config-lock —
+  shell access already implies file-system access, so an
+  HTTP-level secret here would be cargo-culting.
+
+### New endpoints
+
+- `POST /api/extensions/update` — takes `{"name": "..."}`, returns
+  `{from_version, to_version, changed, via, restart_required}`.
+- `POST /api/extensions/uninstall` real implementation (was the E0
+  501 stub). Takes `{"name": "...", "remove_state": bool}`; returns
+  a summary of paths removed and paths that weren't on disk.
+
+### Tests
+
+- `tests/test_extensions_manage.py` — 15 new cases: clone-path
+  update, fetch failure, submodule update path, unchanged-version
+  idempotence, too-new-manifest validation, clone-path uninstall
+  (keep state), state-removal deletes declared paths, missing-path
+  reporting, submodule uninstall calls `deinit`, idempotent
+  uninstall of a missing tree, and three CLI-driver cases
+  confirming `python3 -m lib.extensions` goes through the same
+  functions as the HTTP handlers.
+
+Full suite: 579 tests green.
+
 ## 0.7.1.1 — Config > Extensions install UI (2026-04-24)
 
 One-click install for the agent extension (and any future extension

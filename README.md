@@ -41,6 +41,30 @@ python3 tb.py exec work --json -- pytest -q
 distro packages it (Debian/Ubuntu `apt install ttyd`, Homebrew `brew install
 ttyd`), that works too.
 
+### Installing the agent module
+
+The agent platform lives in a separate repo
+[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
+and is opt-in. Three ways to enable it:
+
+```bash
+# 1. In the running dashboard: Config → Extensions → Agents
+#    module → Download and enable. Restart when the banner appears.
+
+# 2. Headless host with the dashboard not running:
+make install-agent            # uses the same install path as the UI
+
+# 3. Clone everything at once, then enable:
+git clone --recursive https://github.com/itsmygithubacct/tmux-browse.git
+cd tmux-browse
+make enable-agent             # flips the bit; restart the dashboard
+```
+
+Manage an already-installed agent with `make update-agent`,
+`make disable-agent`, `make uninstall-agent`, or (three-step
+confirmation to destroy state) `make uninstall-agent-with-state`.
+State files under `~/.tmux-browse/` are kept by every other path.
+
 ## Quick Start
 
 If you want to try it immediately, create a throwaway tmux session first:

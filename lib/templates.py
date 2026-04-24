@@ -488,6 +488,44 @@ def _render(js: str) -> str:
         </div>
     </div>
 </div>
+<div id="extension-manage-modal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="extension-manage-modal-title">
+        <div class="modal-head">
+            <div>
+                <div class="modal-eyebrow">Extension</div>
+                <h2 id="extension-manage-modal-title">Manage</h2>
+            </div>
+            <button class="btn" id="extension-manage-close" type="button" title="close the manage dialog">Close</button>
+        </div>
+        <div class="extension-manage-body">
+            <dl class="extension-manage-facts">
+                <dt>Installed</dt><dd id="extension-manage-version">—</dd>
+                <dt>Source</dt><dd id="extension-manage-source">—</dd>
+                <dt>Status</dt><dd id="extension-manage-state">—</dd>
+            </dl>
+            <div class="extension-manage-actions">
+                <button class="btn blue" id="extension-manage-update" type="button">Update to pinned ref</button>
+                <span class="dim" id="extension-manage-update-hint" style="font-size:0.78rem">Fetches upstream and re-validates the manifest.</span>
+            </div>
+            <div class="extension-manage-actions">
+                <button class="btn" id="extension-manage-toggle" type="button">Disable</button>
+                <span class="dim" style="font-size:0.78rem">Keep code; flip off next start.</span>
+            </div>
+            <div class="extension-manage-actions">
+                <label class="check-row" style="align-items:flex-start;gap:0.4rem">
+                    <input type="checkbox" id="extension-manage-remove-state" />
+                    <span>Also remove this extension's state files under <code>~/.tmux-browse/</code>. <strong>Irreversible.</strong></span>
+                </label>
+            </div>
+            <div class="extension-manage-actions">
+                <button class="btn red" id="extension-manage-uninstall" type="button">Uninstall</button>
+                <span class="dim" id="extension-manage-uninstall-hint" style="font-size:0.78rem">Removes code. Keeps state unless the box above is ticked.</span>
+            </div>
+            <div id="extension-manage-status" class="dim" style="font-size:0.82rem;margin-top:0.4rem"></div>
+            <div id="extension-manage-error" class="ext-card-error" hidden></div>
+        </div>
+    </div>
+</div>
 <script>{js}</script>
 </body>
 </html>

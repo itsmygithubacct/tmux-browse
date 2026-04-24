@@ -10,6 +10,7 @@ state.extensionsPendingRestart = state.extensionsPendingRestart || 0;
 state.extensionsBannerDismissed = false;
 state.extensionRowBusy = state.extensionRowBusy || {};
 state.extensionRowError = state.extensionRowError || {};
+state.extensionManage = state.extensionManage || { open: false, name: "" };
 
 async function loadExtensions() {
     const r = await api("GET", "/api/extensions");
@@ -99,6 +100,13 @@ function renderExtensionActions(row, busy) {
         btn.addEventListener("click", primary.action);
         wrap.appendChild(btn);
     }
+    if (row.installed) {
+        const manage = el("button",
+            { class: "btn", type: "button" }, "Manage…");
+        if (disabled) manage.disabled = true;
+        manage.addEventListener("click", () => openExtensionManageModal(row.name));
+        wrap.appendChild(manage);
+    }
     if (row.repo) {
         const link = document.createElement("a");
         link.className = "btn";
@@ -109,6 +117,145 @@ function renderExtensionActions(row, busy) {
         wrap.appendChild(link);
     }
     return wrap;
+}
+
+function rowByName(name) {
+    return (state.extensions || []).find((r) => r.name === name) || null;
+}
+
+function openExtensionManageModal(name) {
+    state.extensionManage = { open: true, name };
+    const modal = document.getElementById("extension-manage-modal");
+    if (!modal) return;
+    renderManageModal();
+    modal.hidden = false;
+}
+
+function closeExtensionManageModal() {
+    state.extensionManage = { open: false, name: "" };
+    const modal = document.getElementById("extension-manage-modal");
+    if (modal) modal.hidden = true;
+    const errBox = document.getElementById("extension-manage-error");
+    if (errBox) { errBox.hidden = true; errBox.textContent = ""; }
+    const chk = document.getElementById("extension-manage-remove-state");
+    if (chk) chk.checked = false;
+    const statusBox = document.getElementById("extension-manage-status");
+    if (statusBox) statusBox.textContent = "";
+}
+
+function renderManageModal() {
+    const name = state.extensionManage.name;
+    const row = rowByName(name);
+    if (!row) { closeExtensionManageModal(); return; }
+    const title = document.getElementById("extension-manage-modal-title");
+    if (title) title.textContent = `Manage · ${row.label || row.name}`;
+    setText("extension-manage-version", row.version || "—");
+    setText("extension-manage-source",
+        row.submodule ? `submodule at extensions/${row.name}/`
+                      : `clone at extensions/${row.name}/`);
+    let stateLabel = "not installed";
+    if (row.restart_pending) stateLabel = "enabled · restart pending";
+    else if (row.enabled) stateLabel = "enabled";
+    else if (row.installed) stateLabel = "installed, disabled";
+    setText("extension-manage-state", stateLabel);
+    const toggle = document.getElementById("extension-manage-toggle");
+    if (toggle) {
+        toggle.textContent = row.enabled ? "Disable" : "Enable";
+        toggle.className = row.enabled ? "btn" : "btn green";
+    }
+}
+
+function setText(id, value) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = value;
+}
+
+function setManageStatus(text) {
+    const node = document.getElementById("extension-manage-status");
+    if (node) node.textContent = text;
+}
+
+function setManageError(stage, msg) {
+    const box = document.getElementById("extension-manage-error");
+    if (!box) return;
+    if (!msg) { box.hidden = true; box.textContent = ""; return; }
+    box.hidden = false;
+    box.textContent = `${stage || "error"}: ${msg}`;
+}
+
+async function manageUpdate() {
+    const name = state.extensionManage.name;
+    if (!name) return;
+    setManageError(null, null);
+    setManageStatus("Running git fetch / checkout…");
+    const r = await api("POST", "/api/extensions/update", { name });
+    if (!r || !r.ok) {
+        setManageError((r && r.stage) || "error", (r && r.error) || "update failed");
+        setManageStatus("");
+        return;
+    }
+    if (r.changed) {
+        state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
+        state.extensionsBannerDismissed = false;
+        setManageStatus(`Updated ${r.from_version || "?"} → ${r.to_version}. Restart to activate.`);
+    } else {
+        setManageStatus(`Already at ${r.to_version}.`);
+    }
+    await loadExtensions();
+    renderManageModal();
+}
+
+async function manageToggle() {
+    const name = state.extensionManage.name;
+    const row = rowByName(name);
+    if (!row) return;
+    setManageError(null, null);
+    const verb = row.enabled ? "disable" : "enable";
+    setManageStatus(`Running ${verb}…`);
+    const r = await api("POST", `/api/extensions/${verb}`, { name });
+    if (!r || !r.ok) {
+        setManageError(verb, (r && r.error) || `${verb} failed`);
+        setManageStatus("");
+        return;
+    }
+    state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
+    state.extensionsBannerDismissed = false;
+    setManageStatus(`${verb.charAt(0).toUpperCase() + verb.slice(1)}d. Restart to activate.`);
+    await loadExtensions();
+    renderManageModal();
+}
+
+async function manageUninstall() {
+    const name = state.extensionManage.name;
+    if (!name) return;
+    const chk = document.getElementById("extension-manage-remove-state");
+    const removeState = !!(chk && chk.checked);
+    let confirmText;
+    if (removeState) {
+        confirmText = `Uninstall ${name} AND delete its state files under ~/.tmux-browse/? This cannot be undone.`;
+    } else {
+        confirmText = `Uninstall ${name}? Code will be removed; state files stay.`;
+    }
+    if (!confirm(confirmText)) return;
+    setManageError(null, null);
+    setManageStatus("Running uninstall…");
+    const r = await api("POST", "/api/extensions/uninstall",
+        { name, remove_state: removeState });
+    if (!r || !r.ok) {
+        setManageError((r && r.stage) || "error", (r && r.error) || "uninstall failed");
+        setManageStatus("");
+        return;
+    }
+    state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
+    state.extensionsBannerDismissed = false;
+    const removed = (r.summary && r.summary.state_removed) || [];
+    const tail = removeState
+        ? ` (${removed.length} state path${removed.length === 1 ? "" : "s"} removed)`
+        : "";
+    setManageStatus(`Uninstalled${tail}. Restart to drop routes and UI.`);
+    await loadExtensions();
+    // Row is now "not installed" — just close the modal.
+    setTimeout(closeExtensionManageModal, 800);
 }
 
 function primaryExtensionAction(row) {
@@ -215,6 +362,21 @@ function initExtensionsCard() {
             renderRestartBanner();
         });
     }
+    // Manage modal bindings.
+    const closeBtn = document.getElementById("extension-manage-close");
+    if (closeBtn) closeBtn.addEventListener("click", closeExtensionManageModal);
+    const modal = document.getElementById("extension-manage-modal");
+    if (modal) {
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) closeExtensionManageModal();
+        });
+    }
+    const updateBtn = document.getElementById("extension-manage-update");
+    if (updateBtn) updateBtn.addEventListener("click", manageUpdate);
+    const toggleBtn = document.getElementById("extension-manage-toggle");
+    if (toggleBtn) toggleBtn.addEventListener("click", manageToggle);
+    const uninstallBtn = document.getElementById("extension-manage-uninstall");
+    if (uninstallBtn) uninstallBtn.addEventListener("click", manageUninstall);
     loadExtensions();
 }
 

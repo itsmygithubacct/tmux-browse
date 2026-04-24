@@ -137,11 +137,11 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
         self.assertEqual(fake.status, 400)
         self.assertEqual(fake.payload["stage"], "unknown")
 
-    def test_uninstall_endpoint_returns_501(self):
+    def test_uninstall_endpoint_rejects_missing_name(self):
         fake = _FakeHandler(_FakeServer())
         server.Handler._h_extensions_uninstall(
-            fake, urlparse("/api/extensions/uninstall"), {"name": "agent"})
-        self.assertEqual(fake.status, 501)
+            fake, urlparse("/api/extensions/uninstall"), {})
+        self.assertEqual(fake.status, 400)
 
     def test_enable_endpoint_rejects_missing_name(self):
         fake = _FakeHandler(_FakeServer())
