@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased — Config > Extensions install UI (E3)
+
+One-click install for the agent extension (and any future extension
+that lands in `lib/extensions/catalog.py`). The Config pane gains an
+**Extensions** card that lists every known extension with a
+**Download and enable** button; clicking it fetches the extension
+from git, validates the manifest, flips the enabled bit, and shows
+a restart banner at the top of the page. Clicking **Restart now**
+on the banner hits `/api/server/restart` and the loader activates
+the extension on the next boot.
+
+### What's new
+
+- `lib/extensions/catalog.py` — `KNOWN` dict describing each
+  installable extension (name, label, description, repo URL,
+  pinned ref, submodule path). One entry today: `agent` pinned at
+  `v0.7.1-agent`.
+- `lib/extensions.install()` — materialises an extension on disk
+  via `git submodule update --init` when the path is already a
+  registered submodule, else a shallow `git clone` at the pinned
+  ref. Validates the fetched manifest. Cleans up partial trees on
+  failure so a retry starts clean.
+- `lib/extensions.InstallError(stage, msg)` — structured failure
+  surface. Stages: `exists`, `clone`, `submodule_init`, `validate`,
+  `unknown`. UI renders stage + verbatim message.
+- `POST /api/extensions/install` replaces the E0 501 stub. Takes
+  `{"name": "<catalog-entry>"}`, returns `InstallResult` fields
+  plus `restart_required: true`. Config-lock gated.
+- `GET /api/extensions` gains per-row `label` / `description` /
+  `repo` / `submodule` / `restart_pending` fields from the catalog
+  so the Config card renders in one round trip.
+- `GET /api/extensions/available` returns the full catalog (was
+  an empty list in E0).
+- `static/extensions.js` + `lib/templates.py` Extensions card +
+  a restart banner in the page shell. Banner is sticky across tab
+  reloads (state pulled from `/api/extensions.restart_pending`) and
+  dismissible per session.
+
+### Tests
+
+- `tests/test_extensions_install.py` — eight new cases covering
+  fresh-clone success, clone failure (cleanup), manifest-invalid
+  failure (cleanup), too-new-extension rejection, non-empty target
+  dir rejection, unknown-name rejection, timeout, and the
+  submodule-path fast track. `subprocess.run` is mocked so the
+  tests don't touch the network.
+- `tests/test_config_lock.py` gains two cases confirming
+  `/api/extensions/install` and `/api/extensions/enable` return
+  403 when the dashboard is locked without a valid token.
+- `tests/test_server_extensions.py` updated for the new response
+  shape and install semantics.
+
+Full suite: 564 tests green.
+
 ## 0.7.1 — agent platform split out to its own repo (2026-04-24)
 
 The agent platform — every `/api/agent-*` endpoint, the `tb agent`

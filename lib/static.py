@@ -42,6 +42,7 @@ _JS_FILES = [
     "phone-keys.js",
     "sharing.js",
     "panes.js",
+    "extensions.js",
 ]
 
 # One init footer sits between core JS and extension JS so extensions

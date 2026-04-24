@@ -122,18 +122,20 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
                 p.stop()
             tmp.cleanup()
 
-    def test_available_endpoint_returns_empty_list_in_e0(self):
+    def test_available_endpoint_lists_catalog_entries(self):
         fake = _FakeHandler(_FakeServer())
         server.Handler._h_extensions_available(
             fake, urlparse("/api/extensions/available"))
         self.assertEqual(fake.status, 200)
-        self.assertEqual(fake.payload["available"], [])
+        names = [e["name"] for e in fake.payload["available"]]
+        self.assertIn("agent", names)
 
-    def test_install_endpoint_returns_501(self):
+    def test_install_endpoint_rejects_unknown_name(self):
         fake = _FakeHandler(_FakeServer())
         server.Handler._h_extensions_install(
-            fake, urlparse("/api/extensions/install"), {"name": "agent"})
-        self.assertEqual(fake.status, 501)
+            fake, urlparse("/api/extensions/install"), {"name": "bogus"})
+        self.assertEqual(fake.status, 400)
+        self.assertEqual(fake.payload["stage"], "unknown")
 
     def test_uninstall_endpoint_returns_501(self):
         fake = _FakeHandler(_FakeServer())
