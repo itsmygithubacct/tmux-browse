@@ -7,6 +7,11 @@ the existing single-turn runner, teaches the dashboard about agent
 modes, and introduces a pluggable tool registry with `read_file`
 as the first non-`tb_command` tool.
 
+> **Heads-up:** the agent-mode feature (cycle, work) is under active
+> development. Behaviour and defaults may shift between patch
+> releases; treat this surface as unstable until a minor-version
+> bump lands.
+
 ### Agent modes: `cycle` and `work`
 
 Two new agent-level modes, each a thin orchestrator above the
