@@ -16,6 +16,10 @@ class _FakeHandler:
     def __init__(self):
         self.payload = None
         self.status = None
+        # Empty headers dict is sufficient when no config lock is active
+        # (the common case for these tests). Lock-enforcement tests
+        # populate this via headers["X-TB-Unlock-Token"] directly.
+        self.headers = {}
 
     def _send_json(self, obj, status=200):
         self.payload = obj
@@ -23,6 +27,9 @@ class _FakeHandler:
 
     def _send_tb_error(self, err):
         return server.Handler._send_tb_error(self, err)
+
+    def _check_unlock(self):
+        return server.Handler._check_unlock(self)
 
 
 class AgentRouteTableTests(unittest.TestCase):

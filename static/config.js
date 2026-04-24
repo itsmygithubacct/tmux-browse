@@ -398,18 +398,35 @@ function guardConfigOpen(e) {
     if (configUnlocked) return;
     if (wrap.open) return;
     e.preventDefault();
-    const password = prompt("Enter config password:");
-    if (!password) return;
-    api("POST", "/api/config-lock/verify", { password }).then((r) => {
-        if (r.ok && r.unlocked) {
-            configUnlocked = true;
-            wrap.open = true;
-            const lockStatus = document.getElementById("cfg-lock-status");
-            if (lockStatus) lockStatus.textContent = "unlocked this session";
-        } else {
-            alert("Wrong password.");
-        }
+    promptForUnlock().then((token) => {
+        if (!token) return;
+        configUnlocked = true;
+        wrap.open = true;
+        const lockStatus = document.getElementById("cfg-lock-status");
+        if (lockStatus) lockStatus.textContent = "unlocked this session";
     });
+}
+
+// Shared prompt-and-verify flow used by both guardConfigOpen and by
+// util.js's api() when it gets a 403 with "config locked". Returns the
+// issued token on success, "" on cancel or wrong password.
+async function promptForUnlock() {
+    const password = prompt("Enter config password:");
+    if (!password) return "";
+    // Bypass the retry loop in api() for this call — send a plain fetch
+    // so a bad password doesn't spin the retry.
+    const r = await fetch("/api/config-lock/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.unlocked && data.unlock_token) {
+        setStoredUnlockToken(data.unlock_token);
+        return data.unlock_token;
+    }
+    alert("Wrong password.");
+    return "";
 }
 
 async function setConfigLock() {
@@ -420,6 +437,19 @@ async function setConfigLock() {
     if (r.ok) {
         document.getElementById("cfg-lock-password").value = "";
         if (lockStatus) lockStatus.textContent = r.locked ? "lock set" : "lock cleared";
+        // Immediately verify so this session gets an unlock token — otherwise
+        // the very next write would 403 and re-prompt the user who *just*
+        // set the password.
+        if (r.locked) {
+            const verify = await fetch("/api/config-lock/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password: pw }),
+            }).then(v => v.json()).catch(() => null);
+            if (verify && verify.unlock_token) {
+                setStoredUnlockToken(verify.unlock_token);
+            }
+        }
     }
 }
 
@@ -429,6 +459,7 @@ async function clearConfigLock() {
     if (r.ok && lockStatus) {
         lockStatus.textContent = "lock removed";
         configUnlocked = true;
+        setStoredUnlockToken("");
     }
 }
 
