@@ -67,7 +67,7 @@ DEFAULTS: dict[str, Any] = {
     "show_summary_hide": False,
     "show_wc_hide_icon": True,
     "show_summary_reorder": False,
-    "show_summary_move": True,
+    "show_summary_move": False,
     "show_wc_move_icon": True,
     "show_wc_close": True,
     "show_wc_maximize": True,
