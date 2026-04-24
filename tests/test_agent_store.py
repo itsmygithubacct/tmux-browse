@@ -184,5 +184,39 @@ class AddRemoveTests(_IsolatedStateMixin, unittest.TestCase):
             )
 
 
+class SandboxModeTests(_IsolatedStateMixin, unittest.TestCase):
+
+    def test_docker_is_a_supported_mode(self):
+        self.assertIn("docker", agent_store.SUPPORTED_SANDBOX_MODES)
+        self.assertIn("worktree", agent_store.SUPPORTED_SANDBOX_MODES)
+        self.assertIn("host", agent_store.SUPPORTED_SANDBOX_MODES)
+
+    def test_docker_round_trips_through_save_and_get(self):
+        agent_store.save_agent("opus", api_key="sk-x", sandbox="docker")
+        got = agent_store.get_agent("opus")
+        self.assertEqual(got["sandbox"], "docker")
+
+    def test_invalid_sandbox_value_falls_back_to_host(self):
+        # Existing invariant: garbage strings still degrade to host on read.
+        # Docker remains untouched because it is in the supported set now.
+        agent_store.save_agent("opus", api_key="sk-x", sandbox="docker")
+        # Manually corrupt persisted value to simulate an unknown mode.
+        import json as _json
+        path = agent_store.AGENTS_FILE
+        data = _json.loads(path.read_text())
+        data["opus"]["sandbox"] = "podman"
+        path.write_text(_json.dumps(data))
+        got = agent_store.get_agent("opus")
+        self.assertEqual(got["sandbox"], "host")
+
+    def test_docker_sandbox_persists_when_docker_unavailable(self):
+        # save_agent does not consult docker_sandbox.SUPPORTED — config
+        # persistence is independent of transient host capability.
+        with mock.patch("lib.docker_sandbox.SUPPORTED", False):
+            agent_store.save_agent("opus", api_key="sk-x", sandbox="docker")
+            got = agent_store.get_agent("opus")
+        self.assertEqual(got["sandbox"], "docker")
+
+
 if __name__ == "__main__":
     unittest.main()

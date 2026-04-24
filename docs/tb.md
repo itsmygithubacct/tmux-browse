@@ -425,6 +425,57 @@ Shared flags such as `--json`, `--quiet`, and `--no-header` work before or
 after the nested `agent` mode, so both `tb agent --json defaults` and
 `tb agent defaults --json` are valid.
 
+#### Sandbox modes
+
+Each agent has a `sandbox` field stored alongside its other config. Valid
+modes:
+
+- `host` — current behavior; `tb_command` runs against the host tmux server.
+- `worktree` — runs against an isolated git worktree (used by task mode).
+- `docker` — runs `tb.py` inside a one-shot Docker container with its own
+  tmux server. Only the container-local session `sandbox:` is reachable.
+
+**Docker mode setup:**
+
+1. Build the sandbox image once:
+   ```bash
+   docker build -t tmux-browse-sandbox:latest -f Dockerfile.sandbox .
+   ```
+2. Set the agent's sandbox mode (CLI: pass `--sandbox docker` to
+   `tb agent add` / `save`; dashboard: pick `docker` in Agent Settings).
+3. Run as usual: `tb agent <name> "..."`.
+
+**Docker mode semantics:**
+
+- The agent loop, provider API calls, and run logging stay on the host.
+  Only the `tb_command` execution moves into the container. API keys never
+  enter the container.
+- The container is created with `--cap-drop=ALL`, `--read-only`,
+  `--network=none`, `--security-opt=no-new-privileges`, a 256 MiB tmpfs at
+  `/tmp`, and runs as the calling host UID/GID. The repo is mounted
+  read-only at `/opt/tmux-browse`; the workspace is mounted read-write at
+  `/workspace`.
+- Inside the container, the only tmux target the agent can address is
+  `sandbox:`. The system prompt instructs this; `exec_tb()` enforces it at
+  the boundary — non-`sandbox:` targets are rejected before any
+  `docker exec` runs.
+
+**Fail-closed behavior:**
+
+- If Docker is unavailable or container startup fails, the run fails with
+  a sandbox-startup error. There is no fallback to host execution.
+- Saved `sandbox=docker` config is preserved across hosts where Docker is
+  not installed; the dashboard surfaces it as
+  `docker (unavailable on this host)` rather than rewriting the value.
+
+**Non-goals (this phase):**
+
+- Docker-backed task launches (only direct `tb agent` and scheduler
+  workflows use Docker mode).
+- Mapping host tmux sessions into the container.
+- Attaching the dashboard's ttyd UI to the container's tmux session.
+- Combining Docker mode with worktree mode.
+
 ### Bulk (for LLM context)
 
 #### `tb snapshot [--human]`

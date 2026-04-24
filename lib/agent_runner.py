@@ -10,7 +10,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import agent_budgets, agent_costs, agent_hooks, agent_logs, agent_providers, agent_run_index
+from . import (
+    agent_budgets,
+    agent_costs,
+    agent_hooks,
+    agent_logs,
+    agent_providers,
+    agent_run_index,
+    docker_sandbox,
+)
 from .agent_runs import (
     STATUS_COMPLETED,
     STATUS_FAILED,
@@ -42,6 +50,20 @@ Important rules:
 You must respond with JSON only, one object per turn, in one of these shapes:
 {"type":"tool","tool":"tb_command","args":["snapshot","--json"],"stdin":""}
 {"type":"final","message":"done"}
+"""
+
+
+DOCKER_SANDBOX_PROMPT = """
+
+---
+
+You are operating inside an isolated Docker sandbox.
+The only tmux target available is `sandbox:`.
+Do not reference host session names.
+Examples:
+  - tb exec sandbox: -- ls /workspace
+  - tb read sandbox:
+  - tb capture sandbox:
 """
 
 
@@ -219,14 +241,19 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
               origin: str = "cli",
               run_id: str | None = None,
               conversation_messages: list[dict[str, str]] | None = None,
+              sandbox_spec: dict[str, Any] | None = None,
               ) -> dict[str, Any]:
     if not prompt.strip():
         raise UsageError("missing agent prompt")
     if run_id is None:
         run_id = new_run_id()
 
+    system_prompt = SYSTEM_PROMPT
+    if sandbox_spec and sandbox_spec.get("mode") == "docker":
+        system_prompt = system_prompt + DOCKER_SANDBOX_PROMPT
+
     messages: list[dict[str, str]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
     ]
     # Inject prior conversation context before the current prompt.
     if conversation_messages:
@@ -247,7 +274,17 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
         "wire_api": agent.get("wire_api"),
     })
 
+    sandbox = None
     try:
+        if sandbox_spec and sandbox_spec.get("mode") == "docker":
+            sandbox = docker_sandbox.Sandbox(
+                agent_name=agent["name"],
+                run_id=run_id,
+                workspace=Path(sandbox_spec.get("workspace") or repo_root),
+                repo_root=repo_root,
+            )
+            sandbox.create()
+
         for step in range(1, max_steps + 1):
             result = agent_providers.complete(agent, messages, timeout=request_timeout)
             raw = result.content
@@ -327,7 +364,10 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
             stdin_text = action.get("stdin")
             if stdin_text is not None and not isinstance(stdin_text, str):
                 raise UsageError("tb_command stdin must be a string when present")
-            tool_result = _run_tb_command(repo_root, tool_args, stdin_text)
+            if sandbox is not None:
+                tool_result = sandbox.exec_tb(tool_args, stdin_text, timeout=60)
+            else:
+                tool_result = _run_tb_command(repo_root, tool_args, stdin_text)
             tool_payload = _compact_tool_payload(tool_result)
             transcript[-1]["tool_result"] = tool_payload
             messages.append({"role": "assistant", "content": json.dumps(action)})
@@ -377,3 +417,6 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                     pass
             threading.Thread(target=_delayed_retry, daemon=True).start()
         raise
+    finally:
+        if sandbox is not None:
+            sandbox.close()

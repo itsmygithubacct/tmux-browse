@@ -97,10 +97,12 @@ class SandboxFieldTests(unittest.TestCase):
         from lib import agent_store
         out = agent_store._normalize_agent_meta("test", {"sandbox": "worktree"})
         self.assertEqual(out["sandbox"], "worktree")
+        out = agent_store._normalize_agent_meta("test", {"sandbox": "docker"})
+        self.assertEqual(out["sandbox"], "docker")
 
     def test_normalize_rejects_invalid_sandbox(self):
         from lib import agent_store
-        out = agent_store._normalize_agent_meta("test", {"sandbox": "docker"})
+        out = agent_store._normalize_agent_meta("test", {"sandbox": "podman"})
         self.assertEqual(out["sandbox"], "host")
 
 
