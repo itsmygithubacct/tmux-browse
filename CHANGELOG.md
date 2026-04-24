@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — agent platform split out to its own repo (E2)
+## 0.7.1 — agent platform split out to its own repo (2026-04-24)
 
 The agent platform — every `/api/agent-*` endpoint, the `tb agent`
 CLI verb, the workflow scheduler, the conductor, the Agent Settings
@@ -9,34 +9,44 @@ workflow modals — now lives in a separate repository,
 [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent),
 and attaches to core as a git submodule at `extensions/agent/`.
 
+Landed in three phases on a single release so the history is
+reviewable and each phase kept the test suite green:
+
+- **E0** — extension loader substrate.
+- **E1** — relocate the agent platform into `extensions/agent/`
+  behind the loader.
+- **E2** — split `extensions/agent/` out into its own repo; attach
+  as a submodule; remove the first-start default-enable.
+
 **Upgrade note (if you used the agent platform pre-split):** after
-pulling this version the Agents pane and `tb agent` CLI are no longer
-auto-enabled. You have two choices:
+pulling 0.7.1 the Agents pane and `tb agent` CLI are no longer
+auto-enabled. Two choices:
 
 1. **Opt in** — go to Config → Extensions → Agents module → Enable
    in the running dashboard. (Or hand-edit `~/.tmux-browse/extensions.json`
    to `{"agent": {"enabled": true}}`.) Requires `git submodule update
    --init` or `git clone --recursive` to have the submodule on disk
-   first; the install UI in the upcoming release drives that too.
-2. **Ignore** — the core dashboard keeps working without agents. Your
-   saved `~/.tmux-browse/agents.json`, secrets, logs, and history are
-   untouched; only the load-at-start bit flipped.
+   first; the install UI in a forthcoming release drives that too.
+2. **Ignore** — the core dashboard keeps working without agents.
+   Your saved `~/.tmux-browse/agents.json`, secrets, logs, and
+   history are untouched; only the load-at-start bit flipped.
 
-### What moved
+### What moved out
 
 - `lib/agent_*.py` (20 modules), `lib/agent_modes/`, and
-  `lib/tb_cmds/agent.py` → the new repo under `agent/*`, `agent/modes/`,
-  and `tb_cmds/agent.py`.
+  `lib/tb_cmds/agent.py` → the new repo under `agent/*`,
+  `agent/modes/`, and `tb_cmds/agent.py`.
 - All 24 `/api/agent-*` HTTP handlers cut from `lib/server.Handler`
   into `server/routes.py` as free functions taking `handler` as their
   first arg.
-- Agent HTML slots (Agent Settings card, Agents / Runs / Tasks sections,
-  transcript + workflow modals) moved from `lib/templates.py` into
-  `ui_blocks.html`; the loader fills core's `<!--slot:name-->` markers.
+- Agent HTML slots (Agent Settings card, Agents / Runs / Tasks
+  sections, transcript + workflow modals) moved from
+  `lib/templates.py` into `ui_blocks.html`; the loader fills core's
+  `<!--slot:name-->` markers.
 - `static/{agents,runs,tasks}.js` → the new repo's `static/`.
-- Every `test_agent_*.py` → the new repo's `tests/`; core's runner pulls
-  them back in via `tests/test_extension_agent_tests.py` when the
-  submodule is checked out.
+- Every `test_agent_*.py` → the new repo's `tests/`; core's runner
+  pulls them back in via `tests/test_extension_agent_tests.py` when
+  the submodule is checked out.
 
 Net: ~5000 lines leave core. `grep -r '^from lib import agent_' lib/`
 returns nothing.
@@ -45,78 +55,67 @@ returns nothing.
 
 - `lib/docker_sandbox.py`, `lib/session_logs.py`, `lib/tasks.py`,
   `lib/worktrees.py`, `lib/sessions.py` — the primitives the extension
-  uses via `agent.core_api`. That's the one file in the extension that
-  tracks core's API surface; anything else importing from `lib.*` is a
-  bug.
+  uses via `agent.core_api`. That's the one file in the extension
+  that tracks core's API surface; anything else importing from
+  `lib.*` is a bug.
 - First-boot `~/.tmux-browse/` is clean — no `extensions.json` is
   auto-written. Extensions are opt-in from now on.
 
 ### New in core
 
-- `lib/extensions/submodule.py` — thin wrappers around
-  `git submodule update --init` and `--remote` for the Config-pane
-  install / update buttons.
-- `tests/test_extension_agent_lifecycle.py` proves enable → load →
-  disable round-trips against the real submodule checkout.
-- `tests/test_extensions_submodule.py` covers the `.gitmodules`
-  parser and the `subprocess.run` shape, with `git` mocked.
-
-### Compatibility
-
-- `tmux-browse-agent` v0.7.0.4-agent targets `tmux-browse >= 0.7.0.4`
-  per its `manifest.json` `min_tmux_browse`. When either side bumps a
-  version, the other's version pin moves deliberately after tests pass.
-- The submodule is pinned at a specific commit in `.gitmodules`;
-  advancing the pin is deliberate.
-
-## Unreleased — extension loader substrate (E0)
-
-Groundwork for an upcoming split of the agent platform into its own
-repository, loadable on demand. This release ships the substrate; no
-existing feature moves yet and user behaviour is unchanged.
-
-### Extension loader
-
-- New `lib/extensions/` package defines a small load-time contract
-  any optional module can plug into: a `manifest.json` declares
-  dotted-path entry points for HTTP routes, CLI verbs, UI blocks,
-  static JS, and startup hooks. Each entry point returns a typed
-  `Registration` that the core merges into its live tables.
-- `lib/templates.py` `render_index()` now accepts `ui_blocks` and
-  `extension_js`; named injection points live under
-  `<!--slot:name-->` markers. An empty `ui_blocks` dict renders
-  the exact HTML shipped today.
-- `lib/static.py` gains `build_js(extension_js)` that concatenates
-  core JS with each extension's `static/*.js`, with a
-  `window.__tbExtensions` footer between them so extension init
-  can register after the core bootstrap.
-- Route / CLI verb / UI slot collisions across extensions — or
-  between an extension and core — raise fail-closed at server
-  start rather than last-one-wins.
+- `lib/extensions/` package: manifest parsing, registration merging
+  with fail-closed collision detection, per-extension sys.path
+  isolation, and slot-based template injection. Extensions declare
+  their surface via `manifest.json` and a handful of dotted-path
+  entry points.
+- `lib/templates.render_index()` now accepts `ui_blocks` and
+  `extension_js`; injection points live under `<!--slot:name-->`
+  markers. An empty `ui_blocks` dict produces the exact HTML that
+  shipped in 0.7.0.4.
+- `lib/static.build_js(extension_js)` concatenates core JS with each
+  extension's `static/*.js`, with a `window.__tbExtensions` footer
+  between them so extension init can register after the core
+  bootstrap.
+- `lib/extensions/submodule.py` wraps `git submodule update --init`
+  and `--remote` for the Config-pane install / update buttons.
 
 ### New endpoints
 
 - `GET /api/extensions` — status list (installed / enabled /
   version / last error per extension).
-- `GET /api/extensions/available` — catalogue of known
-  extensions (empty in E0; populated in E3).
+- `GET /api/extensions/available` — catalogue of known extensions
+  (empty in 0.7.1; populated when the install UI lands).
 - `POST /api/extensions/enable` / `disable` — flag flip with
   config-lock gating. `restart_required: true` in the response
   since the loader runs once per server process.
-- `POST /api/extensions/install` / `uninstall` — ship as 501
-  stubs; real implementations land in E3/E4.
+- `POST /api/extensions/install` / `uninstall` — 501 stubs;
+  real implementations land alongside the install UI.
 
 ### Tests
 
-- 39 new cases across `tests/test_extensions.py` (loader,
-  manifest, registry, UI-block parsing, end-to-end) and
-  `tests/test_server_extensions.py` (route wiring, index slot
-  injection, the five endpoints).
-- Fixtures under `tests/fixtures/ext_hello/` and
-  `tests/fixtures/ext_bad_collide/` exercise the success and
-  conflict paths respectively.
+- `tests/test_extensions.py` + `tests/test_server_extensions.py`:
+  loader, manifest, registry, UI-block parsing, route wiring, index
+  slot injection, the five endpoints. Fixtures under
+  `tests/fixtures/ext_hello/` and `tests/fixtures/ext_bad_collide/`
+  exercise success and conflict paths.
+- `tests/test_extension_agent_lifecycle.py`: proves enable → load
+  → disable round-trips against the real submodule checkout.
+- `tests/test_extensions_submodule.py`: `.gitmodules` parser and
+  the `subprocess.run` shape, with `git` mocked.
+- `tests/test_extension_agent_tests.py`: loader shim that pulls the
+  extension's own `extensions/agent/tests/` under
+  `python3 -m unittest discover tests`, using a fresh `TestLoader`
+  to avoid clobbering the outer walk's `top_level_dir`.
 
-Full suite at 541 tests.
+Full suite: 554 tests green.
+
+### Compatibility
+
+- `tmux-browse-agent` v0.7.1-agent targets `tmux-browse >= 0.7.1`
+  per its `manifest.json` `min_tmux_browse`. Earlier extension
+  tags (v0.7.0.4-agent) were a pre-release carve; don't use them.
+- The submodule is pinned at a specific commit in `.gitmodules`;
+  advancing the pin is deliberate.
 
 ## 0.7.0.4 — README and default polish (2026-04-24)
 
