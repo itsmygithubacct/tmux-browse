@@ -1,5 +1,81 @@
 # Changelog
 
+## Unreleased — agent-platform evolution (T1-T4)
+
+Follows
+`~/research/tmux-browse/plans/plan_0.8.0_program.md` + the per-phase
+plans under `~/research/tmux-browse/plans/plan_mode_*.md` and
+`plan_tool_sandbox.md`. Version stays at 0.7.0.2 until the full
+program reaches a tagged release.
+
+### T1 — mode design docs (in research only)
+
+Three design docs merged under `~/research/tmux-browse/plans/`:
+`plan_mode_cycle.md`, `plan_mode_work.md`, `plan_mode_drive.md`.
+Drive is deferred to T2b pending its termination contract clearing
+implementation review.
+
+### T2 — cycle and work agent modes
+
+New package `lib/agent_modes/`. Each mode is a thin orchestrator
+above `agent_runner.run_agent`; no new scheduler or log format.
+
+- **cycle** — one planning-then-execute turn. Two `run_agent` calls
+  with `origin="cycle-plan"` and `origin="cycle-exec"`. Goal loaded
+  from `--goal-text` / `--goal` / default file
+  `~/.tmux-browse/agent-cycle/<agent>.txt`, or agent proposes one.
+  CLI: `tb agent cycle`. Endpoint: `POST /api/agent-cycle`. Button
+  on each agent card.
+- **work** — file-backed task queue runner. `FileSource` reads
+  plaintext or JSON lines; `.done` sibling makes it resumable.
+  Aborts on empty queue, daily budget stop, cumulative step cap,
+  stop flag, or optional `--stop-on-error`. CLI: `tb agent work`.
+  Endpoints: `POST /api/agent-work` + `/api/agent-work/stop`.
+  Button on each agent card.
+
+### T3 — mode-aware observability
+
+`agent_status.get_status()` carries `mode` + `mode_phase` derived
+from the most recent run's `origin` (cycle-plan → ("cycle","plan"),
+cycle-exec → ("cycle","exec"), work → ("work",""), drive →
+("drive",""), anything else → ("","")). `/api/agents` surfaces both
+fields on every row; the Agents pane renders a grey badge next to
+the status badge. Runs filter dropdown gains `cli/repl/scheduler/
+conductor/cycle-plan/cycle-exec/work/retry` options.
+
+### T4 — tool registry and `read_file` tool
+
+New `lib/agent_tool_registry.py`. Tools declare
+`(run_host, run_sandbox)` dispatch callables; the runner routes
+through the registry so adding a tool doesn't touch the runner.
+Built-ins: `tb_command` (wraps existing paths unchanged) and
+`read_file` (64 KiB cap, path-validated against the sandbox home
+blocklist on host; `/workspace` + `/opt/tmux-browse` only in Docker
+mode).
+
+Agents gain a `tools` field (default `["tb_command"]`). When an
+agent has more than the default, the system prompt gains an
+`Enabled tools:` block describing each. Disabled tools get a clean
+`not enabled` rejection rather than a silent execution.
+
+### Not in this chunk
+
+- T2 **drive mode** — deferred per `plan_mode_drive.md` until its
+  termination contract holds up in implementation review.
+- T4 `read_file` UI exposure for the Tools field in the agent form —
+  still CLI-only; dashboard Agents form adds the checkbox in a
+  follow-up.
+- T4 Docker-daemon integration test for `read_file` sandbox dispatch
+  — host tests and mocked sandbox tests cover the logic; live
+  Docker verification is a manual step.
+
+## 0.7.0.2 (2026-04-24)
+
+Between-release patch level covering the badge defaults flip, the
+ttyd_wrap per-viewer sizing fix, the scroll icon, session dedup,
+the config-lock/pane-groups/Move-to/conductor/REPL work, and this
+agent-platform program.
+
 ## Unreleased — 0.8.0
 
 Ships the five research proposals tracked in
