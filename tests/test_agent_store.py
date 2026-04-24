@@ -209,6 +209,22 @@ class SandboxModeTests(_IsolatedStateMixin, unittest.TestCase):
         got = agent_store.get_agent("opus")
         self.assertEqual(got["sandbox"], "host")
 
+    def test_default_tools_is_tb_command(self):
+        agent_store.save_agent("opus", api_key="sk-x")
+        got = agent_store.get_agent("opus")
+        self.assertEqual(got["tools"], ["tb_command"])
+
+    def test_tools_round_trip(self):
+        agent_store.save_agent("opus", api_key="sk-x",
+                                tools=["tb_command", "read_file"])
+        got = agent_store.get_agent("opus")
+        self.assertEqual(got["tools"], ["tb_command", "read_file"])
+
+    def test_empty_tools_falls_back_to_default(self):
+        agent_store.save_agent("opus", api_key="sk-x", tools=[])
+        got = agent_store.get_agent("opus")
+        self.assertEqual(got["tools"], ["tb_command"])
+
     def test_docker_sandbox_persists_when_docker_unavailable(self):
         # save_agent does not consult docker_sandbox.SUPPORTED — config
         # persistence is independent of transient host capability.

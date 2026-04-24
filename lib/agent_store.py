@@ -183,6 +183,15 @@ def _normalize_agent_meta(name: str, meta: dict[str, Any]) -> dict[str, Any]:
     out["base_url"] = base_url
     sandbox = (out.get("sandbox") or "").strip().lower()
     out["sandbox"] = sandbox if sandbox in SUPPORTED_SANDBOX_MODES else "host"
+    # Tool allowlist; unknown names dropped. Default to the single-tool
+    # substrate so existing agents continue unchanged.
+    raw_tools = out.get("tools")
+    if isinstance(raw_tools, list):
+        out["tools"] = [t for t in raw_tools if isinstance(t, str) and t]
+    else:
+        out["tools"] = ["tb_command"]
+    if not out["tools"]:
+        out["tools"] = ["tb_command"]
     try:
         out["token_budget"] = max(0, int(out.get("token_budget") or 0))
     except (TypeError, ValueError):
@@ -230,7 +239,8 @@ def save_agent(name: str, *, api_key: str | None = None,
                wire_api: str | None = None,
                sandbox: str | None = None,
                token_budget: int | None = None,
-               daily_token_budget: int | None = None) -> dict[str, Any]:
+               daily_token_budget: int | None = None,
+               tools: list[str] | None = None) -> dict[str, Any]:
     name = _validate_name(name)
     defaults = load_catalog().get(name, {})
     agents = _load_json(AGENTS_FILE, default={})
@@ -247,6 +257,8 @@ def save_agent(name: str, *, api_key: str | None = None,
             else existing.get("token_budget", 0),
         "daily_token_budget": daily_token_budget if daily_token_budget is not None
             else existing.get("daily_token_budget", 0),
+        "tools": tools if tools is not None
+            else existing.get("tools", ["tb_command"]),
     }
     entry = _apply_builtin_constraints(name, entry)
     if not entry["model"]:
