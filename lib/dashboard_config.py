@@ -58,6 +58,7 @@ DEFAULTS: dict[str, Any] = {
     "show_idle_text": True,
     "show_idle_alert_button": False,
     "show_wc_idle_icon": True,
+    "show_wc_scroll_icon": True,
     "show_summary_open": False,
     "show_summary_log": False,
     "show_wc_log_icon": True,

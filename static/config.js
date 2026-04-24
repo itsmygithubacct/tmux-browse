@@ -54,6 +54,7 @@ function configFieldMap() {
         show_wc_hide_icon: document.getElementById("cfg-show-wc-hide-icon"),
         show_wc_log_icon: document.getElementById("cfg-show-wc-log-icon"),
         show_wc_idle_icon: document.getElementById("cfg-show-wc-idle-icon"),
+        show_wc_scroll_icon: document.getElementById("cfg-show-wc-scroll-icon"),
         show_body_launch: document.getElementById("cfg-show-body-launch"),
         show_body_stop: document.getElementById("cfg-show-body-stop"),
         show_body_kill: document.getElementById("cfg-show-body-kill"),
@@ -155,7 +156,7 @@ const SUMMARY_TOGGLE_KEYS = [
     "show_idle_text", "show_idle_alert_button", "show_summary_open",
     "show_summary_log", "show_summary_scroll", "show_summary_split",
     "show_summary_hide", "show_summary_reorder",
-    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon",
+    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon", "show_wc_scroll_icon",
 ];
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
@@ -273,6 +274,7 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.wcMinimize, cfg.show_wc_minimize, "inline-flex");
     setVisible(rec.hideIconBtn, cfg.show_wc_hide_icon, "inline-flex");
     setVisible(rec.logIconBtn, cfg.show_wc_log_icon, "inline-flex");
+    setVisible(rec.scrollIconBtn, cfg.show_wc_scroll_icon, "inline-flex");
     setVisible(rec.sendBar, cfg.show_body_send_bar, "flex");
     setVisible(rec.phoneKeys, cfg.show_body_phone_keys, "flex");
     setVisible(rec.hotManageBtn, cfg.show_body_hot_buttons, "");
