@@ -353,6 +353,30 @@ function resetDashboardConfig() {
     refresh();
 }
 
+// Wipe everything tmux-browse has written to this browser's localStorage
+// and sessionStorage, then reload so state rebuilds from empty.
+// Only keys under the "tmux-browse:" namespace are removed, so any other
+// site sharing this origin is untouched. The dashboard-config.json on the
+// server is not affected — that lives outside the browser.
+function clearLocalCache() {
+    const msg = "This will clear all tmux-browse settings stored in this browser "
+        + "(hidden sessions, pane order, layout, hot buttons, idle alerts, phone keys) "
+        + "and reload the page. Server-side config is untouched. Continue?";
+    if (!confirm(msg)) return;
+    try {
+        const doomed = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith("tmux-browse:")) doomed.push(k);
+        }
+        for (const k of doomed) localStorage.removeItem(k);
+        sessionStorage.clear();
+    } catch (_) {
+        // private-mode / quota / disabled storage — nothing to clear
+    }
+    location.reload();
+}
+
 // --- Config lock ---
 
 let configUnlocked = true;

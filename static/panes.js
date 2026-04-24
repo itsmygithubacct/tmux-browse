@@ -1398,6 +1398,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("config-wrap").addEventListener("click", guardConfigOpen);
     document.getElementById("cfg-qr-show-btn").addEventListener("click", showConfigQR);
     document.getElementById("cfg-qr-scan-btn").addEventListener("click", scanConfigQR);
+    document.getElementById("cfg-clear-cache-btn").addEventListener("click", clearLocalCache);
     document.getElementById("qr-close-btn").addEventListener("click", closeQRModal);
     document.getElementById("qr-modal").addEventListener("click", (e) => { if (e.target.id === "qr-modal") closeQRModal(); });
     document.getElementById("phone-key-add-btn").addEventListener("click", addPhoneKey);
