@@ -455,6 +455,50 @@ Shared flags such as `--json`, `--quiet`, and `--no-header` work before or
 after the nested `agent` mode, so both `tb agent --json defaults` and
 `tb agent defaults --json` are valid.
 
+#### `tb agent cycle <name>`
+
+> **Under active development.** Behaviour and defaults may shift between
+> patch releases.
+
+One planning-then-execute turn. The agent reads a goal (inline, from
+a file, or proposes one if none is given), returns a short plan, then
+runs against that plan with the normal tool budget.
+
+Options:
+
+- `--goal=<path>` — read the goal from a file
+- `--goal-text="..."` — inline goal, overrides `--goal`
+- `--steps=N` — execute-phase step budget
+- `--timeout=SEC` — per-request provider timeout (default 90)
+
+Default goal file (used when neither flag is given) is
+`~/.tmux-browse/agent-cycle/<agent>.txt`. Plan and execute phases
+land in the run index with `origin="cycle-plan"` and
+`origin="cycle-exec"` so they're discoverable via the normal Runs
+search.
+
+#### `tb agent work <name> --tasks=<path>`
+
+> **Under active development.** Behaviour and defaults may shift between
+> patch releases.
+
+Runs a file-backed task queue: one task per line (plaintext or JSON
+object with `id`/`prompt`/`meta`). A sibling `.done` file records
+completed task ids so re-invoking against the same path resumes
+cleanly.
+
+Options:
+
+- `--tasks=<path>` — required; tasks source file
+- `--max-total-steps=N` — cumulative step cap across the queue (default 200)
+- `--steps-per-task=N` — per-task step budget
+- `--stop-on-error` — halt the loop on the first failing task (default continues)
+- `--timeout=SEC` — per-request provider timeout (default 90)
+
+Aborts cleanly on empty queue, daily-budget exhaustion, stop signal,
+or `--stop-on-error` + a failed task. Each task becomes a run in the
+index with `origin="work"`.
+
 #### Sandbox modes
 
 Each agent has a `sandbox` field stored alongside its other config. Valid
