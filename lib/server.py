@@ -788,10 +788,60 @@ class Handler(BaseHTTPRequestHandler):
     def _h_extensions_uninstall(self, _parsed: ParseResult, body: dict) -> None:
         if not self._check_unlock():
             return
+        name = (body.get("name") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"},
+                            status=400)
+            return
+        remove_state = bool(body.get("remove_state"))
+        try:
+            summary = extensions.uninstall(name, remove_state=remove_state)
+        except Exception as e:  # noqa: broad — surface every failure
+            self._send_json(
+                {"ok": False, "error": str(e), "stage": "uninstall"},
+                status=500)
+            return
+        _extensions_pending_restart[name] = True
         self._send_json({
-            "ok": False,
-            "error": "uninstall endpoint ships in a later phase (E4).",
-        }, status=501)
+            "ok": True,
+            "name": name,
+            "restart_required": True,
+            "summary": summary,
+            "message": ("Uninstalled. Restart the dashboard to remove the "
+                        "extension's routes and UI."),
+        })
+
+    def _h_extensions_update(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        name = (body.get("name") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"},
+                            status=400)
+            return
+        try:
+            result = extensions.update(name)
+        except extensions.UpdateError as e:
+            self._send_json(
+                {"ok": False, "error": e.msg, "stage": e.stage},
+                status=500)
+            return
+        if result.changed:
+            _extensions_pending_restart[name] = True
+        self._send_json({
+            "ok": True,
+            "name": name,
+            "from_version": result.from_version,
+            "to_version": result.to_version,
+            "changed": result.changed,
+            "via": result.via,
+            "restart_required": result.changed,
+            "message": (
+                f"Updated {name} {result.from_version} → {result.to_version}. "
+                "Restart the dashboard to activate."
+                if result.changed else
+                f"{name} is already at {result.to_version}."),
+        })
 
     def _h_extensions_enable(self, _parsed: ParseResult, body: dict) -> None:
         if not self._check_unlock():
@@ -991,6 +1041,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/config-lock":        _h_config_lock_set,
         "/api/extensions/install":   _h_extensions_install,
         "/api/extensions/uninstall": _h_extensions_uninstall,
+        "/api/extensions/update":    _h_extensions_update,
         "/api/extensions/enable":    _h_extensions_enable,
         "/api/extensions/disable":   _h_extensions_disable,
         "/api/config-lock/verify": _h_config_lock_verify,

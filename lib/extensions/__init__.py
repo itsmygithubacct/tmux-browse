@@ -49,6 +49,8 @@ __all__ = [
     "RegistryConflict",
     "InstallError",
     "InstallResult",
+    "UpdateError",
+    "UpdateResult",
     "EXTENSIONS_ROOT",
     "ENABLED_FILE",
     "CATALOG",
@@ -58,6 +60,8 @@ __all__ = [
     "enable",
     "disable",
     "install",
+    "update",
+    "uninstall",
     "record_error",
 ]
 
@@ -83,6 +87,29 @@ class InstallResult:
     version: str
     path: Path
     via: str  # "submodule" or "clone"
+
+
+class UpdateError(RuntimeError):
+    """Raised when :func:`update` can't advance an extension.
+
+    ``stage``: ``fetch`` / ``checkout`` / ``submodule`` / ``validate``
+    / ``missing`` / ``unknown``.
+    """
+
+    def __init__(self, stage: str, msg: str):
+        super().__init__(f"{stage}: {msg}")
+        self.stage = stage
+        self.msg = msg
+
+
+@dataclass
+class UpdateResult:
+    name: str
+    from_version: str | None
+    to_version: str
+    path: Path
+    via: str  # "submodule" or "clone"
+    changed: bool
 
 
 def discover() -> list[Path]:
@@ -325,3 +352,167 @@ def _rmtree_safe(path: Path) -> None:
         shutil.rmtree(path)
     except OSError:
         pass
+
+
+def update(name: str, *, core_version: str | None = None,
+           timeout: float = 120.0) -> UpdateResult:
+    """Advance the installed extension to its catalog-pinned ref.
+
+    Submodule path: ``git submodule update --remote`` so the
+    submodule tracks its configured branch.
+
+    Fresh-clone path: ``git fetch`` then ``git checkout <pinned_ref>``
+    inside the extension directory.
+
+    In both cases the post-update manifest is validated against
+    ``core_version`` so a bumped extension that requires a newer core
+    surfaces as ``stage=validate`` instead of silently activating.
+    Returns :class:`UpdateResult` with ``changed=False`` when the
+    version didn't move so the UI can report "already up to date".
+    """
+    spec = CATALOG.get(name)
+    if spec is None:
+        raise UpdateError("unknown", f"{name!r} is not in the catalog")
+    path = EXTENSIONS_ROOT / name
+    if not (path / "manifest.json").is_file():
+        raise UpdateError(
+            "missing",
+            f"{path} is not installed — run install first")
+    before = _current_version(name)
+
+    if submodule.is_submodule_path(name):
+        ok, stderr = submodule.submodule_update_remote(name, timeout=timeout)
+        if not ok:
+            raise UpdateError("submodule", stderr)
+        via = "submodule"
+    else:
+        ref = spec.get("pinned_ref", "main")
+        try:
+            r = subprocess.run(
+                ["git", "fetch", "--depth", "50", "origin"],
+                cwd=path, capture_output=True, text=True, timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            raise UpdateError(
+                "fetch", f"git fetch timed out after {timeout:.0f}s")
+        except FileNotFoundError:
+            raise UpdateError("fetch", "git not on PATH")
+        if r.returncode != 0:
+            raise UpdateError("fetch", (r.stderr or r.stdout).strip())
+        try:
+            r = subprocess.run(
+                ["git", "checkout", ref],
+                cwd=path, capture_output=True, text=True, timeout=30.0,
+            )
+        except subprocess.TimeoutExpired:
+            raise UpdateError("checkout", "git checkout timed out")
+        if r.returncode != 0:
+            raise UpdateError("checkout", (r.stderr or r.stdout).strip())
+        via = "clone"
+
+    try:
+        manifest = Manifest.load(path / "manifest.json")
+        manifest.validate(core_version=core_version or __version__)
+    except ManifestError as e:
+        raise UpdateError("validate", str(e))
+    except Exception as e:
+        raise UpdateError("validate", str(e))
+    return UpdateResult(
+        name=name, from_version=before, to_version=manifest.version,
+        path=path, via=via, changed=(before != manifest.version),
+    )
+
+
+def uninstall(name: str, *, remove_state: bool = False) -> dict[str, Any]:
+    """Remove the extension from disk and mark it disabled.
+
+    Submodule path: ``git submodule deinit -f extensions/<name>`` so
+    the working tree empties. The gitlink entry in core's ``.gitmodules``
+    is left alone — that's a tree-level decision the operator owns.
+
+    Fresh-clone path: ``shutil.rmtree(extensions/<name>)``.
+
+    State-path removal is opt-in via ``remove_state=True``. The paths
+    come from the installed extension's ``manifest.json`` (``state_paths``
+    field) so we can't remove state for an already-gone extension. The
+    default is non-destructive — uninstall followed by reinstall picks
+    up where the agent left off.
+
+    Returns a summary dict with ``removed`` (bool), ``state_removed``
+    (list of paths that existed and were deleted), ``state_missing``
+    (paths listed in the manifest that weren't on disk), and ``via``.
+    """
+    path = EXTENSIONS_ROOT / name
+    state_paths: list[str] = []
+    if (path / "manifest.json").is_file():
+        try:
+            m = Manifest.load(path / "manifest.json")
+            state_paths = list(m.state_paths or [])
+        except ManifestError:
+            pass
+
+    via: str
+    if submodule.is_submodule_path(name):
+        try:
+            subprocess.run(
+                ["git", "submodule", "deinit", "-f", "--",
+                 f"extensions/{name}"],
+                cwd=config.PROJECT_DIR,
+                capture_output=True, text=True, timeout=30.0,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass  # Fall through to _rmtree_safe which is a no-op on deinit'd dir.
+        # deinit leaves the dir empty; nothing more to do.
+        via = "submodule"
+    else:
+        _rmtree_safe(path)
+        via = "clone"
+
+    # Flip enabled=false and annotate the uninstall so the UI can
+    # distinguish "user disabled" from "user uninstalled".
+    data = _read_enabled()
+    entry = data.get(name, {})
+    entry["enabled"] = False
+    entry["uninstalled_ts"] = int(time.time())
+    data[name] = entry
+    _write_enabled(data)
+
+    state_removed: list[str] = []
+    state_missing: list[str] = []
+    if remove_state:
+        for rel in state_paths:
+            target = (config.STATE_DIR / rel).resolve()
+            # Safety rail: never delete outside STATE_DIR.
+            try:
+                target.relative_to(config.STATE_DIR.resolve())
+            except ValueError:
+                continue
+            if not target.exists():
+                state_missing.append(rel)
+                continue
+            if target.is_dir():
+                _rmtree_safe(target)
+            else:
+                try:
+                    target.unlink()
+                except OSError:
+                    continue
+            state_removed.append(rel)
+
+    return {
+        "name": name,
+        "removed": not path.exists() or not any(path.iterdir()),
+        "via": via,
+        "state_removed": state_removed,
+        "state_missing": state_missing,
+    }
+
+
+def _current_version(name: str) -> str | None:
+    path = EXTENSIONS_ROOT / name / "manifest.json"
+    if not path.is_file():
+        return None
+    try:
+        return Manifest.load(path).version
+    except ManifestError:
+        return None
