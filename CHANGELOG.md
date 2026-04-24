@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.0.4 — README and default polish (2026-04-24)
+
+Small follow-up to 0.7.0.3. No behaviour changes at the agent-runtime
+layer.
+
+### Dashboard defaults
+
+- The Move text button on each pane's summary row now defaults off,
+  matching the pattern already in use for Hide, Log, and Scroll
+  (text buttons ship off; icons ship on). The folder-arrow
+  `wc-move-icon` stays visible by default.
+
+### Documentation
+
+- The README gains a Built-in agent platform section covering
+  agents + providers, sandbox modes, the cycle and work modes, the
+  conductor rule engine, observability via the run index, and the
+  extensible tool registry. Opens with an explicit "under active
+  development" heads-up; the two-surface / stdlib-only / ttyd-only
+  framing in the opening blurb stays as it was.
+
 ## 0.7.0.3 — Agent modes and extensible tool surface (2026-04-24)
 
 Adds long-running agent modes (cycle, work) that compose on top of
