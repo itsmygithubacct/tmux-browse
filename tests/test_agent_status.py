@@ -132,5 +132,54 @@ class GetAllStatusesTests(unittest.TestCase):
         self.assertEqual(result["gpt"]["status"], st.AgentStatus.IDLE)
 
 
+class ModePhaseTests(unittest.TestCase):
+
+    def test_cycle_plan_origin_yields_mode_and_phase(self):
+        self.assertEqual(st._mode_and_phase("cycle-plan"), ("cycle", "plan"))
+
+    def test_cycle_exec_origin_yields_mode_and_phase(self):
+        self.assertEqual(st._mode_and_phase("cycle-exec"), ("cycle", "exec"))
+
+    def test_work_origin_yields_mode_no_phase(self):
+        self.assertEqual(st._mode_and_phase("work"), ("work", ""))
+
+    def test_drive_origin_yields_mode_no_phase(self):
+        self.assertEqual(st._mode_and_phase("drive"), ("drive", ""))
+
+    def test_non_mode_origin_yields_empty(self):
+        self.assertEqual(st._mode_and_phase("cli"), ("", ""))
+        self.assertEqual(st._mode_and_phase(""), ("", ""))
+        self.assertEqual(st._mode_and_phase("scheduler"), ("", ""))
+
+    def test_status_dict_includes_mode_fields_for_cycle_run(self):
+        now = int(time.time())
+        entry = {"ts": now - 10, "status": STATUS_STARTED,
+                 "origin": "cycle-plan", "prompt": "hi"}
+        with mock.patch("lib.agent_status.agent_logs.get_latest_entry",
+                        return_value=entry), \
+             mock.patch("lib.agent_status._workflow_paused", return_value=False):
+            result = st.get_status("opus")
+        self.assertEqual(result["mode"], "cycle")
+        self.assertEqual(result["mode_phase"], "plan")
+
+    def test_status_dict_includes_mode_for_work_completed_run(self):
+        entry = {"ts": int(time.time()) - 10, "status": STATUS_COMPLETED,
+                 "origin": "work", "message": "task done"}
+        with mock.patch("lib.agent_status.agent_logs.get_latest_entry",
+                        return_value=entry), \
+             mock.patch("lib.agent_status._workflow_paused", return_value=False):
+            result = st.get_status("opus")
+        self.assertEqual(result["mode"], "work")
+        self.assertEqual(result["mode_phase"], "")
+
+    def test_status_dict_includes_empty_mode_when_no_entry(self):
+        with mock.patch("lib.agent_status.agent_logs.get_latest_entry",
+                        return_value=None), \
+             mock.patch("lib.agent_status._workflow_paused", return_value=False):
+            result = st.get_status("opus")
+        self.assertEqual(result["mode"], "")
+        self.assertEqual(result["mode_phase"], "")
+
+
 if __name__ == "__main__":
     unittest.main()
