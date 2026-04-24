@@ -684,6 +684,17 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True})
 
+    def _h_session_zoom(self, _parsed: ParseResult, body: dict) -> None:
+        name = (body.get("session") or "").strip()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+            return
+        ok, err = sessions.zoom_pane(name)
+        if not ok:
+            self._send_json({"ok": False, "error": err}, status=400)
+            return
+        self._send_json({"ok": True})
+
     def _h_session_type(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("session") or "").strip()
         text = body.get("text")
@@ -1327,6 +1338,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/session/new":        _h_session_new,
         "/api/session/resize":     _h_session_resize,
         "/api/session/scroll":     _h_session_scroll,
+        "/api/session/zoom":       _h_session_zoom,
         "/api/session/type":       _h_session_type,
         "/api/session/key":        _h_session_key,
         "/api/dashboard-config":   _h_dashboard_config_post,
