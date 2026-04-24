@@ -98,6 +98,15 @@ def execute(event_type: str, agent_name: str, *,
             taken.append("pause_workflow")
         elif action == "retry":
             taken.append("retry")
+    # Also fan the event into the conductor's rule engine so cross-event
+    # policy (rolling-window counters, cross-agent routing) can react.
+    try:
+        from . import agent_conductor
+        agent_conductor.record_event(
+            event_type, agent_name,
+            context={"run_id": run_id, "prompt": prompt, "error": error})
+    except Exception:
+        pass
     return taken
 
 
