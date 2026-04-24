@@ -65,6 +65,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_summary_reorder: false,
     show_summary_move: false,
     show_wc_move_icon: true,
+    show_agents_pane: false,
     show_wc_close: true,
     show_wc_maximize: true,
     show_wc_minimize: false,

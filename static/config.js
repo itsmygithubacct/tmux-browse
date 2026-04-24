@@ -36,6 +36,7 @@ function configFieldMap() {
         show_summary_arrow: document.getElementById("cfg-show-summary-arrow"),
         furl_side_by_side: document.getElementById("cfg-furl-side-by-side"),
         resize_row_together: document.getElementById("cfg-resize-row-together"),
+        show_agents_pane: document.getElementById("cfg-show-agents-pane"),
         show_body_actions: document.getElementById("cfg-show-body-actions"),
         show_attached_badge: document.getElementById("cfg-show-attached-badge"),
         show_window_badge: document.getElementById("cfg-show-window-badge"),
@@ -411,6 +412,8 @@ function applyDashboardConfig() {
     // Show/hide phone keys config pane based on the enable toggle
     const phoneKeysWrap = document.getElementById("phone-keys-wrap");
     if (phoneKeysWrap) phoneKeysWrap.hidden = !state.config.show_body_phone_keys;
+    // Re-render the Agents pane so its hidden state tracks show_agents_pane.
+    if (typeof renderAgentsPane === "function") renderAgentsPane();
     for (const rec of state.nodes.values()) applyDashboardConfigToPane(rec);
 }
 

@@ -103,7 +103,12 @@ function renderAgentsPane() {
     const root = document.getElementById("agents-pane");
     if (!wrap || !count || !root) return;
     count.textContent = String(state.agents.length);
-    wrap.hidden = state.agents.length === 0;
+    // Hidden unless the user explicitly enables the pane in Config.
+    // Previously we showed it automatically when any agent existed, but
+    // most users never need the agent surface and the pane is a bulky
+    // interruption in the Config column.
+    const enabled = !!(state.config && state.config.show_agents_pane);
+    wrap.hidden = !enabled || state.agents.length === 0;
     root.innerHTML = "";
     for (const row of state.agents) {
         const sessionName = conversationSessionName(row.name);
