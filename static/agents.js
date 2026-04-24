@@ -16,10 +16,36 @@ function agentFieldMap() {
         model: document.getElementById("cfg-agent-model"),
         base_url: document.getElementById("cfg-agent-base-url"),
         wire_api: document.getElementById("cfg-agent-wire-api"),
+        sandbox: document.getElementById("cfg-agent-sandbox"),
         token_budget: document.getElementById("cfg-agent-token-budget"),
         daily_token_budget: document.getElementById("cfg-agent-daily-budget"),
         api_key: document.getElementById("cfg-agent-api-key"),
     };
+}
+
+// Reflect host Docker capability without rewriting persisted "docker" values.
+// When unavailable: hide the option for new agents, but show it as
+// "docker (unavailable on this host)" disabled when a saved agent already
+// has sandbox=docker so the user sees the truth instead of a silent flip.
+function applyDockerCapability(currentValue) {
+    const select = document.getElementById("cfg-agent-sandbox");
+    if (!select) return;
+    const option = select.querySelector('option[value="docker"]');
+    if (!option) return;
+    const supported = !!state.dockerSupported;
+    if (supported) {
+        option.hidden = false;
+        option.disabled = false;
+        option.textContent = "docker";
+    } else if (currentValue === "docker") {
+        option.hidden = false;
+        option.disabled = true;
+        option.textContent = "docker (unavailable on this host)";
+    } else {
+        option.hidden = true;
+        option.disabled = true;
+        option.textContent = "docker";
+    }
 }
 
 function agentSummaryText() {
@@ -301,6 +327,9 @@ function fillAgentForm(row, opts = {}) {
     fields.model.value = row.model || "";
     fields.base_url.value = row.base_url || "";
     fields.wire_api.value = row.wire_api || "openai-chat";
+    const sandboxValue = row.sandbox || "host";
+    applyDockerCapability(sandboxValue);
+    fields.sandbox.value = sandboxValue;
     fields.token_budget.value = row.token_budget || 0;
     fields.daily_token_budget.value = row.daily_token_budget || 0;
     fields.api_key.value = "";
@@ -316,6 +345,7 @@ function clearAgentForm() {
         model: "",
         base_url: "",
         wire_api: "openai-chat",
+        sandbox: "host",
     }, { existingName: "", presetName: "" });
 }
 
@@ -364,6 +394,7 @@ async function loadAgents(selectedName = "") {
     state.agents = Array.isArray(r.agents) ? r.agents : [];
     state.agentDefaults = Array.isArray(r.defaults) ? r.defaults : [];
     state.agentPaths = r.paths || { agents: "", secrets: "" };
+    state.dockerSupported = !!r.docker_supported;
     const selectedRow = findAgentRow(current);
     renderAgentSelectors(selectedRow ? selectedRow.name : "", findAgentDefault(current) ? current : "");
     if (selectedRow) fillAgentForm(selectedRow);
@@ -434,6 +465,7 @@ function readAgentForm() {
         model: fields.model.value.trim(),
         base_url: fields.base_url.value.trim(),
         wire_api: fields.wire_api.value,
+        sandbox: fields.sandbox.value,
         token_budget: parseInt(fields.token_budget.value) || 0,
         daily_token_budget: parseInt(fields.daily_token_budget.value) || 0,
     };

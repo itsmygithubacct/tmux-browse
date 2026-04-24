@@ -109,5 +109,60 @@ class RunWorkflowTests(unittest.TestCase):
         self.assertIn("not configured", rec.call_args.kwargs["error"])
 
 
+class DockerSandboxSchedulerTests(unittest.TestCase):
+    """Scheduler builds a sandbox spec but never instantiates Sandbox."""
+
+    def _agent(self, sandbox_mode):
+        return {
+            "name": "opus", "model": "m", "wire_api": "openai-chat",
+            "api_key": "k", "base_url": "http://x",
+            "sandbox": sandbox_mode,
+        }
+
+    def test_docker_agent_passes_docker_spec(self):
+        s = sched.Scheduler(repo_root=Path("/repo"))
+        agent = self._agent("docker")
+        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+                        return_value={"message": "ok"}) as run, \
+             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result"):
+            s._run_workflow("opus", 0, "do work", 60)
+        spec = run.call_args.kwargs["sandbox_spec"]
+        self.assertEqual(spec, {"mode": "docker", "workspace": "/repo"})
+
+    def test_host_agent_passes_no_spec(self):
+        s = sched.Scheduler(repo_root=Path("/repo"))
+        agent = self._agent("host")
+        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+                        return_value={"message": "ok"}) as run, \
+             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result"):
+            s._run_workflow("opus", 0, "do work", 60)
+        self.assertIsNone(run.call_args.kwargs["sandbox_spec"])
+
+    def test_scheduler_does_not_instantiate_sandbox(self):
+        s = sched.Scheduler(repo_root=Path("/repo"))
+        agent = self._agent("docker")
+        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+                        return_value={"message": "ok"}), \
+             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result"), \
+             mock.patch("lib.docker_sandbox.Sandbox") as sandbox_cls:
+            s._run_workflow("opus", 0, "do work", 60)
+        sandbox_cls.assert_not_called()
+
+    def test_sandbox_creation_failure_records_error_no_fallback(self):
+        s = sched.Scheduler(repo_root=Path("/repo"))
+        agent = self._agent("docker")
+        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+                        side_effect=Exception("sandbox creation failed: docker missing")), \
+             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result") as rec, \
+             mock.patch("lib.agent_scheduler.agent_hooks.execute"):
+            s._run_workflow("opus", 0, "do work", 60)
+        self.assertEqual(rec.call_args.kwargs["status"], "error")
+        self.assertIn("sandbox creation failed", rec.call_args.kwargs["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

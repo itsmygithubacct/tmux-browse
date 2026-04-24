@@ -20,7 +20,7 @@ CATALOG_OVERRIDE_FILE = config.STATE_DIR / "agent-catalog.json"
 
 
 SUPPORTED_WIRE_APIS = {"openai-chat", "anthropic-messages"}
-SUPPORTED_SANDBOX_MODES = {"host", "worktree"}
+SUPPORTED_SANDBOX_MODES = {"host", "worktree", "docker"}
 
 
 # Built-in fallback. Model names in here will rot — users can override per

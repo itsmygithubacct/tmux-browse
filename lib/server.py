@@ -34,6 +34,7 @@ from . import (
     tasks as tasks_mod,
     config,
     dashboard_config,
+    docker_sandbox,
     ports,
     sessions,
     static,
@@ -362,6 +363,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "agents": agents,
                 "defaults": agent_store.catalog_rows(),
+                "docker_supported": docker_sandbox.SUPPORTED,
                 "paths": {
                     "agents": str(agent_store.AGENTS_FILE),
                     "secrets": str(agent_store.SECRETS_FILE),

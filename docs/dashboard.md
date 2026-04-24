@@ -238,7 +238,11 @@ It covers:
   to defaults. Stored in localStorage.
 - **Agent:** load a built-in preset or existing agent, edit provider/
   model/base URL/wire API/sandbox mode, and save or remove the stored
-  definition
+  definition. The Sandbox dropdown offers `host`, `worktree`, and
+  `docker`. On hosts without Docker installed, the `docker` option is
+  hidden for new agents but shown as `docker (unavailable on this host)`
+  (disabled) when an existing agent already has it set, so saved configs
+  are visible instead of silently rewritten
 - **Lock config pane:** optional password that gates the Config pane.
   Password stored as SHA-256 hash at `~/.tmux-browse/config-lock-secret`
   (outside the repo, 0600 permissions). CLI `tb config set/reset` also

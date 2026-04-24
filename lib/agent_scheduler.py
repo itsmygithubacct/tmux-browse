@@ -127,6 +127,12 @@ class Scheduler:
                 error=f"agent not configured: {e}",
             )
             return
+        sandbox_spec = None
+        if agent.get("sandbox") == "docker":
+            sandbox_spec = {
+                "mode": "docker",
+                "workspace": str(self._repo_root),
+            }
         try:
             agent_runner.run_agent(
                 agent, prompt,
@@ -135,6 +141,7 @@ class Scheduler:
                 request_timeout=90.0,
                 origin="scheduler",
                 run_id=run_id,
+                sandbox_spec=sandbox_spec,
             )
             agent_workflow_runs.record_result(
                 agent_name, workflow_idx,

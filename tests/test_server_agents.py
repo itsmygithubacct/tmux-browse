@@ -60,6 +60,9 @@ class AgentHandlerTests(unittest.TestCase):
         self.assertNotIn("api_key", fake.payload["agents"][0])
         self.assertEqual(fake.payload["defaults"][0]["label"], "OpenAI GPT")
         self.assertEqual(fake.payload["paths"]["agents"], "/tmp/agents.json")
+        # docker_supported is host-global capability, must always be present
+        self.assertIn("docker_supported", fake.payload)
+        self.assertIsInstance(fake.payload["docker_supported"], bool)
 
     def test_agent_log_returns_plain_text(self):
         fake = _FakeHandler()
@@ -197,6 +200,38 @@ class AgentHandlerTests(unittest.TestCase):
         self.assertEqual(fake.status, 500)
         self.assertFalse(fake.payload["ok"])
         self.assertEqual(fake.payload["error"], "broken store")
+
+    def test_docker_supported_reflects_host_capability(self):
+        fake = _FakeHandler()
+        with mock.patch("lib.server.agent_store.list_agents", return_value=[]), \
+             mock.patch("lib.server.agent_store.catalog_rows", return_value=[]), \
+             mock.patch("lib.server.docker_sandbox.SUPPORTED", True):
+            server.Handler._h_agents_get(fake, urlparse("/api/agents"))
+        self.assertTrue(fake.payload["docker_supported"])
+
+        fake2 = _FakeHandler()
+        with mock.patch("lib.server.agent_store.list_agents", return_value=[]), \
+             mock.patch("lib.server.agent_store.catalog_rows", return_value=[]), \
+             mock.patch("lib.server.docker_sandbox.SUPPORTED", False):
+            server.Handler._h_agents_get(fake2, urlparse("/api/agents"))
+        self.assertFalse(fake2.payload["docker_supported"])
+
+    def test_save_path_accepts_docker_when_unavailable(self):
+        # Persistence is independent of transient Docker availability.
+        fake = _FakeHandler()
+        with mock.patch("lib.server.agent_store.save_agent", return_value={
+            "name": "opus", "provider": "anthropic", "model": "claude-opus-4-7",
+            "base_url": "https://api.anthropic.com/v1", "wire_api": "anthropic-messages",
+            "sandbox": "docker", "has_api_key": True,
+        }) as save, mock.patch("lib.server.docker_sandbox.SUPPORTED", False):
+            server.Handler._h_agents_post(fake, urlparse("/api/agents"), {
+                "agent": {
+                    "name": "opus", "api_key": "sk-x", "sandbox": "docker",
+                },
+            })
+        self.assertEqual(fake.status, 200)
+        self.assertTrue(fake.payload["ok"])
+        self.assertEqual(save.call_args.kwargs["sandbox"], "docker")
 
 
 if __name__ == "__main__":

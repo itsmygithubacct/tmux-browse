@@ -187,6 +187,7 @@ const state = {
     agents: [],
     agentDefaults: [],
     agentPaths: { agents: "", secrets: "" },
+    dockerSupported: false,
 };
 
 function saveHidden(set) { saveJSON(HIDDEN_KEY, [...set]); }
