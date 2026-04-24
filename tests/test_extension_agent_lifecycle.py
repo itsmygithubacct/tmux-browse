@@ -51,7 +51,7 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
 
     def test_fresh_install_has_no_extension_surface(self):
         # Opt-in: with no extensions.json, load_enabled returns empty.
-        reg = extensions.load_enabled(core_version_override="0.7.0.4")
+        reg = extensions.load_enabled(core_version_override="0.7.1")
         self.assertEqual(reg.get_routes, {})
         self.assertEqual(reg.post_routes, {})
         self.assertEqual(reg.ui_blocks, {})
@@ -69,7 +69,7 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
 
     def test_enable_then_load_registers_full_agent_surface(self):
         extensions.enable("agent")
-        reg = extensions.load_enabled(core_version_override="0.7.0.4")
+        reg = extensions.load_enabled(core_version_override="0.7.1")
         # Routes from server/routes.py
         self.assertIn("/api/agents", reg.get_routes)
         self.assertIn("/api/agents", reg.post_routes)
@@ -91,7 +91,7 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
     def test_disable_removes_agent_surface(self):
         extensions.enable("agent")
         extensions.disable("agent")
-        reg = extensions.load_enabled(core_version_override="0.7.0.4")
+        reg = extensions.load_enabled(core_version_override="0.7.1")
         self.assertEqual(reg.get_routes, {})
         self.assertEqual(reg.post_routes, {})
         self.assertEqual(reg.ui_blocks, {})
