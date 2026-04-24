@@ -13,7 +13,7 @@ Both share the same Python library. Stdlib-only (`http.server`, `urllib`,
 `subprocess`, `ssl`) — no pip dependencies; the only external is `ttyd`
 itself, which the CLI can install for you.
 
-![tmux-browse dashboard](docs/images/tmux_browse.png)
+![tmux-browse dashboard](docs/images/tmux_browse_0.7.0.png)
 
 [ttyd]: https://github.com/tsl0922/ttyd
 
