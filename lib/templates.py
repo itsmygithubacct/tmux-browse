@@ -188,6 +188,7 @@ def render_index() -> str:
             <button class="btn" id="cfg-reset-btn">Defaults</button>
             <button class="btn" id="cfg-qr-show-btn" title="Generate QR code of current view config">Show QR</button>
             <button class="btn" id="cfg-qr-scan-btn" title="Scan QR code from another device's camera">Read QR</button>
+            <button class="btn red" id="cfg-clear-cache-btn" title="Wipe this browser's tmux-browse settings (hidden, order, layout, hot buttons, idle alerts, phone keys) and reload">Clear Local Cache</button>
             <span class="dim" id="cfg-status">Saved to ~/.tmux-browse/dashboard-config.json</span>
         </div>
         <details style="margin-top:0.6rem">
