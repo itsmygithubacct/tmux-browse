@@ -169,6 +169,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-maximize" /><span>Maximize</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-minimize" /><span>Minimize</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-hide-icon" /><span>Hide (incognito)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-move-icon" /><span>Move-to (folder-arrow)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-log-icon" /><span>Log (document)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-scroll-icon" /><span>Scroll (copy-mode)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-idle-icon" /><span>Idle alert (eye)</span></label>
@@ -179,6 +180,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-scroll" /><span>Scroll button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-split" /><span>Side-by-side button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-hide" /><span>Hide button</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-summary-move" /><span>Move-to button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-summary-reorder" /><span>Reorder pad</span></label>
             </section>
             <section class="config-card">
