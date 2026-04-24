@@ -1,110 +1,100 @@
 # Changelog
 
-## 0.7.0.3 — agent-platform evolution, T1-T4 (2026-04-24)
+## 0.7.0.3 — Agent modes and extensible tool surface (2026-04-24)
 
-First tagged release of the agent-platform program tracked in
-`~/research/tmux-browse/plans/plan_0.8.0_program.md`. Ships T1-T4
-(design docs, modes, observability, tool registry). Drive mode and
-a handful of UI polish items are deferred per explicit kill-switches
-in the per-phase plans.
+Adds long-running agent modes (cycle, work) that compose on top of
+the existing single-turn runner, teaches the dashboard about agent
+modes, and introduces a pluggable tool registry with `read_file`
+as the first non-`tb_command` tool.
 
-### T1 — mode design docs (in research only)
+### Agent modes: `cycle` and `work`
 
-Three design docs merged under `~/research/tmux-browse/plans/`:
-`plan_mode_cycle.md`, `plan_mode_work.md`, `plan_mode_drive.md`.
-Drive is deferred to T2b pending its termination contract clearing
-implementation review.
+Two new agent-level modes, each a thin orchestrator above the
+existing run loop — no new scheduler, no new log format, no new
+conversation store.
 
-### T2 — cycle and work agent modes
+- **Cycle mode.** One planning-then-execute turn per invocation.
+  The agent reads a goal (inline, from a file, or proposes one),
+  returns a short plan, then runs against that plan with the
+  normal tool budget. Goal file defaults to
+  `~/.tmux-browse/agent-cycle/<agent>.txt`. CLI: `tb agent cycle`.
+  Dashboard: Cycle button on each agent card.
+- **Work mode.** File-backed task queue runner. One task per line
+  (plaintext or JSON); a sibling `.done` file tracks completions
+  so re-running the same file resumes cleanly. Stops on empty
+  queue, daily budget exhaustion, cumulative step cap, stop
+  signal, or `--stop-on-error`. CLI: `tb agent work`. Dashboard:
+  Work button on each agent card.
 
-New package `lib/agent_modes/`. Each mode is a thin orchestrator
-above `agent_runner.run_agent`; no new scheduler or log format.
+### Mode-aware status
 
-- **cycle** — one planning-then-execute turn. Two `run_agent` calls
-  with `origin="cycle-plan"` and `origin="cycle-exec"`. Goal loaded
-  from `--goal-text` / `--goal` / default file
-  `~/.tmux-browse/agent-cycle/<agent>.txt`, or agent proposes one.
-  CLI: `tb agent cycle`. Endpoint: `POST /api/agent-cycle`. Button
-  on each agent card.
-- **work** — file-backed task queue runner. `FileSource` reads
-  plaintext or JSON lines; `.done` sibling makes it resumable.
-  Aborts on empty queue, daily budget stop, cumulative step cap,
-  stop flag, or optional `--stop-on-error`. CLI: `tb agent work`.
-  Endpoints: `POST /api/agent-work` + `/api/agent-work/stop`.
-  Button on each agent card.
+Each agent's derived status carries the `mode` and `mode_phase`
+inferred from the most recent run. The Agents pane renders a grey
+badge alongside the status badge — `cycle / plan`, `cycle / exec`,
+`work`, or blank for generic runs. The Runs search filter gains
+an **Origin** dropdown covering CLI, REPL, Scheduler, Conductor,
+Cycle, Work, and Retry.
 
-### T3 — mode-aware observability
+### Extensible tool registry
 
-`agent_status.get_status()` carries `mode` + `mode_phase` derived
-from the most recent run's `origin` (cycle-plan → ("cycle","plan"),
-cycle-exec → ("cycle","exec"), work → ("work",""), drive →
-("drive",""), anything else → ("","")). `/api/agents` surfaces both
-fields on every row; the Agents pane renders a grey badge next to
-the status badge. Runs filter dropdown gains `cli/repl/scheduler/
-conductor/cycle-plan/cycle-exec/work/retry` options.
+Agents now declare which tools they're allowed to call. Each tool
+ships a host dispatch and (where applicable) a Docker-sandbox
+dispatch, both of which route through the same run-log substrate
+so every invocation is auditable.
 
-### T4 — tool registry and `read_file` tool
+- **`tb_command`** — the existing tool, unchanged for every
+  existing agent.
+- **`read_file`** — bounded file read, default 16 KiB, hard cap
+  64 KiB. Host paths are validated against the same sensitive-
+  directory blocklist used by the sandbox; Docker mode only
+  accepts paths under `/workspace` or `/opt/tmux-browse`.
 
-New `lib/agent_tool_registry.py`. Tools declare
-`(run_host, run_sandbox)` dispatch callables; the runner routes
-through the registry so adding a tool doesn't touch the runner.
-Built-ins: `tb_command` (wraps existing paths unchanged) and
-`read_file` (64 KiB cap, path-validated against the sandbox home
-blocklist on host; `/workspace` + `/opt/tmux-browse` only in Docker
-mode).
+Per-agent `tools` field defaults to `["tb_command"]` so every
+existing agent is bit-identical after upgrade. Agents with more
+than the default get an `Enabled tools:` block in their system
+prompt; calls to tools that aren't enabled are rejected cleanly
+with an explicit error.
 
-Agents gain a `tools` field (default `["tb_command"]`). When an
-agent has more than the default, the system prompt gains an
-`Enabled tools:` block describing each. Disabled tools get a clean
-`not enabled` rejection rather than a silent execution.
+### Deferred
 
-### Not in this chunk
+- **Drive mode.** Was scoped alongside cycle and work but held back
+  pending a solid termination contract; ships in a follow-up.
+- **Tools checkbox in the agent form.** The `tools` field can be
+  set on disk or via the CLI today; a dashboard checkbox group
+  lands in a follow-up.
 
-- T2 **drive mode** — deferred per `plan_mode_drive.md` until its
-  termination contract holds up in implementation review.
-- T4 `read_file` UI exposure for the Tools field in the agent form —
-  still CLI-only; dashboard Agents form adds the checkbox in a
-  follow-up.
-- T4 Docker-daemon integration test for `read_file` sandbox dispatch
-  — host tests and mocked sandbox tests cover the logic; live
-  Docker verification is a manual step.
+## 0.7.0.2 — Conductor, structured REPL, pane groups (2026-04-24)
 
-## 0.7.0.2 — research proposals shipped (2026-04-24)
-
-Between-release patch level covering the five research proposals
-tracked in `~/research/tmux-browse/plans/plan_*.md`, plus assorted
-UI polish (badge defaults flip, ttyd_wrap per-viewer sizing fix,
-scroll icon, session dedup).
-
-Not formally tagged — `0.7.0.3` is the first tagged release after
-v0.7.0.
+Patch-level release (not formally tagged; 0.7.0.3 is the first tag
+after v0.7.0) covering agent-side automation features — a
+conductor rule engine above event hooks, REPL primitives modelled
+on tmuxai, and dashboard-side organisation features including
+user-defined pane groups, a Move-to button, and server-side
+config-lock enforcement.
 
 ### Conductor rule engine
 
-A thin rule engine sits above the existing event hooks with three
-capabilities hooks can't express on their own:
-
-### Conductor rule engine (Phase B)
+A thin rule engine above event hooks that adds three capabilities
+individual hooks can't express:
 
 - **State across events** — rolling-window counters
-  (`within_last` + `count_at_least`), keyed by (rule_id, agent), so
-  a rule can require "three failures in one hour."
-- **Cross-agent routing** — new `run_agent` action spawns a run on
-  a target agent with `$.original_prompt` substitution, for
-  scenarios like "on sonnet rate-limit, try opus."
+  (`within_last` + `count_at_least`), keyed by `(rule_id, agent)`.
+  A rule can require "three failures in one hour" without any
+  external state.
+- **Cross-agent routing** — a new `run_agent` action spawns a run
+  on a different agent with `$.original_prompt` substitution. On
+  Sonnet rate-limit, failover to Opus automatically.
 - **Decision log** — every fired rule appends a JSONL record to
-  `~/.tmux-browse/agent-conductor.jsonl` so operators can answer
-  "why did this happen?".
+  `~/.tmux-browse/agent-conductor.jsonl` so operators can always
+  answer "why did this happen?".
 
-Rules live in `~/.tmux-browse/agent-conductor.json`. Editor sits in
-Config > Agent Settings alongside Event Hooks; per-agent "Conductor: N"
-badges on each card open an activity view. Runs search gains an
-origin filter (`cli / scheduler / conductor / retry`). QR share
-carries the rule set.
-
-A runaway-loop guard drops same-(rule, agent) re-entry within 5 s,
-so rules whose actions might re-cause the triggering event can't
-fork-bomb.
+Rules live in `~/.tmux-browse/agent-conductor.json`. The editor sits
+in Config → Agent Settings alongside Event Hooks, each agent card
+grows a "Conductor: N" badge that opens a recent-decisions view,
+the Runs search gains an origin filter, and QR share carries the
+rule set across devices. A runaway-loop guard drops same-rule
+same-agent re-entry within 5 seconds so rules whose actions might
+re-cause the triggering event can't fork-bomb.
 
 ### Structured REPL primitives
 
