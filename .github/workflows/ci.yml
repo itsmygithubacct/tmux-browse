@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out core (with agent submodule)
+        uses: actions/checkout@v4
+        with:
+          # Pull the agent submodule so the extension-lifecycle tests
+          # and the loader shim have the tree to exercise.
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+
+      - name: Preflight (core/extension version alignment)
+        run: make preflight
+
+      - name: Run test suite
+        run: make test

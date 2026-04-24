@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased — CI workflow + cross-repo version preflight
+
+Maintenance additions that catch version-drift bugs between core
+and the agent submodule before they ship:
+
+- `.github/workflows/ci.yml` — core now has CI. Checks out with
+  submodules recursive, installs tmux, runs `make preflight` then
+  `make test`. Same cadence as the extension's existing workflow.
+- `scripts/preflight.py` — four checks run on every PR and before
+  every release:
+  1. **Submodule populated** — fails fast if
+     `extensions/agent/manifest.json` is missing.
+  2. **Catalog `pinned_ref` matches submodule tag** — catches the
+     "I bumped `.gitmodules` but forgot `catalog.py`" case.
+  3. **Core's `__version__` satisfies the extension's
+     `min_tmux_browse`** — stricter than the loader's runtime
+     check, so bad pairings surface at dev time.
+  4. **Submodule manifest version matches its git tag** —
+     cosmetic but catches tag/manifest drift.
+- `make preflight` and `make ci` targets wrap the script.
+- `tests/test_preflight.py` — 11 cases, each check exercised with
+  both passing and failing fixtures.
+
+Full suite: 590 tests green (was 579).
+
 ## 0.7.1.2 — Extension Manage modal + CLI (2026-04-24)
 
 Completes the extension-management surface. After install (E3), the
