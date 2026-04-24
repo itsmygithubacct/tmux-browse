@@ -151,6 +151,18 @@ function renderAgentsPane() {
                         onclick: () => openAgentContext(row.name),
                         title: "View REPL context (exec target, observed panes, KB)",
                     }, "Context"),
+                    el("button", {
+                        class: "btn blue",
+                        type: "button",
+                        onclick: () => startAgentCycle(row.name),
+                        title: "Run one plan + execute cycle",
+                    }, "Cycle"),
+                    el("button", {
+                        class: "btn blue",
+                        type: "button",
+                        onclick: () => startAgentWork(row.name),
+                        title: "Run tasks from a file, one at a time",
+                    }, "Work"),
                 ),
             ),
             el("div", { class: "agent-card-status" },
@@ -172,6 +184,46 @@ function renderAgentsPane() {
             ),
         ));
     }
+}
+
+// --- Agent modes (cycle / work) ---
+
+async function startAgentCycle(agentName) {
+    const goalText = prompt(
+        `Cycle "${agentName}": optional goal text (leave blank to use the `
+        + `stored goal file or let the agent propose one)`);
+    if (goalText === null) return;  // canceled
+    const body = { name: agentName };
+    if (goalText.trim()) body.goal_text = goalText.trim();
+    const r = await api("POST", "/api/agent-cycle", body);
+    if (!r.ok) {
+        alert("cycle failed: " + (r.error || "unknown"));
+        return;
+    }
+    if (r.plan) {
+        alert(`[${agentName} cycle]\n\nPlan:\n${r.plan}\n\n`
+              + `Execute phase is running in the background; watch the `
+              + `Runs section for the result.`);
+    } else {
+        alert(`[${agentName} cycle] started in background. `
+              + `Watch the Runs section.`);
+    }
+    await searchRuns();
+}
+
+async function startAgentWork(agentName) {
+    const tasks = prompt(
+        `Work "${agentName}": path to tasks file (one task per line)`);
+    if (!tasks || !tasks.trim()) return;
+    const body = { name: agentName, tasks: tasks.trim() };
+    const r = await api("POST", "/api/agent-work", body);
+    if (!r.ok) {
+        alert("work failed to start: " + (r.error || "unknown"));
+        return;
+    }
+    alert(`[${agentName} work] started. Each task becomes a run with `
+          + `origin="work" in the Runs section. Click Work again and the `
+          + `stop-endpoint is hit.`);
 }
 
 // Lazy-loaded REPL context view. Called when the user clicks the
