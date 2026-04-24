@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Extension Manage modal + CLI (E4)
+## 0.7.1.2 — Extension Manage modal + CLI (2026-04-24)
 
 Completes the extension-management surface. After install (E3), the
 only way out was to hand-edit `extensions.json` or delete the
