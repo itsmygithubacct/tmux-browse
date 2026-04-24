@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Config > Extensions install UI (E3)
+## 0.7.1.1 — Config > Extensions install UI (2026-04-24)
 
 One-click install for the agent extension (and any future extension
 that lands in `lib/extensions/catalog.py`). The Config pane gains an
