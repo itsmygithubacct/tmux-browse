@@ -298,6 +298,11 @@ pane. Each configured agent gets:
 - a **Conductor: N** grey badge when at least one rule in the
   conductor config matches this agent (specifically or via `*`); click
   it to see the recent decision-log entries scoped to this agent
+- **Cycle** / **Work** buttons launch the corresponding agent mode
+  (see `tb.md`). **Under active development** — behaviour and
+  defaults may shift between patch releases.
+- a grey mode badge (e.g. `cycle / plan`, `cycle / exec`, `work`)
+  alongside the status badge when the most recent run used a mode
 
 Below the agent cards, a **token usage summary** shows cumulative token
 counts per agent (when provider usage data is available).
