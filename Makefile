@@ -7,7 +7,8 @@
 
 .PHONY: help list-extensions \
         install-agent update-agent enable-agent disable-agent \
-        uninstall-agent uninstall-agent-with-state test
+        uninstall-agent uninstall-agent-with-state \
+        preflight test ci
 
 PY ?= python3
 
@@ -21,7 +22,9 @@ help:
 	@echo "  make uninstall-agent           remove the agent code (keeps state)"
 	@echo "  make uninstall-agent-with-state  also delete ~/.tmux-browse/agent-*"
 	@echo "  make list-extensions           show status of every known extension"
+	@echo "  make preflight                 check core/extension version alignment"
 	@echo "  make test                      run the core test suite"
+	@echo "  make ci                        preflight + tests (what CI runs)"
 	@echo ""
 	@echo "After install/update/enable/disable, restart the dashboard."
 
@@ -46,5 +49,10 @@ uninstall-agent:
 uninstall-agent-with-state:
 	$(PY) -m lib.extensions uninstall agent --remove-state
 
+preflight:
+	$(PY) scripts/preflight.py
+
 test:
 	$(PY) -m unittest discover tests
+
+ci: preflight test
