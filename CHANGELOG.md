@@ -1,5 +1,62 @@
 # Changelog
 
+## Unreleased
+
+### Idle detection and session logging
+
+- **Content-hash idle.** Every session is piped to
+  `~/.tmux-browse/session-logs/<name>.log` via `tmux pipe-pane`.
+  `idle_seconds` is now derived from a SHA-256 of the log tail rather
+  than tmux's `session_activity`, so cursor blinks no longer look like
+  activity and a long-thinking agent with no output is reported
+  accurately. Falls back to `session_activity` for pre-existing
+  sessions before their log exists. New module `lib/session_logs.py`.
+- **Idle-alert threshold in hours + minutes.** The per-session idle
+  modal replaces the old seconds-only input with two fields (hours and
+  minutes), each with native up/down arrows. Minimum threshold bumped
+  from 5 s to 60 s.
+- **Always-on idle polling.** When `auto_refresh` is off, a 60-second
+  `pollIdleOnly()` loop still fetches `/api/sessions` so idle labels
+  and alerts update without a full refresh. Hidden sessions are
+  skipped.
+
+### Dashboard UI defaults and polish
+
+- **Quieter summary row.** Attached-clients and port badges drop their
+  green/orange accents; all badges now inherit the base grey styling.
+  Window-count and port-badge defaults flip to off; the attached-clients
+  default mirrors the canonical `~/.tmux-browse/dashboard-config.json`.
+- **Hide/unhide tooltip.** The Hide button and incognito icon now flip
+  their `title` to "unhide this session" when the session is in the
+  hidden list.
+- **Lock config pane** moved to the top of the Config body (furled by
+  default) so access control sits above the settings it gates.
+- **Multi-viewer sizing.** `ttyd_wrap.sh` now gives every ttyd viewer
+  its own grouped tmux session (via `new-session -t`, with
+  `window-size latest` and `destroy-unattached on`) so one narrow
+  viewer can't pin every other viewer's windows to its size.
+
+### Docker sandbox for `tb agent`
+
+- **New sandbox mode: `docker`.** Agents configured with
+  `sandbox=docker` run their `tb_command` tool inside a short-lived
+  container with its own tmux server (session `sandbox`,
+  `/workspace`). The agent loop, provider API calls, and run logging
+  stay on the host; only execution moves into the container. API keys
+  never enter the container. `run_agent()` owns lifecycle in one
+  try/finally and is the sole owner — scheduler and CLI only pass a
+  spec. Fail-closed: missing Docker or failed startup is a hard run
+  failure, never a host fallback.
+- **Isolation enforced at the boundary.** `exec_tb()` rejects any
+  non-`sandbox:` target before invoking `docker exec`, so a misbehaving
+  model can't reach host tmux even if it ignores the system prompt.
+- **Host-global capability flag.** `/api/agents` exposes
+  `docker_supported`; the UI hides the Docker option on hosts without
+  Docker but preserves saved `sandbox=docker` config as
+  `docker (unavailable on this host)` rather than rewriting it.
+- `Dockerfile.sandbox` ships a minimal `ubuntu:24.04 + python3 + tmux`
+  image. See `docs/tb.md` for the `Sandbox modes` section.
+
 ## 0.6.0 — Agent operations platform
 
 ### Agent runtime foundations (Phase 0)

@@ -29,6 +29,7 @@ lib/config.py              ports + paths (one place to tune)
 lib/dashboard_config.py    validated dashboard UI config file helpers
 lib/ports.py               JSON+flock registry: session name → stable port
 lib/sessions.py            everything tmux-related (enumerate, capture, send)
+lib/session_logs.py        per-session pipe-pane capture + SHA-256 tail hashing for idle
 lib/ttyd.py                spawn/stop/track per-session ttyd, PID files, port probes
 lib/ttyd_installer.py      fetch the ttyd static binary from GitHub releases
 lib/server.py              http.server handler + JSON API + scheduler lifecycle
@@ -219,6 +220,20 @@ reloading the `<iframe>`s, which would tear down active ttyd connections.
 Age fields (`idle_seconds`, `created_seconds_ago`) are computed server-side
 so clock skew between browser and server doesn't report "idle 0s" for
 every session after a laptop wake.
+
+`idle_seconds` comes from a content hash, not from tmux's `session_activity`.
+`lib/session_logs.py` keeps every session piped to
+`~/.tmux-browse/session-logs/<name>.log` via `tmux pipe-pane -o` (idempotent,
+so re-asserting on every `/api/sessions` call is safe and catches panes
+added after session creation). The handler hashes the trailing 8 KiB with
+SHA-256; unchanged hash keeps the activity timestamp pinned, and any
+change bumps it to now. This fixes two previous failure modes: a pane
+with only cursor blinks would look active under `session_activity`, and a
+long-thinking agent with no output would look idle under it.
+
+When `auto_refresh` is off, a dedicated 60-second `pollIdleOnly()` loop
+still hits `/api/sessions` so idle labels and idle-alert firing stay
+current without rebuilding panes; it skips sessions in `state.hidden`.
 
 Reordering and hiding state live in `localStorage` (`tmux-browse:order`
 and `tmux-browse:hidden`), per-browser per-origin. Intentionally not
