@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import agent_conversations
+from . import conversations as agent_conversations
 
 
 CONVERSATION_PREFIX = "agent-repl-"

@@ -12,7 +12,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from . import config
+from lib import config
 
 TOTAL_BYTES_CAP = 128 * 1024
 
