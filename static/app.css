@@ -49,6 +49,40 @@ h1 {
     display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
     margin-bottom: 1rem;
 }
+.ext-restart-banner {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    margin-bottom: 0.75rem; padding: 0.55rem 0.75rem;
+    border: 1px solid var(--green); border-radius: 4px;
+    background: rgba(63, 185, 80, 0.08); color: var(--fg);
+    font-size: 0.9rem;
+}
+.ext-restart-banner > span { margin-right: auto; }
+.ext-card {
+    display: grid; gap: 0.35rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.55rem 0.75rem; background: var(--card);
+}
+.ext-card-head {
+    display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+}
+.ext-card-label { font-weight: 600; }
+.ext-card-state {
+    font-size: 0.78rem; color: var(--muted, #8b949e);
+    padding: 0.1rem 0.4rem; border-radius: 3px;
+    border: 1px solid var(--border);
+}
+.ext-card-state.installed { color: var(--green); border-color: var(--green); }
+.ext-card-state.enabled   { color: var(--accent); border-color: var(--accent); }
+.ext-card-state.error     { color: var(--red, #f85149); border-color: var(--red, #f85149); }
+.ext-card-desc { font-size: 0.82rem; color: var(--muted, #8b949e); }
+.ext-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.ext-card-error {
+    font-family: ui-monospace, monospace; font-size: 0.78rem;
+    color: var(--red, #f85149);
+    white-space: pre-wrap; max-height: 10em; overflow: auto;
+    padding: 0.35rem; background: rgba(248, 81, 73, 0.06);
+    border-radius: 3px;
+}
 .topbar input[type=text] {
     background: var(--card); border: 1px solid var(--border); color: var(--fg);
     padding: 0.35rem 0.5rem; border-radius: 4px; font-family: inherit;

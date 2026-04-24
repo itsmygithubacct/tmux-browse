@@ -268,6 +268,18 @@ It covers:
   with the editor in Config > Behavior. Each group renders as its
   own furled `<details>` block between the Visible stack and the
   Hidden drawer. A session lives in exactly one bucket at a time.
+- **Extensions:** one card per known extension with a **Download and
+  enable** button. Installation pulls the extension from git (using
+  `git submodule update --init` if the path is already registered in
+  `.gitmodules`, otherwise a shallow `git clone` at the catalog's
+  pinned ref) and validates the manifest before flipping the
+  enabled bit in `~/.tmux-browse/extensions.json`. A restart banner
+  appears at the top of the page until you click **Restart now**;
+  the loader activates the extension on restart. Install is
+  config-lock gated. Failures surface verbatim in the card with a
+  stage tag (`clone` / `submodule_init` / `validate`) so you can
+  tell whether it's a network problem, a pin problem, or a core-
+  version mismatch.
 
 Action buttons: **Save Config**, **Load From File**, **Defaults**,
 **Show QR** (generate QR code of current view config), **Read QR**

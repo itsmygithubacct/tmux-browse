@@ -53,6 +53,11 @@ def _render(js: str) -> str:
 <style>{static.CSS}</style>
 </head>
 <body>
+<div id="extensions-restart-banner" class="ext-restart-banner" hidden>
+    <span id="extensions-restart-msg">Restart the dashboard to activate the extension.</span>
+    <button class="btn green" id="extensions-restart-btn" type="button">Restart now</button>
+    <button class="btn" id="extensions-restart-dismiss" type="button" title="Hide until next install or enable">Dismiss</button>
+</div>
 <div class="topbar">
     <h1>tmux sessions <span class="dim" id="count" style="font-size:0.85rem"></span>
         <button class="tmux-help-btn" id="tmux-help-btn" type="button" title="tmux hot keys">?</button>
@@ -251,6 +256,18 @@ def _render(js: str) -> str:
         </div>
         <!--slot:config_agent-->
         <!--slot:config_extras-->
+        <details id="extensions-wrap" class="config-subsection" open>
+            <summary>Extensions</summary>
+            <div class="config-body">
+                <div class="dim" style="font-size:0.82rem;margin-bottom:0.5rem">
+                    Optional modules that add functionality to tmux-browse.
+                    Installing an extension pulls it from git; restart the
+                    dashboard to activate it.
+                </div>
+                <div id="extensions-list" style="display:grid;gap:0.5rem"></div>
+                <div id="extensions-status" class="dim" style="font-size:0.82rem;margin-top:0.4rem"></div>
+            </div>
+        </details>
         <details id="pane-admin-wrap" class="config-subsection">
             <summary>Pane Admin</summary>
             <div class="config-body">
