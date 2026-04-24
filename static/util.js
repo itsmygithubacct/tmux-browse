@@ -69,16 +69,54 @@ function fmtAge(epoch) {
 }
 
 
+const UNLOCK_TOKEN_KEY = "tmux-browse:unlock-token";
+
+function getStoredUnlockToken() {
+    try { return localStorage.getItem(UNLOCK_TOKEN_KEY) || ""; }
+    catch { return ""; }
+}
+
+function setStoredUnlockToken(token) {
+    try {
+        if (token) localStorage.setItem(UNLOCK_TOKEN_KEY, token);
+        else localStorage.removeItem(UNLOCK_TOKEN_KEY);
+    } catch (_) { /* storage disabled — nothing we can do */ }
+}
+
 async function api(method, path, body) {
     const opts = { method, headers: {} };
     if (body !== undefined) {
         opts.headers["Content-Type"] = "application/json";
         opts.body = JSON.stringify(body);
     }
-    const r = await fetch(path, opts);
+    // Attach the unlock token on every non-GET — the server ignores it when
+    // no config lock is active, so this is safe without feature-detection.
+    if (method && method.toUpperCase() !== "GET") {
+        const token = getStoredUnlockToken();
+        if (token) opts.headers["X-TB-Unlock-Token"] = token;
+    }
+    let r = await fetch(path, opts);
+    // 403 with the "config locked" error means the token was missing,
+    // stale, or the lock was just set. Prompt for the password once and
+    // retry; if the retry still 403s, give up and let the caller render
+    // the error normally.
+    if (r.status === 403) {
+        const probe = await r.clone().text();
+        if (probe.includes("config locked") && typeof promptForUnlock === "function") {
+            const got = await promptForUnlock();
+            if (got) {
+                opts.headers["X-TB-Unlock-Token"] = got;
+                r = await fetch(path, opts);
+            }
+        } else {
+            // Return the parsed original response below.
+            const text = probe;
+            try { return JSON.parse(text); }
+            catch { return { ok: false, raw: text, status: 403 }; }
+        }
+    }
     const text = await r.text();
     if (!text) {
-        // Empty 2xx should not look like success with an undefined shape.
         return { ok: r.ok, empty: true, status: r.status };
     }
     try { return JSON.parse(text); }
