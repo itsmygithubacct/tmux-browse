@@ -207,6 +207,11 @@ a.wc-log-icon { text-decoration: none; }
     border-color: rgba(139, 148, 158, 0.3);
     color: var(--accent);
 }
+.wc-scroll-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
 .summary-idle-wrap {
     display: inline-flex;
     align-items: center;

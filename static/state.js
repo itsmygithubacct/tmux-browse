@@ -53,6 +53,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_idle_text: true,
     show_idle_alert_button: false,
     show_wc_idle_icon: true,
+    show_wc_scroll_icon: true,
     show_summary_open: false,
     show_summary_log: false,
     show_wc_log_icon: true,

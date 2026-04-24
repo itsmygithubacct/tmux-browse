@@ -835,7 +835,7 @@ function createPane(s) {
     const logIconBtn = el("a", {
         class: "wc-btn wc-log-icon",
         target: "_blank", rel: "noopener",
-        title: "tmux scrollback",
+        title: "view tmux log (scrollback dump)",
         onclick: stopSummaryToggle,
         href: `/api/session/log?session=${encodeURIComponent(s.name)}`,
     });
@@ -849,6 +849,17 @@ function createPane(s) {
         },
         title: "enter tmux copy-mode so you can scroll back (equivalent to C-b [)",
     }, "Scroll");
+    const scrollIconBtn = el("button", {
+        class: "wc-btn wc-scroll-icon",
+        type: "button",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            enterCopyMode(s.name);
+        },
+        title: "enter tmux copy-mode (live scrollback — C-b [)",
+    });
+    scrollIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l3-3 3 3"/><path d="M5 12l3 3 3-3"/><line x1="8" y1="1" x2="8" y2="15"/></svg>';
     const hideBtn = el("button", {
         class: "btn red summary-hide",
         onclick: (e) => {
@@ -932,7 +943,7 @@ function createPane(s) {
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
-            summaryTabLink, logLink, logIconBtn, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
+            summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
     );
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
@@ -1118,7 +1129,7 @@ function createPane(s) {
 
     return {
         details, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
-        summaryTabLink, logLink, logIconBtn, scrollBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
+        summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
