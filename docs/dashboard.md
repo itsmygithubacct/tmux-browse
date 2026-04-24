@@ -292,6 +292,12 @@ pane. Each configured agent gets:
   conversation session named `agent-repl-<agent>` and opens its ttyd
 - a **Fork REPL** button that branches the current conversation into a
   new session with copied history — both can then diverge independently
+- a **Context** button that opens a read-only summary of the REPL's
+  exec target, observed panes, mode, and attached knowledge-base files
+  (managed via `tb agent repl <name>` slash-commands — see `tb.md`)
+- a **Conductor: N** grey badge when at least one rule in the
+  conductor config matches this agent (specifically or via `*`); click
+  it to see the recent decision-log entries scoped to this agent
 
 Below the agent cards, a **token usage summary** shows cumulative token
 counts per agent (when provider usage data is available).
