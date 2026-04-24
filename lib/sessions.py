@@ -290,6 +290,23 @@ def enter_copy_mode(session: str) -> tuple[bool, str]:
     return True, ""
 
 
+def zoom_pane(session: str) -> tuple[bool, str]:
+    """Toggle zoom on the active pane (``C-b z`` / ``resize-pane -Z``).
+
+    tmux's pane-zoom feature makes the current pane fill its window; a
+    second invocation restores the layout.
+    """
+    if not exists(session):
+        return False, f"no such session: {session}"
+    r = subprocess.run(
+        ["tmux", "resize-pane", "-t", f"{session}:", "-Z"],
+        capture_output=True, text=True, timeout=5,
+    )
+    if r.returncode != 0:
+        return False, (r.stderr or r.stdout).strip()
+    return True, ""
+
+
 def send_literal(target: Target, text: str) -> tuple[bool, str]:
     """Send ``text`` verbatim. Newlines in ``text`` become literal newlines."""
     if not exists(target.session):
