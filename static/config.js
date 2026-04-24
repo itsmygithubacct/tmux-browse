@@ -219,6 +219,32 @@ function scheduleRefreshLoop() {
     state.refreshTimer = setInterval(refresh, state.config.refresh_seconds * 1000);
 }
 
+// Minute-by-minute poll that keeps idle-alert detection and each visible
+// pane's "idle Xs" label current even when auto-refresh is off. Hidden
+// sessions are skipped — we don't fire alerts for them and don't update
+// their labels. Fetches /api/sessions and touches only the DOM text,
+// never rebuilding pane structure.
+async function pollIdleOnly() {
+    // If auto-refresh is running, it already refreshes idle state — skip.
+    if (state.config.auto_refresh) return;
+    try {
+        const r = await api("GET", "/api/sessions");
+        const sessions = (r && r.sessions) || [];
+        state.sessions = sessions;
+        const visible = sessions.filter((s) => !state.hidden.has(s.name));
+        checkIdleAlerts(visible);
+        for (const s of visible) {
+            const rec = state.nodes.get(s.name);
+            if (!rec) continue;
+            rec.idle.textContent = `idle ${s.idle_seconds !== undefined
+                ? fmtAgeSeconds(s.idle_seconds)
+                : fmtAge(s.activity)}`;
+        }
+    } catch (_) {
+        // silent — next tick will retry
+    }
+}
+
 function scheduleWorkflowLoop() {
     // Workflow execution is now server-side. This loop just polls
     // the server's workflow state so the UI stays current.

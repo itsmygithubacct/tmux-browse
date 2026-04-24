@@ -1492,6 +1492,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadNotifications();
     await loadClients();
     scheduleRefreshLoop();
+    setInterval(pollIdleOnly, 60000);
     setInterval(loadClients, 15000);
     setInterval(checkClientInbox, 10000);
 });
