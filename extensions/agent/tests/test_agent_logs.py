@@ -7,17 +7,22 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_logs  # noqa: E402
-from lib.agent_runs import LOG_SCHEMA_VERSION  # noqa: E402
+from agent import logs as agent_logs  # noqa: E402
+from agent.runs import LOG_SCHEMA_VERSION  # noqa: E402
 
 
 class _TmpMixin:
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self._log_dir = Path(self._tmpdir.name)
-        self._patch = mock.patch("lib.agent_logs.config.AGENT_LOG_DIR", self._log_dir)
+        self._patch = mock.patch("agent.logs.config.AGENT_LOG_DIR", self._log_dir)
         self._patch.start()
 
     def tearDown(self):

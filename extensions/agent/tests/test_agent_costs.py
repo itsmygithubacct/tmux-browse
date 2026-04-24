@@ -7,9 +7,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_costs as ac  # noqa: E402
+from agent import costs as ac  # noqa: E402
 
 
 class _TmpMixin:
@@ -89,19 +94,19 @@ class SandboxFieldTests(unittest.TestCase):
     """Verify agent_store handles the sandbox field."""
 
     def test_normalize_adds_sandbox_default(self):
-        from lib import agent_store
+        from agent import store as agent_store
         out = agent_store._normalize_agent_meta("test", {})
         self.assertEqual(out["sandbox"], "host")
 
     def test_normalize_preserves_valid_sandbox(self):
-        from lib import agent_store
+        from agent import store as agent_store
         out = agent_store._normalize_agent_meta("test", {"sandbox": "worktree"})
         self.assertEqual(out["sandbox"], "worktree")
         out = agent_store._normalize_agent_meta("test", {"sandbox": "docker"})
         self.assertEqual(out["sandbox"], "docker")
 
     def test_normalize_rejects_invalid_sandbox(self):
-        from lib import agent_store
+        from agent import store as agent_store
         out = agent_store._normalize_agent_meta("test", {"sandbox": "podman"})
         self.assertEqual(out["sandbox"], "host")
 

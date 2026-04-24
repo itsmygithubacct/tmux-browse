@@ -7,9 +7,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_hooks as ah  # noqa: E402
+from agent import hooks as ah  # noqa: E402
 
 
 class _TmpMixin:
@@ -97,8 +102,8 @@ class ExecuteTests(_TmpMixin, unittest.TestCase):
     def test_pause_workflow_disables_agent(self):
         ah.save({"budget_exceeded": ["log", "pause_workflow"]})
         wf = {"agents": {"gpt": {"enabled": True, "workflows": []}}}
-        with mock.patch("lib.agent_hooks.agent_workflows.load", return_value=wf), \
-             mock.patch("lib.agent_hooks.agent_workflows.save") as save_wf:
+        with mock.patch("agent.hooks.agent_workflows.load", return_value=wf), \
+             mock.patch("agent.hooks.agent_workflows.save") as save_wf:
             taken = ah.execute("budget_exceeded", "gpt")
         self.assertIn("pause_workflow", taken)
         save_wf.assert_called_once()
