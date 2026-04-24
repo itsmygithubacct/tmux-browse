@@ -38,17 +38,18 @@ class ListSessionsDedupTests(unittest.TestCase):
         names = [r["name"] for r in out]
         self.assertEqual(names, ["claude_code"])
 
-    def test_orphan_group_keeps_one_viewer(self):
-        # No primary present — one viewer survives so the work is still
-        # reachable in the listing.
+    def test_orphan_group_is_dropped_entirely(self):
+        # No primary present — viewers are dropped from the listing so the
+        # weirdly-named `<base>-v<pid>-<rand>` sessions that ttyd_wrap.sh
+        # leaves behind when the base dies don't pollute the session list.
+        # The parallel fix in ttyd_wrap.sh's watcher actively kills them;
+        # this is the defensive filter for the transient window.
         rows = [
             _tmux_row("music-v1-1", "music"),
             _tmux_row("music-v2-2", "music"),
         ]
         out = self._run(rows)
-        names = [r["name"] for r in out]
-        self.assertEqual(len(names), 1)
-        self.assertTrue(names[0].startswith("music-v"))
+        self.assertEqual([r["name"] for r in out], [])
 
     def test_mixed_groups_and_ungrouped(self):
         rows = [
@@ -59,10 +60,9 @@ class ListSessionsDedupTests(unittest.TestCase):
         ]
         out = self._run(rows)
         names = sorted(r["name"] for r in out)
-        self.assertEqual(len(names), 3)
-        self.assertIn("scratch", names)
-        self.assertIn("claude_code", names)
-        self.assertTrue(any(n.startswith("orphan-v") for n in names))
+        # scratch (ungrouped) and claude_code (primary) survive; the
+        # orphan viewer is dropped, the claude_code viewer is dropped.
+        self.assertEqual(names, ["claude_code", "scratch"])
 
     def test_primary_wins_regardless_of_ordering(self):
         # Viewer comes first in tmux output, primary second — primary still wins.
