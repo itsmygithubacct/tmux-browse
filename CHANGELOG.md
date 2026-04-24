@@ -1,29 +1,87 @@
 # Changelog
 
-## Unreleased — CI workflow + cross-repo version preflight
+## 0.7.1.3 — Docker sandbox + QR sharing carved out; lib lean pass (2026-04-24)
 
-Maintenance additions that catch version-drift bugs between core
-and the agent submodule before they ship:
+Three modules leave core, in keeping with the E0-E4 extension
+pattern:
+
+- **`lib/worktrees.py` → `tmux-browse-agent/agent/worktrees.py`** at
+  v0.7.2-agent. Agent-only helper; `lib/tasks.py` no longer creates
+  git worktrees — it stores `worktree_path` / `branch` as opaque
+  strings and leaves lifecycle to whoever created them.
+- **`lib/docker_sandbox.py` → new
+  [`tmux-browse-sandbox`](https://github.com/itsmygithubacct/tmux-browse-sandbox)
+  repo** at v0.7.2-sandbox. Library-only extension; the loader
+  prepends every enabled extension's dir to `sys.path` before
+  any `load_one()` runs, so the agent extension just does
+  `import sandbox as docker_sandbox`.
+- **`lib/qr.py` + `/api/qr` + Show QR / Read QR buttons + scanner
+  modal → new
+  [`tmux-browse-qr`](https://github.com/itsmygithubacct/tmux-browse-qr)
+  repo** at v0.7.2-qr. Fills two new slots
+  (`config_actions_extras`, `qr_modal`) via the extension loader.
+
+### Catalog
+
+`KNOWN` in `lib/extensions/catalog.py` now lists all three:
+`agent` (at v0.7.2-agent), `sandbox` (v0.7.2-sandbox), `qr` (v0.7.2-qr).
+Install via the Config pane or the Makefile.
+
+### Loader changes
+
+- Library-only extensions are explicitly supported. A manifest
+  with no entry points validates fine; the loader still prepends
+  its dir to `sys.path`, which is the whole point.
+- `load_enabled()` now does a two-pass dance: first it prepends
+  every enabled extension to `sys.path`, then it calls
+  `load_one()` on each. Cross-extension imports (e.g.
+  `agent.tool_registry` importing from `sandbox`) resolve at
+  module-load time regardless of alphabetical discovery order.
+- `scripts/preflight.py` generalises from agent-only to catalog-
+  driven: it runs the four version-alignment checks against every
+  entry in `KNOWN` and exits non-zero on any mismatch.
+- `tests/test_extension_agent_tests.py` now walks every installed
+  submodule under `extensions/` and loads their test files via
+  `importlib.util.spec_from_file_location` with uniquified module
+  names — avoids the `tests` package-name collision that
+  `unittest.discover` would otherwise hit between core's implicit
+  namespace package and each extension's explicit one.
+
+### Net diff in core
+
+~670 lines leave `lib/` (docker_sandbox, qr, worktrees, plus their
+tests). `lib/tasks.py` loses the worktree-creation path but keeps
+the same on-disk schema. `lib/server.py` loses one import, one
+handler, one route entry. `lib/templates.py` adds two slots and
+drops the QR modal + buttons. `static/sharing.js` loses the
+Show/Read QR functions. `static/panes.js` loses three event
+bindings.
+
+### Migration
+
+Existing installs: `git submodule update --init --recursive` brings
+in the new submodules. Users who had Docker sandbox agents or QR
+config share enabled will need to click **Config → Extensions →
+Enable** on each of `sandbox` and `qr`; the agent extension's
+Docker-mode code lazy-imports sandbox, so a Docker-agent run on an
+install without the sandbox extension enabled raises at tool-call
+time with a clear ImportError message.
+
+Full suite: 586 tests green.
+
+### CI + preflight (landed alongside the carves)
 
 - `.github/workflows/ci.yml` — core now has CI. Checks out with
   submodules recursive, installs tmux, runs `make preflight` then
-  `make test`. Same cadence as the extension's existing workflow.
-- `scripts/preflight.py` — four checks run on every PR and before
-  every release:
-  1. **Submodule populated** — fails fast if
-     `extensions/agent/manifest.json` is missing.
-  2. **Catalog `pinned_ref` matches submodule tag** — catches the
-     "I bumped `.gitmodules` but forgot `catalog.py`" case.
-  3. **Core's `__version__` satisfies the extension's
-     `min_tmux_browse`** — stricter than the loader's runtime
-     check, so bad pairings surface at dev time.
-  4. **Submodule manifest version matches its git tag** —
-     cosmetic but catches tag/manifest drift.
-- `make preflight` and `make ci` targets wrap the script.
-- `tests/test_preflight.py` — 11 cases, each check exercised with
-  both passing and failing fixtures.
-
-Full suite: 590 tests green (was 579).
+  `make test`.
+- `scripts/preflight.py` — catalog-driven. Four checks per
+  submodule: populated, pinned_ref matches tag, core satisfies
+  min_tmux_browse, manifest version matches tag. Exit 1 on any
+  mismatch; grep-friendly `FAIL: <ext>/<check>: <msg>` lines on
+  stderr.
+- `make preflight` and `make ci` wrap the script.
+- `tests/test_preflight.py` — cases for each check, passing and
+  failing.
 
 ## 0.7.1.2 — Extension Manage modal + CLI (2026-04-24)
 

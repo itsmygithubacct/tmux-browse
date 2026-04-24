@@ -128,14 +128,10 @@ class Manifest:
             raise ManifestError(
                 f"extension {self.name!r} requires tmux-browse >= "
                 f"{self.min_tmux_browse}; this install is {core_version}")
-        # At least one of the four entry points should be set — an
-        # extension with nothing to contribute shouldn't load at all.
-        if not any((self.routes_entry, self.cli_entry,
-                    self.ui_blocks_path, self.startup_entry)):
-            raise ManifestError(
-                f"extension {self.name!r} declares no entry points; "
-                f"set at least one of routes_entry / cli_entry / "
-                f"ui_blocks_path / startup_entry")
+        # Library-only extensions (no entry points, just a Python
+        # package other extensions import) are allowed. The loader
+        # still prepends the extension dir to ``sys.path`` at load
+        # time, which is what makes ``import sandbox`` etc. work.
 
 
 # --- helpers -----------------------------------------------------------

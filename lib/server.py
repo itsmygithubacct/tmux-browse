@@ -18,7 +18,6 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
-    qr,
     auth,
     tasks as tasks_mod,
     config,
@@ -639,25 +638,6 @@ class Handler(BaseHTTPRequestHandler):
         messages = _client_inbox.pop(cid, [])
         self._send_json({"ok": True, "messages": messages})
 
-    def _h_qr(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        data = (query.get("data", [""])[0] or "").strip()
-        if not data:
-            self._send_json({"ok": False, "error": "missing 'data'"}, status=400)
-            return
-        try:
-            svg = qr.generate_svg(data)
-        except ValueError as e:
-            self._send_json({"ok": False, "error": str(e)}, status=400)
-            return
-        body = svg.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "image/svg+xml")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
-
     def _h_config_lock_status(self, _parsed: ParseResult) -> None:
         has_lock = config.CONFIG_LOCK_FILE.exists() and config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
         self._send_json({"ok": True, "locked": bool(has_lock)})
@@ -1017,7 +997,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/session/log":        _h_session_log,
         "/api/clients":            _h_clients,
         "/api/clients/inbox":      _h_clients_inbox,
-        "/api/qr":                 _h_qr,
         "/api/config-lock":        _h_config_lock_status,
         "/api/extensions":         _h_extensions_status,
         "/api/extensions/available": _h_extensions_available,
