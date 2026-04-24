@@ -1,10 +1,8 @@
-"""scripts/preflight.py catches each kind of cross-repo drift.
+"""scripts/preflight.py — catalog-driven version alignment check.
 
-Rather than run the real script against a mocked filesystem — which
-would require patching ``subprocess.run`` and a lot of paths — the
-tests import the check functions and patch their dependencies
-directly. The integration "does preflight actually exit 1 on a
-broken tree" case is left to CI, which runs the real script.
+Exercises ``check_one`` against a tmpdir fixture standing in for a
+catalog entry's submodule. The real-world pass/fail is also
+covered by ``make preflight`` in CI.
 """
 
 from __future__ import annotations
@@ -12,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -21,116 +20,80 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts import preflight  # noqa: E402
 
 
-class _IsolatedRepoMixin:
-    """Redirect preflight's REPO / SUBMODULE / MANIFEST paths to a temp."""
+def _manifest(version: str, min_core: str) -> str:
+    return json.dumps({
+        "name": "sandbox", "version": version, "module": "sandbox",
+        "min_tmux_browse": min_core,
+    })
+
+
+class CheckOneTests(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         root = Path(self._tmp.name)
-        self._submodule = root / "extensions" / "agent"
-        self._manifest = self._submodule / "manifest.json"
-        self._patches = [
-            mock.patch.object(preflight, "REPO", root),
-            mock.patch.object(preflight, "SUBMODULE", self._submodule),
-            mock.patch.object(preflight, "MANIFEST", self._manifest),
-        ]
-        for p in self._patches:
-            p.start()
+        self._root = root
+        self._patch = mock.patch.object(preflight, "REPO", root)
+        self._patch.start()
+        self._sub = root / "extensions" / "sandbox"
+        self._sub.mkdir(parents=True)
+        self._manifest_path = self._sub / "manifest.json"
 
     def tearDown(self):
-        for p in self._patches:
-            p.stop()
+        self._patch.stop()
         self._tmp.cleanup()
 
-    def _populate(self, *, version: str = "0.7.1",
-                  min_core: str = "0.7.1") -> None:
-        self._submodule.mkdir(parents=True, exist_ok=True)
-        self._manifest.write_text(json.dumps({
-            "name": "agent",
-            "version": version,
-            "module": "agent",
-            "min_tmux_browse": min_core,
-        }))
+    def _spec(self, pinned_ref: str = "v0.7.2-sandbox") -> dict:
+        return {
+            "submodule_path": "extensions/sandbox",
+            "pinned_ref": pinned_ref,
+        }
 
+    def test_missing_manifest_returns_false(self):
+        with mock.patch.object(preflight, "_core_version", return_value="0.7.1.2"):
+            self.assertFalse(preflight.check_one("sandbox", self._spec()))
 
-class SubmodulePopulatedTests(_IsolatedRepoMixin, unittest.TestCase):
+    def test_happy_path_passes(self):
+        self._manifest_path.write_text(_manifest("0.7.2", "0.7.1"))
+        git_ret = (0, "v0.7.2-sandbox", "")
+        with mock.patch.object(preflight, "_git", return_value=git_ret), \
+             mock.patch.object(preflight, "_core_version",
+                               return_value="0.7.1.2"):
+            self.assertTrue(preflight.check_one("sandbox", self._spec()))
 
-    def test_missing_manifest_fails(self):
-        self.assertFalse(preflight.check_submodule_populated())
-
-    def test_present_manifest_passes(self):
-        self._populate()
-        self.assertTrue(preflight.check_submodule_populated())
-
-
-class PinnedRefMatchesCatalogTests(_IsolatedRepoMixin, unittest.TestCase):
-
-    def _git_returns(self, tag: str, *, rc: int = 0):
-        return (rc, tag, "")
-
-    def test_catalog_and_submodule_agree(self):
-        self._populate()
-        catalog = {"agent": {"pinned_ref": "v0.7.1-agent"}}
+    def test_pinned_ref_mismatch_fails(self):
+        self._manifest_path.write_text(_manifest("0.7.2", "0.7.1"))
+        # Submodule is at v0.7.1-sandbox but catalog says v0.7.2-sandbox.
         with mock.patch.object(preflight, "_git",
-                               return_value=self._git_returns("v0.7.1-agent")), \
-             mock.patch.dict(sys.modules, {}, clear=False), \
-             mock.patch("lib.extensions.catalog.KNOWN", catalog):
-            self.assertTrue(preflight.check_pinned_ref_matches_catalog())
+                               return_value=(0, "v0.7.1-sandbox", "")), \
+             mock.patch.object(preflight, "_core_version",
+                               return_value="0.7.1.2"):
+            self.assertFalse(preflight.check_one("sandbox", self._spec()))
 
-    def test_mismatch_fails(self):
-        self._populate()
-        catalog = {"agent": {"pinned_ref": "v0.7.2-agent"}}
+    def test_min_core_too_new_fails(self):
+        self._manifest_path.write_text(_manifest("0.7.2", "9.9.9"))
         with mock.patch.object(preflight, "_git",
-                               return_value=self._git_returns("v0.7.1-agent")), \
-             mock.patch("lib.extensions.catalog.KNOWN", catalog):
-            self.assertFalse(preflight.check_pinned_ref_matches_catalog())
+                               return_value=(0, "v0.7.2-sandbox", "")), \
+             mock.patch.object(preflight, "_core_version",
+                               return_value="0.7.1.2"):
+            self.assertFalse(preflight.check_one("sandbox", self._spec()))
 
-    def test_submodule_not_on_tag_fails(self):
-        self._populate()
-        catalog = {"agent": {"pinned_ref": "v0.7.1-agent"}}
+    def test_tag_and_manifest_version_mismatch_fails(self):
+        # Tag says -0.7.2- but manifest says 0.7.1
+        self._manifest_path.write_text(_manifest("0.7.1", "0.7.1"))
         with mock.patch.object(preflight, "_git",
-                               return_value=(128, "", "fatal: no tag")), \
-             mock.patch("lib.extensions.catalog.KNOWN", catalog):
-            self.assertFalse(preflight.check_pinned_ref_matches_catalog())
-
-
-class CoreSatisfiesMinTests(_IsolatedRepoMixin, unittest.TestCase):
-
-    def test_core_newer_than_required_passes(self):
-        self._populate(min_core="0.7.0")
-        with mock.patch("lib.__version__", "0.7.1.2"):
-            self.assertTrue(preflight.check_core_satisfies_min())
-
-    def test_core_equal_passes(self):
-        self._populate(min_core="0.7.1")
-        with mock.patch("lib.__version__", "0.7.1"):
-            self.assertTrue(preflight.check_core_satisfies_min())
-
-    def test_core_older_than_required_fails(self):
-        self._populate(min_core="0.9.0")
-        with mock.patch("lib.__version__", "0.7.1"):
-            self.assertFalse(preflight.check_core_satisfies_min())
-
-
-class ManifestVersionMatchesTagTests(_IsolatedRepoMixin, unittest.TestCase):
-
-    def test_tag_and_manifest_match(self):
-        self._populate(version="0.7.1")
-        with mock.patch.object(preflight, "_git",
-                               return_value=(0, "v0.7.1-agent", "")):
-            self.assertTrue(preflight.check_manifest_version_matches_tag())
-
-    def test_mismatch_fails(self):
-        self._populate(version="0.7.0")
-        with mock.patch.object(preflight, "_git",
-                               return_value=(0, "v0.7.1-agent", "")):
-            self.assertFalse(preflight.check_manifest_version_matches_tag())
+                               return_value=(0, "v0.7.2-sandbox", "")), \
+             mock.patch.object(preflight, "_core_version",
+                               return_value="0.7.1.2"):
+            self.assertFalse(preflight.check_one("sandbox", self._spec()))
 
     def test_non_matching_tag_format_fails(self):
-        self._populate(version="0.7.1")
+        self._manifest_path.write_text(_manifest("0.7.2", "0.7.1"))
         with mock.patch.object(preflight, "_git",
-                               return_value=(0, "random-tag", "")):
-            self.assertFalse(preflight.check_manifest_version_matches_tag())
+                               return_value=(0, "random-tag", "")), \
+             mock.patch.object(preflight, "_core_version",
+                               return_value="0.7.1.2"):
+            self.assertFalse(preflight.check_one("sandbox", self._spec()))
 
 
 if __name__ == "__main__":

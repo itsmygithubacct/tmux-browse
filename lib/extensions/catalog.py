@@ -38,7 +38,34 @@ KNOWN: dict[str, CatalogEntry] = {
         "repo": "https://github.com/itsmygithubacct/tmux-browse-agent.git",
         # Tags are preferred over branch names so the install path
         # doesn't move under us between today and next week.
-        "pinned_ref": "v0.7.1-agent",
+        "pinned_ref": "v0.7.2-agent",
         "submodule_path": "extensions/agent",
+    },
+    "sandbox": {
+        "name": "sandbox",
+        "label": "Docker sandbox",
+        "description": (
+            "Docker-based execution sandbox. Library-only — other "
+            "extensions ``import sandbox``; nothing in it is visible "
+            "to the dashboard until the agent extension (or another) "
+            "uses it. Recommended when any agent is configured with "
+            "``sandbox: docker``."
+        ),
+        "repo": "https://github.com/itsmygithubacct/tmux-browse-sandbox.git",
+        "pinned_ref": "v0.7.2-sandbox",
+        "submodule_path": "extensions/sandbox",
+    },
+    "qr": {
+        "name": "qr",
+        "label": "QR config share",
+        "description": (
+            "Share view config — layout, hidden list, hot buttons, "
+            "idle alerts, mobile keys — between devices by scanning "
+            "a QR code. Adds Show QR / Read QR buttons to Config and "
+            "a ``/api/qr`` endpoint."
+        ),
+        "repo": "https://github.com/itsmygithubacct/tmux-browse-qr.git",
+        "pinned_ref": "v0.7.2-qr",
+        "submodule_path": "extensions/qr",
     },
 }

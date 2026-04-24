@@ -242,6 +242,19 @@ def load_enabled(
     """
     core_version = core_version_override or __version__
     enabled = _read_enabled()
+    # Pre-pass: prepend every enabled extension's dir to ``sys.path``
+    # BEFORE any ``load_one()`` call runs. Extensions can then import
+    # each other at module-load time without depending on alphabetical
+    # discovery order — e.g. the agent extension can
+    # ``import sandbox`` at the top of its tool_registry.py regardless
+    # of whether sandbox has been load_one'd yet.
+    import sys as _sys
+    for path in discover():
+        if not enabled.get(path.name, {}).get("enabled"):
+            continue
+        ext_root = str(path.resolve())
+        if ext_root not in _sys.path:
+            _sys.path.insert(0, ext_root)
     merged = MergedRegistry()
     for path in discover():
         name = path.name
