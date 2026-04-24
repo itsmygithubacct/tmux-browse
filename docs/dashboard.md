@@ -137,8 +137,8 @@ multiple panes into the same row for side-by-side viewing. The collapsed
 | `N clients` badge | number of attached tmux clients (green if ≥ 1) |
 | `Nw` badge | window count |
 | `:PORT` badge | only shown while ttyd is running; its listening port |
-| `idle Xs\|m\|h\|d` | time since last tmux-measured activity |
-| **Idle Alert** | button to the right of `idle …`; enables per-session idle notifications with a threshold and sound/prompt mode |
+| `idle Xs\|m\|h\|d` | time since the session's log content last changed (SHA-256 of the trailing 8 KiB of `~/.tmux-browse/session-logs/<name>.log`, written via `tmux pipe-pane`). Falls back to tmux's `session_activity` for pre-existing sessions before the log is first created. |
+| **Idle Alert** | button to the right of `idle …`; enables per-session idle notifications. Threshold is configured in the modal as hours + minutes (minimum 1 minute) with sound and/or prompt delivery. |
 | **Open ↗** | green button; opens the live ttyd in a new browser tab. Only visible while ttyd is running. |
 | **Log** | serves `tmux capture-pane` output for that session as `text/plain` in a new tab — the scrollback up to `history-limit`. |
 | **Scroll** | orange button; invokes `tmux copy-mode` on the session's active pane (equivalent to `C-b [`). Useful when viewing through ttyd. |
@@ -193,10 +193,20 @@ fire-and-forget background shells. **Restart** re-execs the dashboard server
 process itself.
 
 Idle alerts are browser-side. When enabled for a session, the dashboard
-watches that session's `idle_seconds` value during the normal refresh loop
-and fires once when the session crosses the configured threshold. It rearms
-after the session becomes active again. The per-session settings are stored
-in `localStorage`. Sound alerts work best after at least one click or keypress
+watches that session's `idle_seconds` value and fires once when the session
+crosses the configured threshold. The threshold is expressed as hours +
+minutes (minimum 1 minute). Polling cadence:
+
+- If **auto-refresh** is on, the full `/api/sessions` refresh handles idle
+  detection on its normal interval.
+- Otherwise, a dedicated 60-second `pollIdleOnly()` loop still fetches
+  `/api/sessions` to keep idle labels and alert firing current without
+  rebuilding panes. Hidden sessions are skipped — if you hid it, you don't
+  want to hear about it.
+
+The alert rearms after the session becomes active again. The per-session
+settings are stored in `localStorage`. Sound alerts work best after at least
+one click or keypress
 in the page, because browsers often block audio until the page has received a
 user gesture.
 
