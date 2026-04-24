@@ -117,8 +117,6 @@ details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
     font-size: 0.72rem; padding: 0.05rem 0.4rem; border-radius: 10px;
     border: 1px solid var(--border); color: var(--dim);
 }
-.badge.attached { border-color: var(--green); color: var(--green); }
-.badge.running  { border-color: var(--orange); color: var(--orange); }
 
 .summary-actions {
     margin-left: auto; display: flex; align-items: center; gap: 0.4rem;

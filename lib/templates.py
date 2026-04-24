@@ -46,6 +46,15 @@ def render_index() -> str:
 <details id="config-wrap" class="config-pane">
     <summary>Config</summary>
     <div class="config-body">
+        <details class="config-lock-section">
+            <summary class="dim" style="cursor:pointer;font-size:0.82rem">Lock config pane</summary>
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
+                <input type="password" id="cfg-lock-password" placeholder="Set or change password" style="flex:1;min-width:140px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+                <button class="btn green" id="cfg-lock-set-btn" type="button">Set Lock</button>
+                <button class="btn red" id="cfg-lock-clear-btn" type="button">Remove Lock</button>
+                <span class="dim" id="cfg-lock-status" style="font-size:0.82rem"></span>
+            </div>
+        </details>
         <div class="config-grid">
             <section class="config-card">
                 <div class="config-card-title">Behavior</div>
@@ -181,15 +190,6 @@ def render_index() -> str:
             <button class="btn" id="cfg-qr-scan-btn" title="Scan QR code from another device's camera">Read QR</button>
             <span class="dim" id="cfg-status">Saved to ~/.tmux-browse/dashboard-config.json</span>
         </div>
-        <details class="config-lock-section">
-            <summary class="dim" style="cursor:pointer;font-size:0.82rem">Lock config pane</summary>
-            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem;flex-wrap:wrap">
-                <input type="password" id="cfg-lock-password" placeholder="Set or change password" style="flex:1;min-width:140px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
-                <button class="btn green" id="cfg-lock-set-btn" type="button">Set Lock</button>
-                <button class="btn red" id="cfg-lock-clear-btn" type="button">Remove Lock</button>
-                <span class="dim" id="cfg-lock-status" style="font-size:0.82rem"></span>
-            </div>
-        </details>
         <details style="margin-top:0.6rem">
             <summary class="dim" style="cursor:pointer;font-size:0.85rem">Agent Settings</summary>
             <div style="display:grid;gap:0.5rem;margin-top:0.5rem">
