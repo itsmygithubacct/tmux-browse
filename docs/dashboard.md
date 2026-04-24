@@ -253,10 +253,21 @@ It covers:
   hidden for new agents but shown as `docker (unavailable on this host)`
   (disabled) when an existing agent already has it set, so saved configs
   are visible instead of silently rewritten
-- **Lock config pane:** optional password that gates the Config pane.
-  Password stored as SHA-256 hash at `~/.tmux-browse/config-lock-secret`
-  (outside the repo, 0600 permissions). CLI `tb config set/reset` also
-  requires the password when set.
+- **Lock config pane:** optional password that gates both the Config
+  pane UI *and* every server-side mutation endpoint
+  (`/api/agents`, `/api/agent-hooks`, `/api/agent-workflows`,
+  `/api/dashboard-config`, `/api/tasks`, `/api/config-lock` itself).
+  `/api/config-lock/verify` issues a 32-byte unlock token with a
+  12-hour TTL; the browser sends it as `X-TB-Unlock-Token` on every
+  non-GET request. Password stored as SHA-256 hash at
+  `~/.tmux-browse/config-lock-secret` (0600). Tokens live in server
+  memory only — a restart forces re-unlock. Clearing the lock drops
+  all tokens.
+- **Pane Groups:** named buckets for sessions. Visible and Hidden
+  always exist; create additional groups (e.g. Agents, Monitoring)
+  with the editor in Config > Behavior. Each group renders as its
+  own furled `<details>` block between the Visible stack and the
+  Hidden drawer. A session lives in exactly one bucket at a time.
 
 Action buttons: **Save Config**, **Load From File**, **Defaults**,
 **Show QR** (generate QR code of current view config), **Read QR**
@@ -332,6 +343,13 @@ within that bucket independently of the main list. If all entries are
 hidden, the main area shows "All sessions are hidden — open the list
 below." If a hidden session is killed or disappears, it's automatically
 dropped from the hidden set.
+
+Hidden is one of two built-in pseudo-groups — the other is Visible.
+Any additional user-defined groups created in Config > Behavior render
+between Visible and Hidden as their own furled `<details>` blocks. The
+**Move** button on each pane (text + folder-arrow icon) opens a popover
+listing all buckets and a "+ New group…" entry, writing through the
+same per-browser localStorage that backs Hidden/Visible.
 
 ## Ports & persistence
 
