@@ -102,7 +102,7 @@ function normalizeIdleAlert(value) {
     const thresholdSec = Number(raw.thresholdSec);
     return {
         enabled: !!raw.enabled,
-        thresholdSec: Number.isFinite(thresholdSec) && thresholdSec >= 5 ? Math.floor(thresholdSec) : 300,
+        thresholdSec: Number.isFinite(thresholdSec) && thresholdSec >= 60 ? Math.floor(thresholdSec) : 300,
         sound: raw.sound !== false,
         prompt: !!raw.prompt,
     };
