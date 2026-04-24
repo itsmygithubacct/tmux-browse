@@ -8,9 +8,14 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_providers as ap  # noqa: E402
+from agent import providers as ap  # noqa: E402
 from lib.errors import AuthError, StateError, UsageError  # noqa: E402
 
 

@@ -6,11 +6,16 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_budgets  # noqa: E402
+from agent import budgets as agent_budgets  # noqa: E402
 from lib import config as cfg  # noqa: E402
-from lib.agent_modes import work as work_mode  # noqa: E402
+from agent.modes import work as work_mode  # noqa: E402
 
 
 AGENT = {"name": "opus", "model": "claude-opus-4-7"}
@@ -83,11 +88,11 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
 
     def _patch_budget(self, action="ok", reason=""):
         return mock.patch(
-            "lib.agent_modes.work.agent_budgets.check_daily_budget",
+            "agent.modes.work.agent_budgets.check_daily_budget",
             return_value={"action": action, "reason": reason})
 
     def test_empty_source_returns_empty(self):
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent") as ra, \
+        with mock.patch("agent.modes.work.agent_runner.run_agent") as ra, \
              self._patch_budget():
             path = self._tasks_file([])
             result = work_mode.run(AGENT, tasks_path=str(path))
@@ -96,7 +101,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
         ra.assert_not_called()
 
     def test_two_tasks_run_sequentially(self):
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         return_value=_ok_run()) as ra, \
              self._patch_budget():
             path = self._tasks_file(["alpha", "beta"])
@@ -112,7 +117,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
             if prompt == "bad":
                 raise RuntimeError("boom")
             return _ok_run()
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         side_effect=side_effect) as ra, \
              self._patch_budget():
             path = self._tasks_file(["good", "bad", "never"])
@@ -128,7 +133,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
             if prompt == "bad":
                 raise RuntimeError("boom")
             return _ok_run()
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         side_effect=side_effect), \
              self._patch_budget():
             path = self._tasks_file(["good", "bad", "final"])
@@ -138,7 +143,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
         self.assertEqual(result.failed, 1)
 
     def test_daily_budget_aborts(self):
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         return_value=_ok_run()) as ra, \
              self._patch_budget(action=agent_budgets.ACTION_STOP,
                                  reason="daily cap reached"):
@@ -149,7 +154,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
         ra.assert_not_called()
 
     def test_step_cap_aborts(self):
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         return_value=_ok_run(steps=50)) as ra, \
              self._patch_budget():
             path = self._tasks_file(["one", "two", "three"])
@@ -163,7 +168,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
 
     def test_stop_signal(self):
         # Request stop before any tasks run; loop should exit immediately.
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         return_value=_ok_run()) as ra, \
              self._patch_budget():
             path = self._tasks_file(["one", "two"])
@@ -182,7 +187,7 @@ class RunLoopTests(_IsolatedWork, unittest.TestCase):
         self.assertEqual(result.completed, 1)
 
     def test_origin_is_work(self):
-        with mock.patch("lib.agent_modes.work.agent_runner.run_agent",
+        with mock.patch("agent.modes.work.agent_runner.run_agent",
                         return_value=_ok_run()) as ra, \
              self._patch_budget():
             path = self._tasks_file(["t"])

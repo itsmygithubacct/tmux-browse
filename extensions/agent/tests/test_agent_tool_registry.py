@@ -6,9 +6,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_tool_registry as reg  # noqa: E402
+from agent import tool_registry as reg  # noqa: E402
 
 
 class RegistryTests(unittest.TestCase):
@@ -113,7 +118,7 @@ class ReadFileSandboxTests(unittest.TestCase):
     def test_accepts_workspace_path(self):
         sb = mock.Mock()
         sb.container_name = "tb-test"
-        with mock.patch("lib.agent_tool_registry.subprocess.run",
+        with mock.patch("agent.tool_registry.subprocess.run",
                         return_value=mock.Mock(returncode=0, stdout="bytes",
                                                stderr="")):
             result = reg._read_file_sandbox(
@@ -124,7 +129,7 @@ class ReadFileSandboxTests(unittest.TestCase):
     def test_accepts_opt_tmux_browse_path(self):
         sb = mock.Mock()
         sb.container_name = "tb-test"
-        with mock.patch("lib.agent_tool_registry.subprocess.run",
+        with mock.patch("agent.tool_registry.subprocess.run",
                         return_value=mock.Mock(returncode=0, stdout="x",
                                                stderr="")):
             result = reg._read_file_sandbox(
