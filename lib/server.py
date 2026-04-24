@@ -19,6 +19,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
     agent_budgets,
+    agent_conductor,
     agent_costs,
     agent_hooks,
     qr,
@@ -881,6 +882,38 @@ class Handler(BaseHTTPRequestHandler):
                 limit=max(1, min(200, limit))),
         })
 
+    def _h_agent_conductor_get(self, _parsed: ParseResult) -> None:
+        self._send_json({
+            "ok": True,
+            "rules": agent_conductor.load_rules(),
+        })
+
+    def _h_agent_conductor_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        payload = body.get("rules")
+        if payload is None:
+            payload = body
+        try:
+            saved = agent_conductor.save_rules(
+                {"rules": payload} if isinstance(payload, list) else payload)
+            self._send_json({"ok": True, "rules": saved})
+        except ValueError as e:
+            self._send_json({"ok": False, "error": str(e)}, status=400)
+
+    def _h_agent_conductor_events(self, parsed: ParseResult) -> None:
+        query = parse_qs(parsed.query)
+        try:
+            limit = int(query.get("limit", ["50"])[0])
+        except (ValueError, TypeError):
+            limit = 50
+        agent = (query.get("agent", [""])[0] or "").strip()
+        self._send_json({
+            "ok": True,
+            "decisions": agent_conductor.read_decisions(
+                limit=max(1, min(500, limit)), agent=agent),
+        })
+
     def _h_agent_costs(self, parsed: ParseResult) -> None:
         q = parse_qs(parsed.query)
 
@@ -1165,6 +1198,8 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-costs":        _h_agent_costs,
         "/api/agent-hooks":        _h_agent_hooks_get,
         "/api/agent-notifications": _h_agent_notifications,
+        "/api/agent-conductor":    _h_agent_conductor_get,
+        "/api/agent-conductor-events": _h_agent_conductor_events,
         "/api/clients":            _h_clients,
         "/api/clients/inbox":      _h_clients_inbox,
         "/api/qr":                 _h_qr,
@@ -1186,6 +1221,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agents/remove":      _h_agents_remove,
         "/api/agent-workflows":    _h_agent_workflows_post,
         "/api/agent-hooks":        _h_agent_hooks_post,
+        "/api/agent-conductor":    _h_agent_conductor_post,
         "/api/agent-conversation":      _h_agent_conversation_open,
         "/api/agent-conversation-fork": _h_agent_conversation_fork,
         "/api/clients/nickname":   _h_clients_nickname,
