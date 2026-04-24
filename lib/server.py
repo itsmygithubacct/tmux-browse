@@ -204,6 +204,55 @@ def _clear_dashboard_state() -> None:
 from . import __version__
 
 
+# -----------------------------------------------------------------------------
+# Config-lock unlock tokens
+# -----------------------------------------------------------------------------
+#
+# When the config-lock is set, mutating endpoints require an unlock token.
+# The token is issued on a successful ``/api/config-lock/verify`` and held
+# in-memory only — server restart forces re-unlock, which is acceptable for
+# the single-user / small-LAN threat model this gate exists for. Tokens are
+# compared with ``hmac.compare_digest`` to avoid timing leaks.
+
+_UNLOCK_TOKEN_TTL_SEC = 12 * 3600
+_unlock_tokens: dict[str, int] = {}  # token -> expiry epoch
+
+
+def _issue_unlock_token(now: int | None = None) -> str:
+    import secrets
+    if now is None:
+        now = int(time.time())
+    # Prune expired entries opportunistically so the dict doesn't grow.
+    for k in [k for k, exp in _unlock_tokens.items() if exp <= now]:
+        _unlock_tokens.pop(k, None)
+    token = secrets.token_urlsafe(32)
+    _unlock_tokens[token] = now + _UNLOCK_TOKEN_TTL_SEC
+    return token
+
+
+def _unlock_token_valid(token: str, now: int | None = None) -> bool:
+    import hmac
+    if not token:
+        return False
+    if now is None:
+        now = int(time.time())
+    for known, exp in list(_unlock_tokens.items()):
+        if exp <= now:
+            _unlock_tokens.pop(known, None)
+            continue
+        if hmac.compare_digest(known, token):
+            return True
+    return False
+
+
+def _lock_is_active() -> bool:
+    try:
+        return bool(config.CONFIG_LOCK_FILE.exists()
+                    and config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"tmux-browse/{__version__}"
 
@@ -259,6 +308,21 @@ class Handler(BaseHTTPRequestHandler):
     def _send_tb_error(self, err: TBError) -> None:
         status = 400 if err.exit_code == 2 else 500
         self._send_json({"ok": False, "error": err.message}, status=status)
+
+    def _check_unlock(self) -> bool:
+        """Gate for mutating endpoints. Returns True when the request may
+        proceed; sends 403 and returns False when the config lock is set
+        and no valid unlock token is presented.
+
+        Called at the top of each gated POST handler. Reads are never gated.
+        """
+        if not _lock_is_active():
+            return True
+        token = (self.headers.get("X-TB-Unlock-Token") or "").strip()
+        if _unlock_token_valid(token):
+            return True
+        self._send_json({"ok": False, "error": "config locked"}, status=403)
+        return False
 
     # --- auth --------------------------------------------------------------
 
@@ -643,6 +707,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True})
 
     def _h_dashboard_config_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         payload = body.get("config", body)
         saved = dashboard_config.save(payload)
         self._send_json({
@@ -652,6 +718,8 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def _h_agents_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         payload = body.get("agent", body)
         name = (payload.get("name") or "").strip()
         api_key = payload.get("api_key")
@@ -687,6 +755,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "agent": row})
 
     def _h_agents_remove(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         name = (body.get("name") or "").strip()
         if not name:
             self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
@@ -699,6 +769,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "removed": removed, "name": name})
 
     def _h_agent_workflows_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         payload = body.get("config", body)
         try:
             saved = agent_workflows.save(payload)
@@ -789,6 +861,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "hooks": agent_hooks.load()})
 
     def _h_agent_hooks_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         try:
             saved = agent_hooks.save(body.get("hooks", body))
             self._send_json({"ok": True, "hooks": saved})
@@ -903,6 +977,10 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "locked": bool(has_lock)})
 
     def _h_config_lock_set(self, _parsed: ParseResult, body: dict) -> None:
+        # Setting or clearing the lock must itself be gated when a lock is
+        # already active — otherwise anyone on the LAN could wipe it.
+        if not self._check_unlock():
+            return
         password = (body.get("password") or "").strip()
         if not password:
             # Clear the lock
@@ -910,6 +988,8 @@ class Handler(BaseHTTPRequestHandler):
                 config.CONFIG_LOCK_FILE.unlink(missing_ok=True)
             except OSError:
                 pass
+            # Drop every issued token on clear so they can't be reused.
+            _unlock_tokens.clear()
             self._send_json({"ok": True, "locked": False})
             return
         import hashlib
@@ -935,7 +1015,12 @@ class Handler(BaseHTTPRequestHandler):
         attempt = hashlib.sha256(password.encode("utf-8")).hexdigest()
         import hmac
         if hmac.compare_digest(stored, attempt):
-            self._send_json({"ok": True, "unlocked": True})
+            token = _issue_unlock_token()
+            self._send_json({
+                "ok": True, "unlocked": True,
+                "unlock_token": token,
+                "ttl_seconds": _UNLOCK_TOKEN_TTL_SEC,
+            })
         else:
             self._send_json({"ok": False, "error": "wrong password"}, status=403)
 
@@ -949,6 +1034,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_tb_error(e)
 
     def _h_tasks_create(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         try:
             task = tasks_mod.create(
                 title=(body.get("title") or "").strip(),
@@ -962,6 +1049,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_tb_error(e)
 
     def _h_tasks_update(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
         task_id = (body.get("id") or "").strip()
         if not task_id:
             self._send_json({"ok": False, "error": "missing 'id'"}, status=400)
