@@ -48,6 +48,8 @@ function configFieldMap() {
         show_summary_split: document.getElementById("cfg-show-summary-split"),
         show_summary_hide: document.getElementById("cfg-show-summary-hide"),
         show_summary_reorder: document.getElementById("cfg-show-summary-reorder"),
+        show_summary_move: document.getElementById("cfg-show-summary-move"),
+        show_wc_move_icon: document.getElementById("cfg-show-wc-move-icon"),
         show_wc_close: document.getElementById("cfg-show-wc-close"),
         show_wc_maximize: document.getElementById("cfg-show-wc-maximize"),
         show_wc_minimize: document.getElementById("cfg-show-wc-minimize"),
@@ -155,8 +157,8 @@ const SUMMARY_TOGGLE_KEYS = [
     "show_attached_badge", "show_window_badge", "show_port_badge",
     "show_idle_text", "show_idle_alert_button", "show_summary_open",
     "show_summary_log", "show_summary_scroll", "show_summary_split",
-    "show_summary_hide", "show_summary_reorder",
-    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon", "show_wc_scroll_icon",
+    "show_summary_hide", "show_summary_reorder", "show_summary_move",
+    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon", "show_wc_scroll_icon", "show_wc_move_icon",
 ];
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
@@ -359,6 +361,8 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.scrollBtn, cfg.show_summary_scroll, "");
     setVisible(rec.splitBtn, cfg.show_summary_split, "");
     setVisible(rec.hideBtn, cfg.show_summary_hide, "");
+    setVisible(rec.moveBtn, cfg.show_summary_move, "");
+    setVisible(rec.moveIconBtn, cfg.show_wc_move_icon, "inline-flex");
     setVisible(rec.reorderPad, cfg.show_summary_reorder, "inline-flex");
     setVisible(rec.launchBtn, cfg.show_body_launch, "");
     setVisible(rec.stopBtn, cfg.show_body_stop, "");

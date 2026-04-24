@@ -212,6 +212,37 @@ a.wc-log-icon { text-decoration: none; }
     border-color: rgba(139, 148, 158, 0.3);
     color: var(--accent);
 }
+.wc-move-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
+.move-menu {
+    position: absolute;
+    z-index: 2000;
+    min-width: 200px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.3rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    font-size: 0.82rem;
+}
+.move-menu-head {
+    color: var(--dim);
+    font-size: 0.78rem;
+    padding: 0.15rem 0.5rem 0.3rem;
+}
+.move-menu-row {
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    border-radius: 3px;
+    color: var(--fg);
+}
+.move-menu-row:hover { background: rgba(88, 166, 255, 0.12); color: var(--accent); }
+.move-menu-row.current { color: var(--dim); font-style: italic; }
+.move-menu-row.new-group { color: var(--green); }
+.move-menu-sep { border-top: 1px dotted var(--border); margin: 0.25rem 0; }
 .summary-idle-wrap {
     display: inline-flex;
     align-items: center;
