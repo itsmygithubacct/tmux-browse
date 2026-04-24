@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from . import config
-from .errors import StateError
+from lib import config
+from lib.errors import StateError
 
 
 DEFAULTS: dict[str, Any] = {"agents": {}}

@@ -14,8 +14,8 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from . import config
-from .errors import StateError
+from lib import config
+from lib.errors import StateError
 
 
 COSTS_FILE = config.STATE_DIR / "agent-costs.jsonl"

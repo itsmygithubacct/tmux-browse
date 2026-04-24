@@ -26,7 +26,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
-from .. import agent_budgets, agent_repl_context, agent_runner, config
+from .. import (
+    budgets as agent_budgets,
+    repl_context as agent_repl_context,
+    runner as agent_runner,
+)
+from lib import config
 
 
 @dataclass

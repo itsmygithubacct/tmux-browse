@@ -15,7 +15,8 @@ import calendar
 import time
 from typing import Any
 
-from . import agent_costs, agent_store, dashboard_config
+from . import costs as agent_costs, store as agent_store
+from lib import dashboard_config
 
 
 ACTION_OK = "ok"

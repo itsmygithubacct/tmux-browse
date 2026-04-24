@@ -20,7 +20,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .. import agent_repl_context, agent_runner, agent_runtime, config
+from .. import (
+    repl_context as agent_repl_context,
+    runner as agent_runner,
+    runtime as agent_runtime,
+)
+from lib import config
 
 
 PLAN_PROMPT_SUFFIX = """

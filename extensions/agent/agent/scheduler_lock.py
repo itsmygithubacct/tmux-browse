@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import config
+from lib import config
 
 
 LOCK_FILE = config.STATE_DIR / "agent-scheduler.lock"

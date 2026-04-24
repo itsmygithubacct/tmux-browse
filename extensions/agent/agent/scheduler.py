@@ -17,15 +17,15 @@ import traceback
 from pathlib import Path
 
 from . import (
-    agent_budgets,
-    agent_hooks,
-    agent_runner,
-    agent_scheduler_lock,
-    agent_store,
-    agent_workflow_runs,
-    agent_workflows,
+    budgets as agent_budgets,
+    hooks as agent_hooks,
+    runner as agent_runner,
+    scheduler_lock as agent_scheduler_lock,
+    store as agent_store,
+    workflow_runs as agent_workflow_runs,
+    workflows as agent_workflows,
 )
-from .agent_runs import new_run_id
+from .runs import new_run_id
 
 
 TICK_INTERVAL = 10  # seconds between scheduler wake-ups

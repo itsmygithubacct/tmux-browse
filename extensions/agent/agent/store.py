@@ -10,8 +10,8 @@ import json
 import os
 from typing import Any
 
-from . import config
-from .errors import StateError, UsageError
+from lib import config
+from lib.errors import StateError, UsageError
 
 
 AGENTS_FILE = config.STATE_DIR / "agents.json"

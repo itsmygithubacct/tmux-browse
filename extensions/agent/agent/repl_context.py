@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from . import config
+from lib import config
 
 VALID_MODES = {"observe", "act", "watch"}
 MAX_OBSERVED_PANES = 8
