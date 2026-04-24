@@ -52,7 +52,7 @@ DEFAULTS: dict[str, Any] = {
     "show_body_actions": False,
     "show_footer": True,
     "show_inline_messages": True,
-    "show_attached_badge": True,
+    "show_attached_badge": False,
     "show_window_badge": False,
     "show_port_badge": False,
     "show_idle_text": True,
