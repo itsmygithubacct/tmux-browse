@@ -442,6 +442,29 @@ details.session.drop-bottom > .drop-overlay {
     content: "▸"; margin-right: 0.4rem;
 }
 .config-pane[open] > summary::before { content: "▾"; }
+
+/* Nested subsections under the Config pane (Pane Admin, Connected
+   Endpoints). Lighter visual weight than top-level panes since they
+   already live inside a parent details; dotted top border separates
+   them from the settings grid above. */
+.config-subsection {
+    margin-top: 0.8rem;
+    padding-top: 0.5rem;
+    border-top: 1px dotted var(--border);
+}
+.config-subsection > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 0.25rem 0.2rem;
+    list-style: none;
+}
+.config-subsection > summary::-webkit-details-marker { display: none; }
+.config-subsection > summary::before {
+    content: "▸"; margin-right: 0.4rem;
+}
+.config-subsection[open] > summary::before { content: "▾"; }
+
 .config-body {
     padding-top: 0.7rem;
 }
