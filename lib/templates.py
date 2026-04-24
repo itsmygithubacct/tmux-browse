@@ -530,10 +530,19 @@ def render_index() -> str:
                 <input type="checkbox" id="idle-enabled" />
                 <span>Enable idle detection for this session</span>
             </label>
-            <label class="field">
-                <span>Trigger after idle seconds</span>
-                <input type="number" id="idle-threshold" min="5" step="5" value="300" />
-            </label>
+            <div class="field">
+                <span>Trigger after idle</span>
+                <div class="idle-threshold-row">
+                    <label class="idle-threshold-cell">
+                        <input type="number" id="idle-threshold-hours" min="0" step="1" value="0" />
+                        <span class="dim">hours</span>
+                    </label>
+                    <label class="idle-threshold-cell">
+                        <input type="number" id="idle-threshold-minutes" min="0" max="59" step="1" value="5" />
+                        <span class="dim">minutes</span>
+                    </label>
+                </div>
+            </div>
             <div class="field">
                 <span>Notification type</span>
                 <label class="check-row">

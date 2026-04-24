@@ -842,6 +842,20 @@ details.session.drop-bottom > .drop-overlay {
     gap: 0.9rem;
     padding: 1rem 1.1rem 1.1rem;
 }
+.idle-threshold-row {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.3rem;
+    flex-wrap: wrap;
+}
+.idle-threshold-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.idle-threshold-cell input[type="number"] {
+    width: 4.5rem;
+}
 .split-picker-body {
     padding: 1rem 1.1rem 1.1rem;
     display: grid;

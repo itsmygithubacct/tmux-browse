@@ -320,7 +320,9 @@ function renderIdleEditor() {
     const cfg = idleAlertFor(session);
     document.getElementById("idle-modal-title").textContent = `Idle Alert · ${session}`;
     document.getElementById("idle-enabled").checked = cfg.enabled;
-    document.getElementById("idle-threshold").value = cfg.thresholdSec;
+    const totalSec = Math.max(60, cfg.thresholdSec);
+    document.getElementById("idle-threshold-hours").value = Math.floor(totalSec / 3600);
+    document.getElementById("idle-threshold-minutes").value = Math.floor((totalSec % 3600) / 60);
     document.getElementById("idle-sound").checked = cfg.sound;
     document.getElementById("idle-prompt").checked = cfg.prompt;
 }
@@ -328,7 +330,9 @@ function renderIdleEditor() {
 function saveIdleEditor() {
     const session = state.idleEditor.session;
     const enabled = document.getElementById("idle-enabled").checked;
-    const threshold = Math.max(5, Math.floor(Number(document.getElementById("idle-threshold").value) || 300));
+    const hours = Math.max(0, Math.floor(Number(document.getElementById("idle-threshold-hours").value) || 0));
+    const minutes = Math.max(0, Math.floor(Number(document.getElementById("idle-threshold-minutes").value) || 0));
+    const threshold = Math.max(60, hours * 3600 + minutes * 60);
     const sound = document.getElementById("idle-sound").checked;
     const prompt = document.getElementById("idle-prompt").checked;
     if (enabled && !sound && !prompt) {
