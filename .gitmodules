@@ -1,0 +1,4 @@
+[submodule "extensions/agent"]
+	path = extensions/agent
+	url = https://github.com/itsmygithubacct/tmux-browse-agent.git
+	branch = main

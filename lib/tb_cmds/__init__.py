@@ -40,7 +40,6 @@ def _register_extension_verbs(subparsers, common) -> None:
     import sys
     from .. import extensions
 
-    extensions.bootstrap_default_enabled()
     enabled_state = extensions._read_enabled()
     for ext_path in extensions.discover():
         if not enabled_state.get(ext_path.name, {}).get("enabled"):

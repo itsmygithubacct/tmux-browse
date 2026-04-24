@@ -1,14 +1,19 @@
 """End-to-end sanity for the agent extension's load lifecycle.
 
-Proves that the E0 loader actually wires the agent extension's routes,
-UI blocks, static JS, CLI verb, and startup/shutdown hooks to core when
-enabled — and that disabling it removes the entire agent surface
-without breaking the rest of the dashboard.
+Proves that the E0 loader wires the agent extension's routes,
+UI blocks, static JS, CLI verb, and startup/shutdown hooks to core
+when explicitly enabled — and that disabling it removes the entire
+agent surface without breaking the rest of the dashboard.
+
+Post-E2, the agent extension is a submodule at ``extensions/agent/``
+and is **opt-in**: core never auto-enables it. A fresh
+``~/.tmux-browse/`` that has no ``extensions.json`` contributes
+nothing from the extension; the operator must click Enable in the
+Config pane (or hand-edit the file) for the agent surface to appear.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest
@@ -21,6 +26,11 @@ from lib import config as cfg  # noqa: E402
 from lib import extensions  # noqa: E402
 
 
+@unittest.skipUnless(
+    (Path(__file__).resolve().parent.parent
+     / "extensions" / "agent" / "manifest.json").exists(),
+    "agent submodule not checked out (git submodule update --init)",
+)
 class AgentExtensionLifecycleTests(unittest.TestCase):
 
     def setUp(self):
@@ -39,15 +49,26 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
             p.stop()
         self._state.cleanup()
 
-    def test_bootstrap_enables_bundled_agent_extension(self):
-        extensions.bootstrap_default_enabled()
-        self.assertTrue(self._enabled_file.exists())
-        data = json.loads(self._enabled_file.read_text())
-        self.assertIn("agent", data)
-        self.assertTrue(data["agent"]["enabled"])
+    def test_fresh_install_has_no_extension_surface(self):
+        # Opt-in: with no extensions.json, load_enabled returns empty.
+        reg = extensions.load_enabled(core_version_override="0.7.0.4")
+        self.assertEqual(reg.get_routes, {})
+        self.assertEqual(reg.post_routes, {})
+        self.assertEqual(reg.ui_blocks, {})
+        self.assertEqual(reg.static_js, [])
+        self.assertEqual(reg.cli_verbs, {})
+        self.assertFalse(self._enabled_file.exists())
 
-    def test_load_enabled_returns_agent_surface(self):
-        extensions.bootstrap_default_enabled()
+    def test_agent_shows_as_installed_but_not_enabled(self):
+        # Status reflects "submodule present on disk, not turned on".
+        rows = extensions.status()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "agent")
+        self.assertTrue(rows[0]["installed"])
+        self.assertFalse(rows[0]["enabled"])
+
+    def test_enable_then_load_registers_full_agent_surface(self):
+        extensions.enable("agent")
         reg = extensions.load_enabled(core_version_override="0.7.0.4")
         # Routes from server/routes.py
         self.assertIn("/api/agents", reg.get_routes)
@@ -68,7 +89,7 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
         self.assertEqual(len(reg.shutdown), 1)
 
     def test_disable_removes_agent_surface(self):
-        extensions.bootstrap_default_enabled()
+        extensions.enable("agent")
         extensions.disable("agent")
         reg = extensions.load_enabled(core_version_override="0.7.0.4")
         self.assertEqual(reg.get_routes, {})
@@ -77,16 +98,15 @@ class AgentExtensionLifecycleTests(unittest.TestCase):
         self.assertEqual(reg.static_js, [])
         self.assertEqual(reg.cli_verbs, {})
 
-    def test_bootstrap_preserves_operator_decisions(self):
-        # When the operator has already set state, bootstrap leaves it
-        # alone. This matters most for disabled-by-operator extensions
-        # that must not get silently re-enabled on every boot.
-        self._enabled_file.write_text(json.dumps({
-            "agent": {"enabled": False, "disabled_ts": 1, "source": "user"},
-        }))
-        extensions.bootstrap_default_enabled()
-        state = json.loads(self._enabled_file.read_text())
-        self.assertFalse(state["agent"]["enabled"])
+    def test_disable_leaves_submodule_files_on_disk(self):
+        # Uninstall is a separate verb (E4) — disable just flips the bit.
+        # Confirms the submodule tree is still readable after disable so
+        # re-enabling doesn't require a fresh clone.
+        extensions.enable("agent")
+        extensions.disable("agent")
+        ext_dir = cfg.PROJECT_DIR / "extensions" / "agent"
+        self.assertTrue((ext_dir / "manifest.json").is_file())
+        self.assertTrue((ext_dir / "agent" / "__init__.py").is_file())
 
 
 if __name__ == "__main__":

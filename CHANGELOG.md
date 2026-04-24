@@ -1,5 +1,74 @@
 # Changelog
 
+## Unreleased — agent platform split out to its own repo (E2)
+
+The agent platform — every `/api/agent-*` endpoint, the `tb agent`
+CLI verb, the workflow scheduler, the conductor, the Agent Settings
+config card, the Agents / Runs / Tasks sections, and the transcript +
+workflow modals — now lives in a separate repository,
+[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent),
+and attaches to core as a git submodule at `extensions/agent/`.
+
+**Upgrade note (if you used the agent platform pre-split):** after
+pulling this version the Agents pane and `tb agent` CLI are no longer
+auto-enabled. You have two choices:
+
+1. **Opt in** — go to Config → Extensions → Agents module → Enable
+   in the running dashboard. (Or hand-edit `~/.tmux-browse/extensions.json`
+   to `{"agent": {"enabled": true}}`.) Requires `git submodule update
+   --init` or `git clone --recursive` to have the submodule on disk
+   first; the install UI in the upcoming release drives that too.
+2. **Ignore** — the core dashboard keeps working without agents. Your
+   saved `~/.tmux-browse/agents.json`, secrets, logs, and history are
+   untouched; only the load-at-start bit flipped.
+
+### What moved
+
+- `lib/agent_*.py` (20 modules), `lib/agent_modes/`, and
+  `lib/tb_cmds/agent.py` → the new repo under `agent/*`, `agent/modes/`,
+  and `tb_cmds/agent.py`.
+- All 24 `/api/agent-*` HTTP handlers cut from `lib/server.Handler`
+  into `server/routes.py` as free functions taking `handler` as their
+  first arg.
+- Agent HTML slots (Agent Settings card, Agents / Runs / Tasks sections,
+  transcript + workflow modals) moved from `lib/templates.py` into
+  `ui_blocks.html`; the loader fills core's `<!--slot:name-->` markers.
+- `static/{agents,runs,tasks}.js` → the new repo's `static/`.
+- Every `test_agent_*.py` → the new repo's `tests/`; core's runner pulls
+  them back in via `tests/test_extension_agent_tests.py` when the
+  submodule is checked out.
+
+Net: ~5000 lines leave core. `grep -r '^from lib import agent_' lib/`
+returns nothing.
+
+### What stayed
+
+- `lib/docker_sandbox.py`, `lib/session_logs.py`, `lib/tasks.py`,
+  `lib/worktrees.py`, `lib/sessions.py` — the primitives the extension
+  uses via `agent.core_api`. That's the one file in the extension that
+  tracks core's API surface; anything else importing from `lib.*` is a
+  bug.
+- First-boot `~/.tmux-browse/` is clean — no `extensions.json` is
+  auto-written. Extensions are opt-in from now on.
+
+### New in core
+
+- `lib/extensions/submodule.py` — thin wrappers around
+  `git submodule update --init` and `--remote` for the Config-pane
+  install / update buttons.
+- `tests/test_extension_agent_lifecycle.py` proves enable → load →
+  disable round-trips against the real submodule checkout.
+- `tests/test_extensions_submodule.py` covers the `.gitmodules`
+  parser and the `subprocess.run` shape, with `git` mocked.
+
+### Compatibility
+
+- `tmux-browse-agent` v0.7.0.4-agent targets `tmux-browse >= 0.7.0.4`
+  per its `manifest.json` `min_tmux_browse`. When either side bumps a
+  version, the other's version pin moves deliberately after tests pass.
+- The submodule is pinned at a specific commit in `.gitmodules`;
+  advancing the pin is deliberate.
+
 ## Unreleased — extension loader substrate (E0)
 
 Groundwork for an upcoming split of the agent platform into its own
