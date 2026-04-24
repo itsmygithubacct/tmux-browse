@@ -1,12 +1,12 @@
 # Changelog
 
-## Unreleased — agent-platform evolution (T1-T4)
+## 0.7.0.3 — agent-platform evolution, T1-T4 (2026-04-24)
 
-Follows
-`~/research/tmux-browse/plans/plan_0.8.0_program.md` + the per-phase
-plans under `~/research/tmux-browse/plans/plan_mode_*.md` and
-`plan_tool_sandbox.md`. Version stays at 0.7.0.2 until the full
-program reaches a tagged release.
+First tagged release of the agent-platform program tracked in
+`~/research/tmux-browse/plans/plan_0.8.0_program.md`. Ships T1-T4
+(design docs, modes, observability, tool registry). Drive mode and
+a handful of UI polish items are deferred per explicit kill-switches
+in the per-phase plans.
 
 ### T1 — mode design docs (in research only)
 
@@ -69,25 +69,22 @@ agent has more than the default, the system prompt gains an
   — host tests and mocked sandbox tests cover the logic; live
   Docker verification is a manual step.
 
-## 0.7.0.2 (2026-04-24)
+## 0.7.0.2 — research proposals shipped (2026-04-24)
 
-Between-release patch level covering the badge defaults flip, the
-ttyd_wrap per-viewer sizing fix, the scroll icon, session dedup,
-the config-lock/pane-groups/Move-to/conductor/REPL work, and this
-agent-platform program.
+Between-release patch level covering the five research proposals
+tracked in `~/research/tmux-browse/plans/plan_*.md`, plus assorted
+UI polish (badge defaults flip, ttyd_wrap per-viewer sizing fix,
+scroll icon, session dedup).
 
-## Unreleased — 0.8.0
+Not formally tagged — `0.7.0.3` is the first tagged release after
+v0.7.0.
 
-Ships the five research proposals tracked in
-`~/research/tmux-browse/plans/plan_*.md`. Phase A (config-lock
-enforcement, pane groups, Move-to, broader QR share) landed earlier
-in this line; this section adds Phase B (conductor) and Phase C
-(structured REPL primitives).
-
-### Conductor rule engine (Phase B)
+### Conductor rule engine
 
 A thin rule engine sits above the existing event hooks with three
 capabilities hooks can't express on their own:
+
+### Conductor rule engine (Phase B)
 
 - **State across events** — rolling-window counters
   (`within_last` + `count_at_least`), keyed by (rule_id, agent), so
@@ -109,7 +106,7 @@ A runaway-loop guard drops same-(rule, agent) re-entry within 5 s,
 so rules whose actions might re-cause the triggering event can't
 fork-bomb.
 
-### Structured REPL primitives (Phase C)
+### Structured REPL primitives
 
 MVP of the tmuxai-style REPL shape. Per-agent context (exec target,
 observed panes, mode, tick) persists at
@@ -127,8 +124,6 @@ Explicitly deferred to a follow-up: watch-mode auto-turn loop
 compaction. Current slash-commands thread the mode value through
 the context but don't enforce observe/act/watch at the loop layer
 yet.
-
-## Unreleased — 0.8.0 Phase A
 
 ### Server-side config-lock enforcement
 
