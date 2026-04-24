@@ -35,6 +35,7 @@ from . import (
     config,
     dashboard_config,
     docker_sandbox,
+    session_logs,
     ports,
     sessions,
     static,
@@ -88,6 +89,10 @@ def _session_summary() -> list[dict]:
     own clock — useful across VMs or laptops waking from sleep.
     """
     now = int(time.time())
+    # Ensure pipe-pane logging is active for every session — cheap and
+    # throttled internally, so calling on every request is fine. This
+    # catches panes/windows that were added after the session was created.
+    session_logs.ensure_logging_all()
     assignments = ports.all_assignments()
     try:
         configured_agents = {row["name"] for row in agent_store.list_agents()}
@@ -99,13 +104,17 @@ def _session_summary() -> list[dict]:
         port = assignments.get(name)
         pid = ttyd.read_pid(name)
         agent_name = agent_runtime.agent_name_from_session(name)
+        # Prefer hash-based idle from the session log; fall back to
+        # tmux's session_activity if no log exists yet.
+        hash_idle = session_logs.idle_seconds(name, now=now)
+        idle = hash_idle if hash_idle is not None else max(0, now - s["activity"])
         out.append({
             "name": name,
             "windows": s["windows"],
             "attached": s["attached"],
             "created": s["created"],
             "activity": s["activity"],
-            "idle_seconds": max(0, now - s["activity"]),
+            "idle_seconds": idle,
             "created_seconds_ago": max(0, now - s["created"]),
             "port": port,
             "pid": pid,
