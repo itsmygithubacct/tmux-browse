@@ -547,6 +547,7 @@ class Handler(BaseHTTPRequestHandler):
                 until=_int("until"),
                 text=_first("q"),
                 tool=_first("tool"),
+                origin=_first("origin"),
                 limit=max(1, min(500, _int("limit", 50) or 50)),
             )
             self._send_json({"ok": True, "runs": rows})

@@ -87,6 +87,16 @@ function agentLastActivity(ts) {
     return fmtAgeSeconds(Math.max(0, Math.floor(Date.now() / 1000) - ts)) + " ago";
 }
 
+// Count how many conductor rules match a given agent (specific or wildcard).
+function conductorRulesForAgent(agentName) {
+    const rules = state.conductorRules || [];
+    return rules.filter((r) => {
+        const when = r.when || {};
+        const target = when.agent || "*";
+        return target === "*" || target === agentName;
+    }).length;
+}
+
 function renderAgentsPane() {
     const wrap = document.getElementById("agents-wrap");
     const count = document.getElementById("agents-count");
@@ -144,10 +154,41 @@ function renderAgentsPane() {
                     : row.budget_status === "stop"
                     ? el("span", { class: "agent-status-badge s-error" }, "Budget Exceeded")
                     : el("span"),
+                conductorRulesForAgent(row.name) > 0
+                    ? el("span", {
+                        class: "agent-status-badge s-idle",
+                        style: "cursor:pointer",
+                        onclick: () => openConductorActivity(row.name),
+                        title: "recent conductor decisions for this agent",
+                      }, `Conductor: ${conductorRulesForAgent(row.name)}`)
+                    : el("span"),
                 el("span", {}, statusLine.join(" · ")),
             ),
         ));
     }
+}
+
+// Simple lazy-loaded activity view: fetch the decision log filtered to
+// this agent and alert() the result. A proper modal is a follow-up.
+async function openConductorActivity(agentName) {
+    const r = await api("GET",
+        `/api/agent-conductor-events?agent=${encodeURIComponent(agentName)}&limit=25`);
+    if (!r.ok) {
+        alert("failed to load conductor activity: " + (r.error || "unknown"));
+        return;
+    }
+    const decisions = r.decisions || [];
+    if (!decisions.length) {
+        alert(`No conductor decisions for ${agentName}.`);
+        return;
+    }
+    const lines = decisions.slice(0, 25).map((d) => {
+        const ts = new Date((d.ts || 0) * 1000).toLocaleString();
+        const actions = (d.actions || []).map((a) => a.action).join(",");
+        const reason = d.reason ? ` [${d.reason}]` : "";
+        return `${ts}  ${d.rule_id}  on ${d.event}  → ${actions}${reason}`;
+    });
+    alert(`Conductor activity · ${agentName}\n\n` + lines.join("\n"));
 }
 
 
@@ -576,6 +617,50 @@ async function resetHooks() {
     if (r.ok) renderHooksEditor(r.hooks || {});
     const status = document.getElementById("hooks-status");
     if (status) status.textContent = r.ok ? "reset to defaults" : "error";
+}
+
+// --- Conductor editor ---
+//
+// JSON textarea for now; a proper form UI can come later. The textarea
+// maps directly to the POST /api/agent-conductor payload — this keeps
+// the server as the schema authority and lets rule shapes evolve
+// without a UI change.
+
+async function loadConductor() {
+    const r = await api("GET", "/api/agent-conductor");
+    const ta = document.getElementById("conductor-editor");
+    const status = document.getElementById("conductor-status");
+    if (!ta) return;
+    if (r.ok) {
+        state.conductorRules = r.rules || [];
+        ta.value = JSON.stringify({ rules: state.conductorRules }, null, 2);
+        if (status) status.textContent = `${state.conductorRules.length} rule(s)`;
+    } else {
+        if (status) status.textContent = "load failed";
+    }
+}
+
+async function saveConductor() {
+    const ta = document.getElementById("conductor-editor");
+    const status = document.getElementById("conductor-status");
+    if (!ta) return;
+    let parsed;
+    try {
+        parsed = JSON.parse(ta.value);
+    } catch (e) {
+        if (status) status.textContent = "invalid JSON: " + e.message;
+        return;
+    }
+    const r = await api("POST", "/api/agent-conductor", parsed);
+    if (r.ok) {
+        state.conductorRules = r.rules || [];
+        ta.value = JSON.stringify({ rules: state.conductorRules }, null, 2);
+        if (status) status.textContent = `saved ${state.conductorRules.length} rule(s)`;
+        // Refresh per-agent badges so the new rule count shows up.
+        renderAgentsPane();
+    } else {
+        if (status) status.textContent = "error: " + (r.error || "unknown");
+    }
 }
 
 async function loadNotifications() {

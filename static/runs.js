@@ -16,10 +16,13 @@ async function searchRuns() {
     const q = (document.getElementById("runs-search-q").value || "").trim();
     const agent = document.getElementById("runs-filter-agent").value;
     const status = document.getElementById("runs-filter-status").value;
+    const originSel = document.getElementById("runs-filter-origin");
+    const origin = originSel ? originSel.value : "";
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (agent) params.set("agent", agent);
     if (status) params.set("status", status);
+    if (origin) params.set("origin", origin);
     params.set("limit", "80");
     const r = await api("GET", "/api/agent-runs?" + params.toString());
     renderRunsPane(r.ok ? (r.runs || []) : []);
