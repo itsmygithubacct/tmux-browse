@@ -97,6 +97,7 @@ function collectViewConfig() {
         phoneKeys: loadPhoneKeys(),
         groups: state.groups,
         hooks: state.agentHooksForShare || null,  // populated by hooks editor on load
+        conductor: state.conductorRules || null,   // rule set, not decision log
     };
 }
 
@@ -140,6 +141,16 @@ function applyViewConfig(cfg) {
             if (r && r.ok && r.hooks) {
                 state.agentHooksForShare = r.hooks;
                 if (typeof renderHooksEditor === "function") renderHooksEditor();
+            }
+        });
+    }
+    if (cfg.conductor) {
+        // Same shape as the Conductor editor submits: {rules: [...]}.
+        // Server validates and config-lock gates it.
+        api("POST", "/api/agent-conductor", { rules: cfg.conductor }).then((r) => {
+            if (r && r.ok) {
+                state.conductorRules = r.rules || [];
+                if (typeof loadConductor === "function") loadConductor();
             }
         });
     }

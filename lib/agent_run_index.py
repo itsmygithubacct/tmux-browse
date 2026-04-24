@@ -88,6 +88,7 @@ def append(*, run_id: str, agent: str, status: str,
 def query(*, agent: str | None = None, status: str | None = None,
           since: int | None = None, until: int | None = None,
           text: str | None = None, tool: str | None = None,
+          origin: str | None = None,
           limit: int = 100) -> list[dict[str, Any]]:
     """Query the run index with optional filters.
 
@@ -116,6 +117,8 @@ def query(*, agent: str | None = None, status: str | None = None,
         if agent and row.get("agent") != agent:
             continue
         if status and row.get("status") != status:
+            continue
+        if origin and row.get("origin") != origin:
             continue
         ts = int(row.get("finished_ts") or row.get("started_ts") or 0)
         if since and ts < since:
