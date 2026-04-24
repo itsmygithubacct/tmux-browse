@@ -1,9 +1,13 @@
-"""Optional task abstraction for isolated agent work.
+"""Lightweight task abstraction used by the agent extension.
 
-A task links a title, a git repo, an optional worktree, an assigned
-agent, and a tmux session.  Tasks are persisted in
-``~/.tmux-browse/tasks.json`` and are entirely optional — agents work
-fine without them.
+A task links a title, a git repo path, an optional worktree path,
+an assigned agent name, and a tmux session.  Tasks are persisted
+in ``~/.tmux-browse/tasks.json``.
+
+Worktree lifecycle lives in the agent extension (``agent.worktrees``)
+— core tasks just record paths. A caller who wants a worktree
+provisions it, then calls :func:`update` to attach the path to the
+task.
 
 Task statuses: ``open``, ``done``, ``archived``.
 """
@@ -16,7 +20,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from . import config, worktrees
+from . import config
 from .errors import StateError, UsageError
 
 
@@ -50,8 +54,14 @@ def _new_id() -> str:
 
 
 def create(*, title: str, repo_path: str, agent: str | None = None,
-           branch: str | None = None, use_worktree: bool = True) -> dict[str, Any]:
-    """Create a new task. Optionally provisions a git worktree."""
+           worktree_path: str = "", branch: str = "") -> dict[str, Any]:
+    """Create a new task.
+
+    ``worktree_path`` and ``branch`` are free-form strings — core
+    doesn't provision or validate them. Callers that want a git
+    worktree create it themselves (e.g. via ``agent.worktrees`` in
+    the agent extension) and pass the resulting path here.
+    """
     title = (title or "").strip()
     if not title:
         raise UsageError("task title required")
@@ -60,22 +70,13 @@ def create(*, title: str, repo_path: str, agent: str | None = None,
         raise UsageError(f"repo path does not exist: {repo}")
 
     task_id = _new_id()
-    slug = f"{task_id}-{worktrees._slugify(title)}"
-
-    wt_path = ""
-    wt_branch = ""
-    if use_worktree:
-        wt = worktrees.create(repo, slug, branch=branch)
-        wt_path = wt["path"]
-        wt_branch = wt["branch"]
-
     task: dict[str, Any] = {
         "id": task_id,
         "title": title,
         "status": "open",
         "repo_path": str(repo),
-        "worktree_path": wt_path,
-        "branch": wt_branch,
+        "worktree_path": str(worktree_path or ""),
+        "branch": str(branch or ""),
         "agent": (agent or "").strip().lower() or None,
         "session": "",
         "created_ts": int(time.time()),
@@ -123,13 +124,11 @@ def update(task_id: str, **fields: Any) -> dict[str, Any]:
     raise UsageError(f"task {task_id} not found")
 
 
-def archive(task_id: str, *, cleanup_worktree: bool = False) -> dict[str, Any]:
-    """Mark a task as archived. Optionally remove its worktree."""
+def archive(task_id: str) -> dict[str, Any]:
+    """Mark a task as archived.
+
+    Worktree cleanup (if any) is the caller's responsibility —
+    whoever created the worktree owns its lifecycle.
+    """
     task = update(task_id, status="archived")
-    if cleanup_worktree and task.get("worktree_path") and task.get("repo_path"):
-        slug = Path(task["worktree_path"]).name
-        try:
-            worktrees.remove(task["repo_path"], slug, force=True)
-        except Exception:
-            pass
     return task

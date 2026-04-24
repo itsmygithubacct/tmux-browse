@@ -18,17 +18,12 @@ class _TmpMixin:
         d = Path(self._tmpdir.name)
         self._p_file = mock.patch.object(tasks, "TASKS_FILE", d / "tasks.json")
         self._p_file.start()
-        # Mock worktrees.create to avoid needing real git repos
-        self._p_wt = mock.patch("lib.tasks.worktrees.create", return_value={
-            "path": str(d / "wt"), "branch": "tb-task/test", "created": True,
-        })
-        self._p_wt.start()
-        # Create a fake repo dir
+        # Core tasks doesn't touch git anymore — worktree provisioning
+        # lives in the agent extension. Tests just need a repo-ish dir.
         self._repo = d / "repo"
         self._repo.mkdir()
 
     def tearDown(self):
-        self._p_wt.stop()
         self._p_file.stop()
         self._tmpdir.cleanup()
 
@@ -53,9 +48,20 @@ class CreateTests(_TmpMixin, unittest.TestCase):
         with self.assertRaises(UsageError):
             tasks.create(title="test", repo_path="/nonexistent/path")
 
-    def test_create_without_worktree(self):
-        t = tasks.create(title="simple", repo_path=str(self._repo), use_worktree=False)
+    def test_create_records_worktree_path_verbatim(self):
+        # Callers (e.g. the agent extension) provision the worktree
+        # themselves and pass the path to ``create``. Core stores it
+        # as opaque data.
+        t = tasks.create(
+            title="simple", repo_path=str(self._repo),
+            worktree_path="/tmp/somewhere", branch="tb-task/simple")
+        self.assertEqual(t["worktree_path"], "/tmp/somewhere")
+        self.assertEqual(t["branch"], "tb-task/simple")
+
+    def test_create_defaults_worktree_path_to_empty(self):
+        t = tasks.create(title="simple", repo_path=str(self._repo))
         self.assertEqual(t["worktree_path"], "")
+        self.assertEqual(t["branch"], "")
 
 
 class ListTests(_TmpMixin, unittest.TestCase):
