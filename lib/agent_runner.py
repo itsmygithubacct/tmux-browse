@@ -242,6 +242,7 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
               run_id: str | None = None,
               conversation_messages: list[dict[str, str]] | None = None,
               sandbox_spec: dict[str, Any] | None = None,
+              repl_context: dict[str, Any] | None = None,
               ) -> dict[str, Any]:
     if not prompt.strip():
         raise UsageError("missing agent prompt")
@@ -251,6 +252,23 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
     system_prompt = SYSTEM_PROMPT
     if sandbox_spec and sandbox_spec.get("mode") == "docker":
         system_prompt = system_prompt + DOCKER_SANDBOX_PROMPT
+
+    # REPL context + knowledge base prefixes. Both come straight from
+    # static files / a JSON blob; neither reaches the tool loop, only
+    # the model's system prompt.
+    if repl_context:
+        try:
+            from . import agent_repl_context
+            system_prompt = system_prompt + agent_repl_context.render_block(repl_context)
+        except Exception:
+            pass
+    agent_name = agent.get("name") or ""
+    if agent_name:
+        try:
+            from . import agent_kb
+            system_prompt = system_prompt + agent_kb.render_block(agent_name)
+        except Exception:
+            pass
 
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_prompt},

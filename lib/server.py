@@ -22,6 +22,8 @@ from . import (
     agent_conductor,
     agent_costs,
     agent_hooks,
+    agent_kb,
+    agent_repl_context,
     qr,
     agent_logs,
     agent_run_index,
@@ -902,6 +904,22 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             self._send_json({"ok": False, "error": str(e)}, status=400)
 
+    def _h_agent_repl_context(self, parsed: ParseResult) -> None:
+        q = parse_qs(parsed.query)
+        name = (q.get("name", [""])[0] or "").strip().lower()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
+            return
+        ctx = agent_repl_context.load(name)
+        kb = agent_kb.list_files(name)
+        self._send_json({
+            "ok": True,
+            "context": ctx,
+            "kb": kb,
+            "kb_total_bytes": sum(f["size"] for f in kb),
+            "kb_cap_bytes": agent_kb.TOTAL_BYTES_CAP,
+        })
+
     def _h_agent_conductor_events(self, parsed: ParseResult) -> None:
         query = parse_qs(parsed.query)
         try:
@@ -1201,6 +1219,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-notifications": _h_agent_notifications,
         "/api/agent-conductor":    _h_agent_conductor_get,
         "/api/agent-conductor-events": _h_agent_conductor_events,
+        "/api/agent-repl-context": _h_agent_repl_context,
         "/api/clients":            _h_clients,
         "/api/clients/inbox":      _h_clients_inbox,
         "/api/qr":                 _h_qr,

@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .. import agent_runner, agent_runtime, agent_store, dashboard_config, output
+from .. import agent_kb, agent_repl_context, agent_runner, agent_runtime, agent_store, dashboard_config, output
 from ..errors import UsageError
 
 
@@ -110,7 +110,8 @@ def _run_repl(name: str, *, steps: int, timeout: float, fork: bool = False) -> i
         print(f"Agent REPL for {agent['name']} ({agent['model']})")
         if prior:
             print(f"  Resumed conversation ({len(prior)} prior messages)")
-    print("Commands: /exit  /help  /history  /clear  /new  /fork")
+    print("Commands: /exit  /help  /history  /clear  /new  /fork  "
+          "/exec  /watch  /unwatch  /mode  /tick  /kb  /context")
     while True:
         try:
             prompt = input(f"{agent['name']}> ").strip()
@@ -126,11 +127,92 @@ def _run_repl(name: str, *, steps: int, timeout: float, fork: bool = False) -> i
             return 0
         if prompt == "/help":
             print("Type any prompt to run the tmux agent.")
-            print("  /history  — show conversation turns")
-            print("  /clear    — delete conversation and start fresh")
-            print("  /new      — start a new conversation (keeps old one)")
-            print("  /fork     — branch into a new conversation with copied history")
-            print("  /exit     — quit the REPL")
+            print("  /history   — show conversation turns")
+            print("  /clear     — delete conversation and start fresh")
+            print("  /new       — start a new conversation (keeps old one)")
+            print("  /fork      — branch into a new conversation with copied history")
+            print("  /exec T    — set default tmux target for this REPL (T like work: or sandbox:)")
+            print("  /watch T   — add an observed pane to the context block")
+            print("  /unwatch T — remove one")
+            print("  /mode M    — observe | act | watch")
+            print("  /tick N    — watch-mode poll interval in seconds (min 5)")
+            print("  /kb add P  — attach a file under ~/.tmux-browse/agent-kb/<agent>/")
+            print("  /kb rm F   — detach a KB file by filename")
+            print("  /kb ls     — list attached KB files")
+            print("  /context   — print the current REPL context and KB summary")
+            print("  /exit      — quit the REPL")
+            continue
+        # --- REPL context commands ---
+        if prompt.startswith("/exec"):
+            target = prompt[len("/exec"):].strip()
+            ctx = agent_repl_context.set_exec_target(name, target)
+            print(f"exec target: {ctx['exec_target'] or '(unset)'}")
+            continue
+        if prompt.startswith("/watch "):
+            target = prompt[len("/watch "):].strip()
+            try:
+                ctx = agent_repl_context.add_observed(name, target)
+                print(f"observed panes: {ctx['observed_panes']}")
+            except ValueError as e:
+                print(f"error: {e}")
+            continue
+        if prompt.startswith("/unwatch "):
+            target = prompt[len("/unwatch "):].strip()
+            ctx = agent_repl_context.remove_observed(name, target)
+            print(f"observed panes: {ctx['observed_panes']}")
+            continue
+        if prompt.startswith("/mode"):
+            mode = prompt[len("/mode"):].strip()
+            if not mode:
+                ctx = agent_repl_context.load(name)
+                print(f"mode: {ctx['mode']}")
+            else:
+                try:
+                    ctx = agent_repl_context.set_mode(name, mode)
+                    print(f"mode: {ctx['mode']}")
+                except ValueError as e:
+                    print(f"error: {e}")
+            continue
+        if prompt.startswith("/tick "):
+            try:
+                n = int(prompt[len("/tick "):].strip())
+                ctx = agent_repl_context.set_tick(name, n)
+                print(f"tick_sec: {ctx['tick_sec']}")
+            except ValueError:
+                print("error: /tick expects an integer number of seconds")
+            continue
+        if prompt == "/kb ls":
+            files = agent_kb.list_files(name)
+            if not files:
+                print("(no KB files attached)")
+            else:
+                for f in files:
+                    print(f"  {f['name']:40s} {f['size']} bytes")
+            continue
+        if prompt.startswith("/kb add "):
+            path = prompt[len("/kb add "):].strip()
+            try:
+                info = agent_kb.add_file(name, path)
+                print(f"added {info['name']} ({info['size']} bytes)")
+            except (FileNotFoundError, ValueError) as e:
+                print(f"error: {e}")
+            continue
+        if prompt.startswith("/kb rm "):
+            fname = prompt[len("/kb rm "):].strip()
+            if agent_kb.remove_file(name, fname):
+                print(f"removed {fname}")
+            else:
+                print(f"not found: {fname}")
+            continue
+        if prompt == "/context":
+            ctx = agent_repl_context.load(name)
+            print(f"  exec_target:    {ctx['exec_target'] or '(unset)'}")
+            print(f"  observed panes: {ctx['observed_panes']}")
+            print(f"  mode:           {ctx['mode']}")
+            print(f"  tick_sec:       {ctx['tick_sec']}")
+            files = agent_kb.list_files(name)
+            total = sum(f['size'] for f in files)
+            print(f"  KB files:       {len(files)} ({total} bytes)")
             continue
         if prompt == "/history":
             turns = agent_runtime.load_context(name)
@@ -162,6 +244,7 @@ def _run_repl(name: str, *, steps: int, timeout: float, fork: bool = False) -> i
             continue
 
         context = agent_runtime.load_context(name)
+        repl_ctx = agent_repl_context.load(name)
         agent_runtime.record_turn(name, role="user", content=prompt)
         try:
             result = agent_runner.run_agent(
@@ -172,6 +255,7 @@ def _run_repl(name: str, *, steps: int, timeout: float, fork: bool = False) -> i
                 request_timeout=max(5.0, timeout),
                 origin="repl",
                 conversation_messages=context,
+                repl_context=repl_ctx,
             )
         except Exception as e:
             print(f"error: {e}")
