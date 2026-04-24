@@ -47,7 +47,7 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_body_actions: false,
     show_footer: true,
     show_inline_messages: true,
-    show_attached_badge: true,
+    show_attached_badge: false,
     show_window_badge: false,
     show_port_badge: false,
     show_idle_text: true,
