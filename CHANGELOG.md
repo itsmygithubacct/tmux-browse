@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — Docker sandbox and content-hash idle (2026-04-24)
 
 ### Idle detection and session logging
 
@@ -35,6 +35,15 @@
   its own grouped tmux session (via `new-session -t`, with
   `window-size latest` and `destroy-unattached on`) so one narrow
   viewer can't pin every other viewer's windows to its size.
+- **Pane Admin and Connected Endpoints are now Config subsections.**
+  Both were top-level config-panes; they fit better nested under
+  Config since they configure the view rather than show session
+  content. Connected Endpoints sits at the bottom of the Config body.
+- **"Clear Local Cache" button.** A new red button in the Config
+  actions row removes every `tmux-browse:*` key from `localStorage`
+  plus `sessionStorage`, then reloads. Server-side state is
+  untouched. Useful when a secondary device's cached view diverges
+  from what you want and DevTools is awkward to reach.
 
 ### Docker sandbox for `tb agent`
 
