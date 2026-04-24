@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased — extension loader substrate (E0)
+
+Groundwork for an upcoming split of the agent platform into its own
+repository, loadable on demand. This release ships the substrate; no
+existing feature moves yet and user behaviour is unchanged.
+
+### Extension loader
+
+- New `lib/extensions/` package defines a small load-time contract
+  any optional module can plug into: a `manifest.json` declares
+  dotted-path entry points for HTTP routes, CLI verbs, UI blocks,
+  static JS, and startup hooks. Each entry point returns a typed
+  `Registration` that the core merges into its live tables.
+- `lib/templates.py` `render_index()` now accepts `ui_blocks` and
+  `extension_js`; named injection points live under
+  `<!--slot:name-->` markers. An empty `ui_blocks` dict renders
+  the exact HTML shipped today.
+- `lib/static.py` gains `build_js(extension_js)` that concatenates
+  core JS with each extension's `static/*.js`, with a
+  `window.__tbExtensions` footer between them so extension init
+  can register after the core bootstrap.
+- Route / CLI verb / UI slot collisions across extensions — or
+  between an extension and core — raise fail-closed at server
+  start rather than last-one-wins.
+
+### New endpoints
+
+- `GET /api/extensions` — status list (installed / enabled /
+  version / last error per extension).
+- `GET /api/extensions/available` — catalogue of known
+  extensions (empty in E0; populated in E3).
+- `POST /api/extensions/enable` / `disable` — flag flip with
+  config-lock gating. `restart_required: true` in the response
+  since the loader runs once per server process.
+- `POST /api/extensions/install` / `uninstall` — ship as 501
+  stubs; real implementations land in E3/E4.
+
+### Tests
+
+- 39 new cases across `tests/test_extensions.py` (loader,
+  manifest, registry, UI-block parsing, end-to-end) and
+  `tests/test_server_extensions.py` (route wiring, index slot
+  injection, the five endpoints).
+- Fixtures under `tests/fixtures/ext_hello/` and
+  `tests/fixtures/ext_bad_collide/` exercise the success and
+  conflict paths respectively.
+
+Full suite at 541 tests.
+
 ## 0.7.0.4 — README and default polish (2026-04-24)
 
 Small follow-up to 0.7.0.3. No behaviour changes at the agent-runtime

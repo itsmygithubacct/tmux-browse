@@ -1,11 +1,51 @@
 """Top-level dashboard HTML template."""
 
+from __future__ import annotations
+
 import json
+import re
+from pathlib import Path
 
 from . import static
 
 
-def render_index() -> str:
+# Named injection points that extensions can fill. Each slot is marked
+# in the template source with ``<!--slot:name-->`` and substituted for
+# the extension-supplied HTML at render time. Missing slots render
+# empty, so the lean (no-extensions) build produces the historical
+# dashboard HTML unchanged.
+#
+# The full set is declared here rather than being free-form so typos in
+# an extension's ui_blocks.html fail loudly at startup instead of
+# silently landing nothing on the page.
+_SLOTS: tuple[str, ...] = (
+    "topbar_extras",
+    "config_extras",
+    "config_agent",
+    "config_conductor",
+    "agents_section",
+    "runs_section",
+    "tasks_section",
+    "notifications_section",
+    "agent_modals",
+)
+
+_SLOT_RE = re.compile(r"<!--slot:([a-z_][a-z0-9_]*)-->")
+
+
+def _apply_slots(html: str, ui_blocks: dict[str, str] | None) -> str:
+    blocks = ui_blocks or {}
+    return _SLOT_RE.sub(lambda m: blocks.get(m.group(1), ""), html)
+
+
+def render_index(ui_blocks: dict[str, str] | None = None,
+                 extension_js: list[Path] | None = None) -> str:
+    js = static.build_js(extension_js) if extension_js else static.JS
+    html = _render(js)
+    return _apply_slots(html, ui_blocks)
+
+
+def _render(js: str) -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -37,6 +77,7 @@ def render_index() -> str:
     </span>
     <button class="btn red" id="restart-btn" title="restart the dashboard server process">Restart</button>
     <button class="btn red" id="os-restart-btn" title="restart the dashboard server process" style="margin-left:auto" hidden>&#x23FB;</button>
+    <!--slot:topbar_extras-->
 </div>
 <div id="sessions"></div>
 <div id="sessions-groups"></div>
@@ -315,6 +356,7 @@ def render_index() -> str:
                 </details>
             </div>
         </details>
+        <!--slot:config_extras-->
         <details id="pane-admin-wrap" class="config-subsection">
             <summary>Pane Admin</summary>
             <div class="config-body">
@@ -635,7 +677,7 @@ def render_index() -> str:
         </div>
     </div>
 </div>
-<script>{static.JS}</script>
+<script>{js}</script>
 </body>
 </html>
 """
