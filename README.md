@@ -91,6 +91,31 @@ everything stays visible in the dashboard the whole time.
 See [docs/recipes.md](docs/recipes.md) for the full LLM tool-use pattern
 (`snapshot` → `exec` + `wait` → `capture`).
 
+## Orchestrate across remote machines
+
+![Managing a remote coding session from one laptop, orchestrating builds on two remote machines](docs/images/remote_orchestration.png)
+
+Each dashboard pane is whatever its tmux session is running — so if some
+of those sessions are `ssh` shells into remote hosts, one local dashboard
+becomes a cockpit for real work happening on many machines. Drive a
+coding agent in one pane while it kicks off builds in two other panes
+that are themselves `ssh` sessions to remote boxes; watch all three in
+the same browser tab.
+
+```bash
+# Local sessions whose first command is an ssh hop
+tb new coder
+tb new builder_a
+tb new builder_b
+tb type coder       "ssh dev-laptop -- claude"
+tb type builder_a   "ssh builder-1.internal"
+tb type builder_b   "ssh builder-2.internal"
+```
+
+Everything the agent does via `tb` in those panes happens on the remote
+host at the far end of the ssh — tmux just transports the terminal,
+tmux-browse transports tmux.
+
 ## Same sessions, any device on your LAN
 
 The dashboard binds `0.0.0.0` by default, so every terminal you see in the
