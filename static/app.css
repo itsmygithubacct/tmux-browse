@@ -430,6 +430,28 @@ details.session.drop-bottom > .drop-overlay {
 }
 .hidden-list[open] > summary::before { content: "▾"; }
 
+#sessions-groups { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.8rem; }
+.group-wrap {
+    border-top: 1px dashed var(--border);
+    padding-top: 0.6rem;
+}
+.group-wrap > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 0.25rem 0.2rem;
+    list-style: none;
+}
+.group-wrap > summary::-webkit-details-marker { display: none; }
+.group-wrap > summary::before { content: "▸"; margin-right: 0.4rem; }
+.group-wrap[open] > summary::before { content: "▾"; }
+.group-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 0.7rem;
+    margin-top: 0.5rem;
+}
+
 .config-pane {
     margin-top: 1rem;
     border-top: 1px dashed var(--border);

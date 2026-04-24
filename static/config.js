@@ -213,6 +213,100 @@ function readConfigForm() {
 }
 
 
+// --- Pane Groups editor ---
+//
+// Visible and Hidden are implicit pseudo-groups handled by the main
+// renderer; the editor manages user-defined groups only. Each row shows
+// the group name and its member count with Rename/Remove controls.
+// Removing a group migrates its members back to Visible.
+
+function renderPaneGroupsEditor() {
+    const list = document.getElementById("pane-groups-list");
+    if (!list) return;
+    list.textContent = "";
+    const makeRow = (label, count, buttons) => {
+        const row = el("div", {
+            style: "display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;padding:0.2rem 0;border-bottom:1px dotted var(--border)",
+        },
+            el("span", { style: "flex:1" }, label),
+            el("span", { class: "dim", style: "font-size:0.75rem" }, `(${count})`),
+        );
+        for (const b of buttons) row.append(b);
+        return row;
+    };
+    list.append(makeRow("Visible", visibleSessionNames().length, []));
+    for (const groupName of state.groups.order) {
+        const def = state.groups.defs[groupName];
+        if (!def) continue;
+        const count = sessionsInGroup(groupName).length;
+        const rename = el("button", {
+            class: "btn", type: "button",
+            onclick: () => renamePaneGroup(groupName),
+        }, "Rename");
+        const remove = el("button", {
+            class: "btn red", type: "button",
+            onclick: () => removePaneGroup(groupName),
+        }, "Remove");
+        list.append(makeRow(def.label || groupName, count, [rename, remove]));
+    }
+    list.append(makeRow("Hidden", hiddenSessionNames().length, []));
+}
+
+function addPaneGroup() {
+    const input = document.getElementById("pane-group-new-name");
+    const name = (input && input.value || "").trim();
+    if (!name) return;
+    if (name === "Visible" || name === "Hidden") {
+        alert(`"${name}" is reserved.`);
+        return;
+    }
+    if (state.groups.defs[name]) {
+        alert("Group already exists.");
+        return;
+    }
+    state.groups.defs[name] = { label: name, open: true };
+    state.groups.order.push(name);
+    saveGroups();
+    if (input) input.value = "";
+    renderPaneGroupsEditor();
+    renderLayout();
+}
+
+function renamePaneGroup(oldName) {
+    const newName = prompt(`Rename "${oldName}" to:`, oldName);
+    if (!newName || newName === oldName) return;
+    if (newName === "Visible" || newName === "Hidden") {
+        alert(`"${newName}" is reserved.`);
+        return;
+    }
+    if (state.groups.defs[newName]) {
+        alert("A group with that name already exists.");
+        return;
+    }
+    const def = state.groups.defs[oldName];
+    delete state.groups.defs[oldName];
+    state.groups.defs[newName] = { ...def, label: newName };
+    state.groups.order = state.groups.order.map((g) => g === oldName ? newName : g);
+    for (const [session, group] of Object.entries(state.groups.membership)) {
+        if (group === oldName) state.groups.membership[session] = newName;
+    }
+    saveGroups();
+    renderPaneGroupsEditor();
+    renderLayout();
+}
+
+function removePaneGroup(name) {
+    if (!confirm(`Remove group "${name}"? Its panes return to Visible.`)) return;
+    delete state.groups.defs[name];
+    state.groups.order = state.groups.order.filter((g) => g !== name);
+    for (const [session, group] of Object.entries(state.groups.membership)) {
+        if (group === name) delete state.groups.membership[session];
+    }
+    saveGroups();
+    renderPaneGroupsEditor();
+    renderLayout();
+}
+
 function scheduleRefreshLoop() {
     if (state.refreshTimer) clearInterval(state.refreshTimer);
     state.refreshTimer = null;

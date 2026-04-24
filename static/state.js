@@ -6,6 +6,7 @@ const LAYOUT_KEY = "tmux-browse:layout";
 const HOT_KEY    = "tmux-browse:hot-buttons";
 const IDLE_KEY   = "tmux-browse:idle-alerts";
 const PHONE_KEYS_KEY = "tmux-browse:phone-keys";
+const GROUPS_KEY = "tmux-browse:groups";
 const AGENT_CONVERSATION_PREFIX = "agent-repl-";
 const IDLE_SOUND_CHOICES = ["beep", "chime", "knock", "bell", "blip", "ding"];
 const DASHBOARD_CONFIG_DEFAULTS = {
@@ -98,6 +99,46 @@ function normalizeHotButtons(value) {
     return raw.map(normalizeHotSlot);
 }
 
+// User-defined pane groups. "Visible" and "Hidden" are implicit pseudo-
+// groups handled by existing code paths (state.hidden, visibleNames()).
+// User groups live in `defs` + `membership`; panes without an explicit
+// membership render in Visible as before.
+function normalizeGroups(raw) {
+    const out = { order: [], defs: {}, membership: {} };
+    const src = (raw && typeof raw === "object") ? raw : {};
+    if (src.defs && typeof src.defs === "object") {
+        for (const [name, spec] of Object.entries(src.defs)) {
+            if (!name || typeof name !== "string") continue;
+            if (name === "Visible" || name === "Hidden") continue;  // reserved
+            const def = spec && typeof spec === "object" ? spec : {};
+            out.defs[name] = {
+                label: typeof def.label === "string" ? def.label : name,
+                open: def.open !== false,
+            };
+        }
+    }
+    if (Array.isArray(src.order)) {
+        for (const name of src.order) {
+            if (typeof name === "string" && out.defs[name] && !out.order.includes(name)) {
+                out.order.push(name);
+            }
+        }
+    }
+    // Any defs missing from order get appended in iteration order.
+    for (const name of Object.keys(out.defs)) {
+        if (!out.order.includes(name)) out.order.push(name);
+    }
+    if (src.membership && typeof src.membership === "object") {
+        for (const [session, group] of Object.entries(src.membership)) {
+            if (typeof session !== "string" || typeof group !== "string") continue;
+            if (out.defs[group]) out.membership[session] = group;
+            // A membership pointing at an unknown group is dropped on load;
+            // that sanitizes stale data without losing the pane (defaults to Visible).
+        }
+    }
+    return out;
+}
+
 function normalizeIdleAlert(value) {
     const raw = value && typeof value === "object" ? value : {};
     const thresholdSec = Number(raw.thresholdSec);
@@ -174,6 +215,7 @@ const state = {
     hot: normalizeHotButtons(loadJSON(HOT_KEY, [])),
     hotEditor: { open: false, slot: 0, session: "" },
     idleAlerts: loadJSON(IDLE_KEY, {}),
+    groups: normalizeGroups(loadJSON(GROUPS_KEY, {})),
     idleRuntime: {},
     idleEditor: { open: false, session: "" },
     splitPicker: { open: false, session: "", filter: "" },
@@ -196,4 +238,5 @@ function saveOrder(list) { saveJSON(ORDER_KEY, list); }
 function saveLayout(rows) { saveJSON(LAYOUT_KEY, rows); }
 function saveHot() { saveJSON(HOT_KEY, state.hot); }
 function saveIdleAlerts() { saveJSON(IDLE_KEY, state.idleAlerts); }
+function saveGroups() { saveJSON(GROUPS_KEY, state.groups); }
 
