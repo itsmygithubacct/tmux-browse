@@ -402,6 +402,36 @@ invocations, and every run is appended to that agent's log under
 
 This is the command the dashboard uses for conversation-mode ttyd sessions.
 
+**Conversation commands:**
+
+- `/history` — print the conversation so far
+- `/clear` — wipe and start fresh
+- `/new` — start a new conversation, keep the old one on disk
+- `/fork` — branch into a new conversation with copied history
+- `/exit` — quit
+
+**REPL context commands** (persisted per agent under
+`~/.tmux-browse/agent-contexts/<agent>.json`):
+
+- `/exec <target>` — default tmux target for this REPL's tool calls
+  (e.g. `work:` or `sandbox:`)
+- `/watch <target>` — add an observed pane; contents are summarised
+  into the system prompt so the agent has context (up to 8 panes)
+- `/unwatch <target>` — remove one
+- `/mode observe | act | watch` — stance (threaded through the
+  prompt; observe/act/watch enforcement at the loop layer is a
+  follow-up)
+- `/tick <seconds>` — watch-mode poll interval (min 5)
+- `/context` — print the current context and KB summary
+
+**Knowledge base commands** (files live under
+`~/.tmux-browse/agent-kb/<agent>/`, total capped at 128 KiB):
+
+- `/kb add <path>` — attach a file; content prepends to every
+  subsequent system prompt
+- `/kb rm <filename>` — detach
+- `/kb ls` — list attached files with sizes
+
 #### `tb agent <name> <prompt...>`
 
 Runs the named model in a small plan/act loop where its only tool surface is
