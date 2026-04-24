@@ -81,6 +81,11 @@ async function checkClientInbox() {
 
 // --- QR config transfer ---
 
+// Sharable dashboard state — anything in this payload round-trips
+// through QR or import-cfg link. Deliberately excluded:
+// - unlockToken: per-device security; never leaves the browser.
+// - agents.json / agent-secrets.json: server-side, hold API keys.
+// - REPL conversations / KB (Phase C): ephemeral, per-conversation.
 function collectViewConfig() {
     return {
         dashboard: state.config,
@@ -90,6 +95,8 @@ function collectViewConfig() {
         hot: state.hot,
         idleAlerts: state.idleAlerts,
         phoneKeys: loadPhoneKeys(),
+        groups: state.groups,
+        hooks: state.agentHooksForShare || null,  // populated by hooks editor on load
     };
 }
 
@@ -121,6 +128,20 @@ function applyViewConfig(cfg) {
     if (cfg.phoneKeys) {
         savePhoneKeys(cfg.phoneKeys);
         renderPhoneKeysPreview();
+    }
+    if (cfg.groups) {
+        state.groups = normalizeGroups(cfg.groups);
+        saveGroups();
+    }
+    if (cfg.hooks) {
+        // Persist via the gated server endpoint. If this host has a
+        // config lock, api() will prompt for the unlock token.
+        api("POST", "/api/agent-hooks", { hooks: cfg.hooks }).then((r) => {
+            if (r && r.ok && r.hooks) {
+                state.agentHooksForShare = r.hooks;
+                if (typeof renderHooksEditor === "function") renderHooksEditor();
+            }
+        });
     }
     renderLayout();
     refresh();
