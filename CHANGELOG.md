@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased — 0.8.0 Phase A
+
+### Server-side config-lock enforcement
+
+Until now the config-lock password gated only the Config pane UI; a
+bare `curl -X POST /api/agents` on a LAN bypassed it entirely. This
+closes that gap without adding a full auth system.
+
+- `/api/config-lock/verify` now returns a 32-byte `unlock_token` with
+  a 12-hour TTL, held in server memory. Clients send it as
+  `X-TB-Unlock-Token` on every non-GET request.
+- The gate (`_check_unlock`) fronts every mutation endpoint:
+  `/api/agents`, `/api/agents/remove`, `/api/agent-hooks`,
+  `/api/agent-workflows`, `/api/dashboard-config`, `/api/tasks`,
+  `/api/tasks/update`, and `/api/config-lock` itself. GETs, session
+  lifecycle, ttyd, and agent launch are deliberately not gated.
+- Clearing the lock drops every issued token.
+- Client (`api()` in `static/util.js`) automatically prompts and
+  retries once when a 403 "config locked" is returned.
+
+### User-defined pane groups
+
+Named buckets generalize the old Visible/Hidden binary:
+
+- Config > Behavior gains a Pane Groups editor (Add / Rename /
+  Remove). Visible and Hidden are reserved and non-removable.
+- A pane belongs to exactly one bucket at a time. Hide still sends
+  to Hidden; moves between groups go through the new Move button.
+- Groups render as their own furled `<details class="group-wrap">`
+  between the Visible stack and the Hidden drawer.
+
+### Move-to button and popover
+
+- New blue **Move** text button and folder-arrow icon button on each
+  pane's summary row, gated by `show_summary_move` /
+  `show_wc_move_icon` (both default on).
+- Popover lists Visible, every user group, Hidden, and an inline
+  "+ New group…" option.
+- Click-outside and Escape close it.
+
+### QR / link config share, broadened
+
+`collectViewConfig()` / `applyViewConfig()` now carry pane-group
+definitions + membership and a cached copy of the server-side event
+hooks. Importing hooks from a QR POSTs through `/api/agent-hooks`,
+so the config-lock gate holds naturally. Excluded by design: unlock
+tokens, agent API keys, and per-conversation REPL state.
+
 ## 0.7.0 — Docker sandbox and content-hash idle (2026-04-24)
 
 ### Idle detection and session logging
