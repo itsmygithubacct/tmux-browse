@@ -127,6 +127,82 @@ function sessionsInGroup(groupName) {
         .filter((n) => state.groups.membership[n] === groupName);
 }
 
+// Popover menu for the Move button. Lists all reachable buckets
+// (Visible + user groups + Hidden) and an inline "New group…" option.
+// Click-outside and Escape close it.
+let _moveMenuOpen = null;
+
+function openMoveMenu(sessionName, anchorEl) {
+    closeMoveMenu();
+    const current = state.groups.membership[sessionName]
+        || (state.hidden.has(sessionName) ? "Hidden" : "Visible");
+    const menu = el("div", { class: "move-menu" });
+    const heading = el("div", { class: "move-menu-head" },
+        `Move "${sessionName}" to:`);
+    menu.append(heading);
+    const rowFor = (group) => {
+        const isCurrent = group === current;
+        const row = el("div", {
+            class: "move-menu-row" + (isCurrent ? " current" : ""),
+            onclick: (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                moveSessionToGroup(sessionName, group);
+                closeMoveMenu();
+            },
+        }, group + (isCurrent ? "  (current)" : ""));
+        return row;
+    };
+    menu.append(rowFor("Visible"));
+    for (const g of state.groups.order) {
+        if (state.groups.defs[g]) menu.append(rowFor(g));
+    }
+    menu.append(rowFor("Hidden"));
+    menu.append(el("div", { class: "move-menu-sep" }));
+    menu.append(el("div", {
+        class: "move-menu-row new-group",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const name = prompt("New group name:");
+            closeMoveMenu();
+            if (!name) return;
+            const trimmed = name.trim();
+            if (!trimmed || trimmed === "Visible" || trimmed === "Hidden") return;
+            if (!state.groups.defs[trimmed]) {
+                state.groups.defs[trimmed] = { label: trimmed, open: true };
+                state.groups.order.push(trimmed);
+                saveGroups();
+            }
+            moveSessionToGroup(sessionName, trimmed);
+        },
+    }, "+ New group…"));
+    // Anchor below the clicked button.
+    const rect = anchorEl.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + window.scrollY + 4}px`;
+    menu.style.left = `${rect.left + window.scrollX}px`;
+    document.body.append(menu);
+    _moveMenuOpen = menu;
+    // Delay binding the outside-click listener so the click that opened
+    // the menu doesn't immediately close it.
+    setTimeout(() => {
+        document.addEventListener("click", closeMoveMenu, { once: true });
+        document.addEventListener("keydown", _escCloseMoveMenu);
+    }, 0);
+}
+
+function closeMoveMenu() {
+    if (_moveMenuOpen) {
+        _moveMenuOpen.remove();
+        _moveMenuOpen = null;
+    }
+    document.removeEventListener("keydown", _escCloseMoveMenu);
+}
+
+function _escCloseMoveMenu(e) {
+    if (e.key === "Escape") closeMoveMenu();
+}
+
 // Unified mover. Clears conflicting placements so a session is only in
 // one place at a time (Visible / Hidden / one user group).
 function moveSessionToGroup(sessionName, groupName) {
@@ -918,6 +994,27 @@ function createPane(s) {
         title: "enter tmux copy-mode (live scrollback — C-b [)",
     });
     scrollIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l3-3 3 3"/><path d="M5 12l3 3 3-3"/><line x1="8" y1="1" x2="8" y2="15"/></svg>';
+    const moveBtn = el("button", {
+        class: "btn blue summary-move",
+        type: "button",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openMoveMenu(s.name, e.currentTarget);
+        },
+        title: "move this session to another pane group",
+    }, "Move");
+    const moveIconBtn = el("button", {
+        class: "wc-btn wc-move-icon",
+        type: "button",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openMoveMenu(s.name, e.currentTarget);
+        },
+        title: "move this session to another pane group",
+    });
+    moveIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 5.5 v7 a1 1 0 0 0 1 1 h11 a1 1 0 0 0 1 -1 v-6 a1 1 0 0 0 -1 -1 h-6 l-1.5 -1.5 h-3.5 a1 1 0 0 0 -1 1 z"/><path d="M7 9 h4 m0 0 l-1.5 -1.5 m1.5 1.5 l-1.5 1.5"/></svg>';
     const hideBtn = el("button", {
         class: "btn red summary-hide",
         onclick: (e) => {
@@ -1001,7 +1098,7 @@ function createPane(s) {
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
-            summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
+            summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
     );
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
@@ -1187,7 +1284,7 @@ function createPane(s) {
 
     return {
         details, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
-        summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, hideBtn, hideIconBtn, reorderPad,
+        summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
