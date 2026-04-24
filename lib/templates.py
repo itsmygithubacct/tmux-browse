@@ -375,8 +375,12 @@ def render_index() -> str:
                     <select id="runs-filter-origin">
                         <option value="">All origins</option>
                         <option value="cli">CLI</option>
+                        <option value="repl">REPL</option>
                         <option value="scheduler">Scheduler</option>
                         <option value="conductor">Conductor</option>
+                        <option value="cycle-plan">Cycle (plan)</option>
+                        <option value="cycle-exec">Cycle (exec)</option>
+                        <option value="work">Work</option>
                         <option value="retry">Retry</option>
                     </select>
                     <button class="btn blue" id="runs-search-btn" type="button">Search</button>

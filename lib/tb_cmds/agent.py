@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 from .. import agent_kb, agent_repl_context, agent_runner, agent_runtime, agent_store, dashboard_config, output
+from ..agent_modes import cycle as cycle_mode
+from ..agent_modes import work as work_mode
 from ..errors import UsageError
 
 
@@ -85,6 +87,35 @@ def _parse_repl(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--timeout", type=float, default=90.0)
     p.add_argument("--fork", action="store_true",
                    help="fork the current conversation into a new branch")
+    return p.parse_args(argv)
+
+
+def _parse_cycle(argv: list[str]) -> argparse.Namespace:
+    p = _Parser(prog="tb agent cycle")
+    p.add_argument("name")
+    p.add_argument("--goal", default=None,
+                   help="path to a goal file")
+    p.add_argument("--goal-text", dest="goal_text", default=None,
+                   help="inline goal text (overrides --goal)")
+    p.add_argument("--steps", type=int, default=None,
+                   help="execute-phase step budget")
+    p.add_argument("--timeout", type=float, default=90.0)
+    return p.parse_args(argv)
+
+
+def _parse_work(argv: list[str]) -> argparse.Namespace:
+    p = _Parser(prog="tb agent work")
+    p.add_argument("name")
+    p.add_argument("--tasks", required=True,
+                   help="path to a task file (one task per line)")
+    p.add_argument("--steps-per-task", dest="steps_per_task", type=int,
+                   default=None, help="per-task step budget")
+    p.add_argument("--max-total-steps", dest="max_total_steps", type=int,
+                   default=200, help="cumulative step cap across the queue")
+    p.add_argument("--stop-on-error", dest="stop_on_error",
+                   action="store_true",
+                   help="halt the loop on the first failing task")
+    p.add_argument("--timeout", type=float, default=90.0)
     return p.parse_args(argv)
 
 
@@ -267,6 +298,67 @@ def _run_repl(name: str, *, steps: int, timeout: float, fork: bool = False) -> i
         print(result["message"])
 
 
+def _run_cycle(ns: argparse.Namespace, *, json_output: bool,
+               quiet: bool) -> int:
+    agent = agent_store.get_agent(ns.name)
+    try:
+        result = cycle_mode.run(
+            agent,
+            goal_path=ns.goal,
+            goal_text=ns.goal_text,
+            steps=_run_steps(ns.steps),
+            request_timeout=max(5.0, ns.timeout),
+        )
+    except Exception as e:
+        if json_output:
+            output.emit_json({"ok": False, "error": str(e)})
+        else:
+            print(f"cycle failed: {e}")
+        return 7
+    if json_output:
+        output.emit_json({
+            "ok": True,
+            "plan_run_id": result.plan_run_id,
+            "exec_run_id": result.exec_run_id,
+            "plan": result.plan_message,
+            "message": result.exec_message,
+        })
+    elif not quiet:
+        print("[plan]")
+        print(result.plan_message)
+        print()
+        print("[execute]")
+        print(result.exec_message)
+    return 0
+
+
+def _run_work(ns: argparse.Namespace, *, json_output: bool,
+              quiet: bool) -> int:
+    agent = agent_store.get_agent(ns.name)
+    try:
+        result = work_mode.run(
+            agent,
+            tasks_path=ns.tasks,
+            steps_per_task=_run_steps(ns.steps_per_task),
+            max_total_steps=max(1, ns.max_total_steps),
+            stop_on_error=ns.stop_on_error,
+            request_timeout=max(5.0, ns.timeout),
+        )
+    except Exception as e:
+        if json_output:
+            output.emit_json({"ok": False, "error": str(e)})
+        else:
+            print(f"work failed: {e}")
+        return 7
+    if json_output:
+        output.emit_json(result.as_dict())
+    elif not quiet:
+        print(f"work {result.status}: "
+              f"{result.completed} ok / {result.failed} failed "
+              f"({result.total_tasks} tasks seen)")
+    return 0 if result.status in ("done", "empty") else 7
+
+
 def _rows() -> list[dict]:
     rows = []
     for row in agent_store.list_agents():
@@ -351,6 +443,14 @@ def cmd_agent(args: argparse.Namespace) -> int:
         ns = _parse_repl(rest)
         return _run_repl(ns.name, steps=_run_steps(ns.steps), timeout=ns.timeout,
                          fork=getattr(ns, "fork", False))
+
+    if mode == "cycle":
+        ns = _parse_cycle(rest)
+        return _run_cycle(ns, json_output=args.json, quiet=args.quiet)
+
+    if mode == "work":
+        ns = _parse_work(rest)
+        return _run_work(ns, json_output=args.json, quiet=args.quiet)
 
     run = _parse_run(mode, rest)
     agent = agent_store.get_agent(mode)

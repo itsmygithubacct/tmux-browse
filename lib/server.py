@@ -205,6 +205,8 @@ def _clear_dashboard_state() -> None:
 
 
 from . import __version__
+from .agent_modes import cycle as _cycle_mode
+from .agent_modes import work as _work_mode
 
 
 # -----------------------------------------------------------------------------
@@ -904,6 +906,95 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             self._send_json({"ok": False, "error": str(e)}, status=400)
 
+    def _h_agent_cycle_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        name = (body.get("name") or "").strip().lower()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
+            return
+        try:
+            agent = agent_store.get_agent(name)
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        goal_text = (body.get("goal_text") or "").strip() or None
+        goal_path = (body.get("goal") or "").strip() or None
+        try:
+            steps = int(body.get("steps") or 20)
+        except (TypeError, ValueError):
+            steps = 20
+        # Run in a daemon thread so the HTTP request returns quickly.
+        # The run itself is visible via the run index as the user reloads.
+        result_holder: dict = {}
+        def _go():
+            try:
+                result = _cycle_mode.run(
+                    agent, goal_path=goal_path, goal_text=goal_text,
+                    steps=max(1, steps))
+                result_holder["result"] = result
+            except Exception as e:
+                result_holder["error"] = str(e)
+        thread = threading.Thread(target=_go, daemon=True)
+        thread.start()
+        # Wait briefly for the plan phase so the caller gets the plan
+        # summary; execute phase continues in the background.
+        thread.join(timeout=2.0)
+        if "result" in result_holder:
+            self._send_json({
+                "ok": True, "finished": True,
+                "plan_run_id": result_holder["result"].plan_run_id,
+                "exec_run_id": result_holder["result"].exec_run_id,
+                "plan": result_holder["result"].plan_message[:500],
+            })
+        elif "error" in result_holder:
+            self._send_json({"ok": False,
+                             "error": result_holder["error"]}, status=500)
+        else:
+            self._send_json({"ok": True, "finished": False,
+                             "note": "cycle running in background"})
+
+    def _h_agent_work_post(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        name = (body.get("name") or "").strip().lower()
+        tasks_path = (body.get("tasks") or "").strip()
+        if not name or not tasks_path:
+            self._send_json({"ok": False, "error": "missing 'name' or 'tasks'"},
+                            status=400)
+            return
+        try:
+            agent = agent_store.get_agent(name)
+        except TBError as e:
+            self._send_tb_error(e)
+            return
+        try:
+            max_total = int(body.get("max_total_steps") or 200)
+        except (TypeError, ValueError):
+            max_total = 200
+        stop_on_error = bool(body.get("stop_on_error"))
+
+        def _go():
+            try:
+                _work_mode.run(
+                    agent, tasks_path=tasks_path,
+                    max_total_steps=max(1, max_total),
+                    stop_on_error=stop_on_error)
+            except Exception:
+                pass
+        threading.Thread(target=_go, daemon=True).start()
+        self._send_json({"ok": True, "started": True})
+
+    def _h_agent_work_stop(self, _parsed: ParseResult, body: dict) -> None:
+        if not self._check_unlock():
+            return
+        name = (body.get("name") or "").strip().lower()
+        if not name:
+            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
+            return
+        _work_mode.request_stop(name)
+        self._send_json({"ok": True, "stop_requested": True})
+
     def _h_agent_repl_context(self, parsed: ParseResult) -> None:
         q = parse_qs(parsed.query)
         name = (q.get("name", [""])[0] or "").strip().lower()
@@ -1242,6 +1333,9 @@ class Handler(BaseHTTPRequestHandler):
         "/api/agent-workflows":    _h_agent_workflows_post,
         "/api/agent-hooks":        _h_agent_hooks_post,
         "/api/agent-conductor":    _h_agent_conductor_post,
+        "/api/agent-cycle":        _h_agent_cycle_post,
+        "/api/agent-work":         _h_agent_work_post,
+        "/api/agent-work/stop":    _h_agent_work_stop,
         "/api/agent-conversation":      _h_agent_conversation_open,
         "/api/agent-conversation-fork": _h_agent_conversation_fork,
         "/api/clients/nickname":   _h_clients_nickname,
