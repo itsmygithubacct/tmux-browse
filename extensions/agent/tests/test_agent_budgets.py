@@ -7,9 +7,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_budgets as ab  # noqa: E402
+from agent import budgets as ab  # noqa: E402
 
 
 class RunBudgetTests(unittest.TestCase):
@@ -54,27 +59,27 @@ class DailyBudgetTests(unittest.TestCase):
     def test_under_limit(self):
         agent = {"daily_token_budget": 10000}
         totals = {"gpt": {"total_tokens": 5000}}
-        with mock.patch("lib.agent_budgets.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_budgets.agent_costs.per_agent_totals", return_value=totals):
+        with mock.patch("agent.budgets.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.budgets.agent_costs.per_agent_totals", return_value=totals):
             r = ab.check_daily_budget("gpt")
         self.assertEqual(r["action"], ab.ACTION_OK)
 
     def test_exceeded(self):
         agent = {"daily_token_budget": 10000}
         totals = {"gpt": {"total_tokens": 12000}}
-        with mock.patch("lib.agent_budgets.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_budgets.agent_costs.per_agent_totals", return_value=totals):
+        with mock.patch("agent.budgets.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.budgets.agent_costs.per_agent_totals", return_value=totals):
             r = ab.check_daily_budget("gpt")
         self.assertEqual(r["action"], ab.ACTION_STOP)
 
     def test_zero_means_unlimited(self):
         agent = {"daily_token_budget": 0}
-        with mock.patch("lib.agent_budgets.agent_store.get_agent", return_value=agent):
+        with mock.patch("agent.budgets.agent_store.get_agent", return_value=agent):
             r = ab.check_daily_budget("gpt")
         self.assertEqual(r["action"], ab.ACTION_OK)
 
     def test_missing_agent_returns_ok(self):
-        with mock.patch("lib.agent_budgets.agent_store.get_agent", side_effect=Exception("not found")):
+        with mock.patch("agent.budgets.agent_store.get_agent", side_effect=Exception("not found")):
             r = ab.check_daily_budget("missing")
         self.assertEqual(r["action"], ab.ACTION_OK)
 
@@ -84,8 +89,8 @@ class GlobalDailyBudgetTests(unittest.TestCase):
     def test_under_limit(self):
         cfg = {"global_daily_token_budget": 50000}
         totals = {"gpt": {"total_tokens": 10000}, "opus": {"total_tokens": 5000}}
-        with mock.patch("lib.agent_budgets.dashboard_config.load", return_value=cfg), \
-             mock.patch("lib.agent_budgets.agent_costs.per_agent_totals", return_value=totals):
+        with mock.patch("agent.budgets.dashboard_config.load", return_value=cfg), \
+             mock.patch("agent.budgets.agent_costs.per_agent_totals", return_value=totals):
             r = ab.check_global_daily_budget()
         self.assertEqual(r["action"], ab.ACTION_OK)
         self.assertEqual(r["used"], 15000)
@@ -93,14 +98,14 @@ class GlobalDailyBudgetTests(unittest.TestCase):
     def test_exceeded(self):
         cfg = {"global_daily_token_budget": 10000}
         totals = {"gpt": {"total_tokens": 8000}, "opus": {"total_tokens": 5000}}
-        with mock.patch("lib.agent_budgets.dashboard_config.load", return_value=cfg), \
-             mock.patch("lib.agent_budgets.agent_costs.per_agent_totals", return_value=totals):
+        with mock.patch("agent.budgets.dashboard_config.load", return_value=cfg), \
+             mock.patch("agent.budgets.agent_costs.per_agent_totals", return_value=totals):
             r = ab.check_global_daily_budget()
         self.assertEqual(r["action"], ab.ACTION_STOP)
 
     def test_zero_means_unlimited(self):
         cfg = {"global_daily_token_budget": 0}
-        with mock.patch("lib.agent_budgets.dashboard_config.load", return_value=cfg):
+        with mock.patch("agent.budgets.dashboard_config.load", return_value=cfg):
             r = ab.check_global_daily_budget()
         self.assertEqual(r["action"], ab.ACTION_OK)
 
@@ -110,15 +115,15 @@ class BudgetStatusTests(unittest.TestCase):
     def test_returns_worst_action(self):
         daily_warn = {"action": ab.ACTION_WARN, "used": 8000, "limit": 10000, "pct": 80, "reason": ""}
         global_stop = {"action": ab.ACTION_STOP, "used": 50000, "limit": 40000, "pct": 125, "reason": ""}
-        with mock.patch("lib.agent_budgets.check_daily_budget", return_value=daily_warn), \
-             mock.patch("lib.agent_budgets.check_global_daily_budget", return_value=global_stop):
+        with mock.patch("agent.budgets.check_daily_budget", return_value=daily_warn), \
+             mock.patch("agent.budgets.check_global_daily_budget", return_value=global_stop):
             r = ab.get_budget_status("gpt")
         self.assertEqual(r["worst_action"], ab.ACTION_STOP)
 
     def test_ok_when_all_ok(self):
         ok = {"action": ab.ACTION_OK}
-        with mock.patch("lib.agent_budgets.check_daily_budget", return_value=ok), \
-             mock.patch("lib.agent_budgets.check_global_daily_budget", return_value=ok):
+        with mock.patch("agent.budgets.check_daily_budget", return_value=ok), \
+             mock.patch("agent.budgets.check_global_daily_budget", return_value=ok):
             r = ab.get_budget_status("gpt")
         self.assertEqual(r["worst_action"], ab.ACTION_OK)
 

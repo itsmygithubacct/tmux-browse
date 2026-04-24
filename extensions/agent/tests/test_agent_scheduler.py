@@ -5,10 +5,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_scheduler as sched  # noqa: E402
-from lib.agent_providers import ProviderResult  # noqa: E402
+from agent import scheduler as sched  # noqa: E402
+from agent.providers import ProviderResult  # noqa: E402
 
 
 class SchedulerTickTests(unittest.TestCase):
@@ -24,9 +29,9 @@ class SchedulerTickTests(unittest.TestCase):
             "enabled": False,
             "workflows": [{"name": "check", "prompt": "check all", "interval_seconds": 60}],
         }}}
-        with mock.patch("lib.agent_scheduler.agent_scheduler_lock.is_owned", return_value=True), \
-             mock.patch("lib.agent_scheduler.agent_workflows.load", return_value=wf), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.is_due") as is_due:
+        with mock.patch("agent.scheduler.agent_scheduler_lock.is_owned", return_value=True), \
+             mock.patch("agent.scheduler.agent_workflows.load", return_value=wf), \
+             mock.patch("agent.scheduler.agent_workflow_runs.is_due") as is_due:
             s._tick()
         is_due.assert_not_called()
 
@@ -36,9 +41,9 @@ class SchedulerTickTests(unittest.TestCase):
             "enabled": True,
             "workflows": [{"name": "empty", "prompt": "", "interval_seconds": 60}],
         }}}
-        with mock.patch("lib.agent_scheduler.agent_scheduler_lock.is_owned", return_value=True), \
-             mock.patch("lib.agent_scheduler.agent_workflows.load", return_value=wf), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.is_due") as is_due:
+        with mock.patch("agent.scheduler.agent_scheduler_lock.is_owned", return_value=True), \
+             mock.patch("agent.scheduler.agent_workflows.load", return_value=wf), \
+             mock.patch("agent.scheduler.agent_workflow_runs.is_due") as is_due:
             s._tick()
         is_due.assert_not_called()
 
@@ -48,9 +53,9 @@ class SchedulerTickTests(unittest.TestCase):
             "enabled": True,
             "workflows": [{"name": "check", "prompt": "check all", "interval_seconds": 60}],
         }}}
-        with mock.patch("lib.agent_scheduler.agent_scheduler_lock.is_owned", return_value=True), \
-             mock.patch("lib.agent_scheduler.agent_workflows.load", return_value=wf), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.is_due", return_value=True), \
+        with mock.patch("agent.scheduler.agent_scheduler_lock.is_owned", return_value=True), \
+             mock.patch("agent.scheduler.agent_workflows.load", return_value=wf), \
+             mock.patch("agent.scheduler.agent_workflow_runs.is_due", return_value=True), \
              mock.patch.object(s, "_run_workflow") as run_wf:
             s._tick()
         run_wf.assert_called_once_with("gpt", 0, "check all", 60)
@@ -61,17 +66,17 @@ class SchedulerTickTests(unittest.TestCase):
             "enabled": True,
             "workflows": [{"name": "check", "prompt": "check all", "interval_seconds": 60}],
         }}}
-        with mock.patch("lib.agent_scheduler.agent_scheduler_lock.is_owned", return_value=True), \
-             mock.patch("lib.agent_scheduler.agent_workflows.load", return_value=wf), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.is_due", return_value=False), \
+        with mock.patch("agent.scheduler.agent_scheduler_lock.is_owned", return_value=True), \
+             mock.patch("agent.scheduler.agent_workflows.load", return_value=wf), \
+             mock.patch("agent.scheduler.agent_workflow_runs.is_due", return_value=False), \
              mock.patch.object(s, "_run_workflow") as run_wf:
             s._tick()
         run_wf.assert_not_called()
 
     def test_tick_skips_when_not_lock_owner(self):
         s = self._make_scheduler()
-        with mock.patch("lib.agent_scheduler.agent_scheduler_lock.is_owned", return_value=False), \
-             mock.patch("lib.agent_scheduler.agent_workflows.load") as load:
+        with mock.patch("agent.scheduler.agent_scheduler_lock.is_owned", return_value=False), \
+             mock.patch("agent.scheduler.agent_workflows.load") as load:
             s._tick()
         load.assert_not_called()
 
@@ -81,9 +86,9 @@ class RunWorkflowTests(unittest.TestCase):
     def test_records_ok_result(self):
         s = sched.Scheduler(repo_root=Path("/tmp"))
         agent = {"name": "gpt", "model": "m", "wire_api": "openai-chat", "api_key": "k", "base_url": "http://x"}
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_scheduler.agent_runner.run_agent", return_value={"message": "ok"}), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result") as rec:
+        with mock.patch("agent.scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.scheduler.agent_runner.run_agent", return_value={"message": "ok"}), \
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result") as rec:
             s._run_workflow("gpt", 0, "check all", 60)
         rec.assert_called_once()
         self.assertEqual(rec.call_args.kwargs["status"], "ok")
@@ -91,9 +96,9 @@ class RunWorkflowTests(unittest.TestCase):
     def test_records_error_result(self):
         s = sched.Scheduler(repo_root=Path("/tmp"))
         agent = {"name": "gpt", "model": "m", "wire_api": "openai-chat", "api_key": "k", "base_url": "http://x"}
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_scheduler.agent_runner.run_agent", side_effect=Exception("fail")), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result") as rec:
+        with mock.patch("agent.scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.scheduler.agent_runner.run_agent", side_effect=Exception("fail")), \
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result") as rec:
             s._run_workflow("gpt", 0, "check all", 60)
         rec.assert_called_once()
         self.assertEqual(rec.call_args.kwargs["status"], "error")
@@ -101,8 +106,8 @@ class RunWorkflowTests(unittest.TestCase):
 
     def test_records_error_when_agent_not_configured(self):
         s = sched.Scheduler(repo_root=Path("/tmp"))
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", side_effect=Exception("not found")), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result") as rec:
+        with mock.patch("agent.scheduler.agent_store.get_agent", side_effect=Exception("not found")), \
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result") as rec:
             s._run_workflow("missing", 0, "check all", 60)
         rec.assert_called_once()
         self.assertEqual(rec.call_args.kwargs["status"], "error")
@@ -122,10 +127,10 @@ class DockerSandboxSchedulerTests(unittest.TestCase):
     def test_docker_agent_passes_docker_spec(self):
         s = sched.Scheduler(repo_root=Path("/repo"))
         agent = self._agent("docker")
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+        with mock.patch("agent.scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.scheduler.agent_runner.run_agent",
                         return_value={"message": "ok"}) as run, \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result"):
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result"):
             s._run_workflow("opus", 0, "do work", 60)
         spec = run.call_args.kwargs["sandbox_spec"]
         self.assertEqual(spec, {"mode": "docker", "workspace": "/repo"})
@@ -133,20 +138,20 @@ class DockerSandboxSchedulerTests(unittest.TestCase):
     def test_host_agent_passes_no_spec(self):
         s = sched.Scheduler(repo_root=Path("/repo"))
         agent = self._agent("host")
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+        with mock.patch("agent.scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.scheduler.agent_runner.run_agent",
                         return_value={"message": "ok"}) as run, \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result"):
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result"):
             s._run_workflow("opus", 0, "do work", 60)
         self.assertIsNone(run.call_args.kwargs["sandbox_spec"])
 
     def test_scheduler_does_not_instantiate_sandbox(self):
         s = sched.Scheduler(repo_root=Path("/repo"))
         agent = self._agent("docker")
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+        with mock.patch("agent.scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.scheduler.agent_runner.run_agent",
                         return_value={"message": "ok"}), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result"), \
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result"), \
              mock.patch("lib.docker_sandbox.Sandbox") as sandbox_cls:
             s._run_workflow("opus", 0, "do work", 60)
         sandbox_cls.assert_not_called()
@@ -154,11 +159,11 @@ class DockerSandboxSchedulerTests(unittest.TestCase):
     def test_sandbox_creation_failure_records_error_no_fallback(self):
         s = sched.Scheduler(repo_root=Path("/repo"))
         agent = self._agent("docker")
-        with mock.patch("lib.agent_scheduler.agent_store.get_agent", return_value=agent), \
-             mock.patch("lib.agent_scheduler.agent_runner.run_agent",
+        with mock.patch("agent.scheduler.agent_store.get_agent", return_value=agent), \
+             mock.patch("agent.scheduler.agent_runner.run_agent",
                         side_effect=Exception("sandbox creation failed: docker missing")), \
-             mock.patch("lib.agent_scheduler.agent_workflow_runs.record_result") as rec, \
-             mock.patch("lib.agent_scheduler.agent_hooks.execute"):
+             mock.patch("agent.scheduler.agent_workflow_runs.record_result") as rec, \
+             mock.patch("agent.scheduler.agent_hooks.execute"):
             s._run_workflow("opus", 0, "do work", 60)
         self.assertEqual(rec.call_args.kwargs["status"], "error")
         self.assertIn("sandbox creation failed", rec.call_args.kwargs["error"])

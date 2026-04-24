@@ -18,21 +18,7 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from . import (
-    agent_budgets,
-    agent_conductor,
-    agent_costs,
-    agent_hooks,
-    agent_kb,
-    agent_repl_context,
     qr,
-    agent_logs,
-    agent_run_index,
-    agent_scheduler,
-    agent_status,
-    agent_store,
-    agent_runtime,
-    agent_workflow_runs,
-    agent_workflows,
     auth,
     tasks as tasks_mod,
     config,
@@ -72,7 +58,8 @@ class DashboardServer(ThreadingHTTPServer):
         self.expected_token = expected_token
         self.tls_paths = tls_paths
         self.ttyd_bind_addr = ttyd_bind_addr
-        self.scheduler: agent_scheduler.Scheduler | None = None
+        # Populated by the agent extension's startup hook when enabled.
+        self.scheduler = None
         # Extensions load once at server start; Handler reads their
         # routes / slots / JS off ``self.server.extension_registry``.
         self.extension_registry: MergedRegistry = MergedRegistry()
@@ -102,16 +89,24 @@ def _session_summary() -> list[dict]:
     # catches panes/windows that were added after the session was created.
     session_logs.ensure_logging_all()
     assignments = ports.all_assignments()
+    # Agent metadata is only populated when the agent extension is loaded;
+    # core treats its absence as "no agents configured".
     try:
-        configured_agents = {row["name"] for row in agent_store.list_agents()}
-    except TBError:
-        configured_agents = set()
+        from agent import store as agent_store, runtime as agent_runtime
+    except ImportError:
+        agent_store = agent_runtime = None
+    configured_agents: set[str] = set()
+    if agent_store is not None:
+        try:
+            configured_agents = {row["name"] for row in agent_store.list_agents()}
+        except TBError:
+            pass
     out: list[dict] = []
     for s in sessions.list_sessions():
         name = s["name"]
         port = assignments.get(name)
         pid = ttyd.read_pid(name)
-        agent_name = agent_runtime.agent_name_from_session(name)
+        agent_name = agent_runtime.agent_name_from_session(name) if agent_runtime is not None else None
         # Prefer hash-based idle from the session log; fall back to
         # tmux's session_activity if no log exists yet.
         hash_idle = session_logs.idle_seconds(name, now=now)
@@ -210,8 +205,6 @@ def _clear_dashboard_state() -> None:
 
 
 from . import __version__
-from .agent_modes import cycle as _cycle_mode
-from .agent_modes import work as _work_mode
 
 
 # -----------------------------------------------------------------------------
@@ -432,154 +425,6 @@ class Handler(BaseHTTPRequestHandler):
             "path": str(config.DASHBOARD_CONFIG_FILE),
         })
 
-    def _h_agents_get(self, _parsed: ParseResult) -> None:
-        try:
-            agents = agent_store.list_agents()
-            statuses = agent_status.get_all_statuses()
-            for row in agents:
-                name = row.get("name", "")
-                st = statuses.get(name)
-                if st:
-                    row["status"] = st["status"]
-                    row["status_reason"] = st["reason"]
-                    row["last_activity_ts"] = st["last_ts"]
-                    row["mode"] = st.get("mode", "")
-                    row["mode_phase"] = st.get("mode_phase", "")
-                budget = agent_budgets.get_budget_status(name)
-                row["budget_status"] = budget["worst_action"]
-                row["budget_daily"] = budget["daily"]
-            self._send_json({
-                "ok": True,
-                "agents": agents,
-                "defaults": agent_store.catalog_rows(),
-                "docker_supported": docker_sandbox.SUPPORTED,
-                "paths": {
-                    "agents": str(agent_store.AGENTS_FILE),
-                    "secrets": str(agent_store.SECRETS_FILE),
-                    "logs": str(config.AGENT_LOG_DIR),
-                    "workflows": str(config.AGENT_WORKFLOWS_FILE),
-                },
-            })
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_log(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        name = (query.get("name", [""])[0] or "").strip().lower()
-        try:
-            limit = int(query.get("limit", ["200"])[0])
-        except ValueError:
-            limit = 200
-        limit = max(1, min(limit, 1000))
-        if not name:
-            self._send_text("missing 'name' query parameter", status=400)
-            return
-        try:
-            self._send_text(agent_logs.render_text(name, limit=limit))
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_log_json(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        name = (query.get("name", [""])[0] or "").strip().lower()
-        try:
-            limit = int(query.get("limit", ["20"])[0])
-        except ValueError:
-            limit = 20
-        limit = max(1, min(limit, 100))
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name' query parameter"}, status=400)
-            return
-        try:
-            self._send_json({
-                "ok": True,
-                "name": name,
-                "entries": agent_logs.read_entries(name, limit=limit),
-                "path": str(agent_logs.log_path(name)),
-            })
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_workflows_get(self, _parsed: ParseResult) -> None:
-        try:
-            self._send_json({
-                "ok": True,
-                "config": agent_workflows.load(),
-                "path": str(config.AGENT_WORKFLOWS_FILE),
-            })
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_workflow_state(self, _parsed: ParseResult) -> None:
-        try:
-            sched = getattr(self.server, "scheduler", None)
-            self._send_json({
-                "ok": True,
-                "state": agent_workflow_runs.get_all_state(),
-                "scheduler_running": sched.running if sched else False,
-            })
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_workflow_runs(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        try:
-            limit = int(query.get("limit", ["50"])[0])
-        except (ValueError, TypeError):
-            limit = 50
-        limit = max(1, min(500, limit))
-        try:
-            self._send_json({
-                "ok": True,
-                "runs": agent_workflow_runs.read_runs(limit=limit),
-            })
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_runs(self, parsed: ParseResult) -> None:
-        q = parse_qs(parsed.query)
-
-        def _first(key: str) -> str | None:
-            vals = q.get(key)
-            if vals:
-                return vals[0].strip() or None
-            return None
-
-        def _int(key: str, default: int | None = None) -> int | None:
-            v = _first(key)
-            if v is None:
-                return default
-            try:
-                return int(v)
-            except ValueError:
-                return default
-
-        try:
-            rows = agent_run_index.query(
-                agent=_first("agent"),
-                status=_first("status"),
-                since=_int("since"),
-                until=_int("until"),
-                text=_first("q"),
-                tool=_first("tool"),
-                origin=_first("origin"),
-                limit=max(1, min(500, _int("limit", 50) or 50)),
-            )
-            self._send_json({"ok": True, "runs": rows})
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_run(self, parsed: ParseResult) -> None:
-        q = parse_qs(parsed.query)
-        run_id = (q.get("run_id", [""])[0] or "").strip()
-        if not run_id:
-            self._send_json({"ok": False, "error": "missing 'run_id'"}, status=400)
-            return
-        row = agent_run_index.get_run(run_id)
-        if row is None:
-            self._send_json({"ok": False, "error": "run not found"}, status=404)
-            return
-        self._send_json({"ok": True, "run": row})
 
     def _h_session_log(self, parsed: ParseResult) -> None:
         query = parse_qs(parsed.query)
@@ -745,335 +590,6 @@ class Handler(BaseHTTPRequestHandler):
             "path": str(config.DASHBOARD_CONFIG_FILE),
         })
 
-    def _h_agents_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        payload = body.get("agent", body)
-        name = (payload.get("name") or "").strip()
-        api_key = payload.get("api_key")
-        if not isinstance(api_key, str):
-            api_key = None
-        elif not api_key.strip():
-            api_key = None
-
-        def _optional_int(field: str) -> int | None:
-            value = payload.get(field)
-            if value is None:
-                return None
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                raise UsageError(f"{field} must be an integer")
-
-        try:
-            row = agent_store.save_agent(
-                name,
-                api_key=api_key,
-                model=(payload.get("model") or "").strip() or None,
-                base_url=(payload.get("base_url") or "").strip() or None,
-                provider=(payload.get("provider") or "").strip() or None,
-                wire_api=(payload.get("wire_api") or "").strip() or None,
-                sandbox=(payload.get("sandbox") or "").strip() or None,
-                token_budget=_optional_int("token_budget"),
-                daily_token_budget=_optional_int("daily_token_budget"),
-            )
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        self._send_json({"ok": True, "agent": row})
-
-    def _h_agents_remove(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
-            return
-        try:
-            removed = agent_store.remove_agent(name)
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        self._send_json({"ok": True, "removed": removed, "name": name})
-
-    def _h_agent_workflows_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        payload = body.get("config", body)
-        try:
-            saved = agent_workflows.save(payload)
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        self._send_json({
-            "ok": True,
-            "config": saved,
-            "path": str(config.AGENT_WORKFLOWS_FILE),
-        })
-
-    def _h_agent_conversation_open(self, _parsed: ParseResult, body: dict) -> None:
-        agent_name = (body.get("name") or "").strip().lower()
-        if not agent_name:
-            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
-            return
-        try:
-            agent_store.get_agent(agent_name)
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        session_name = agent_runtime.conversation_session_name(agent_name)
-        if not sessions.exists(session_name):
-            cmd = " ".join([
-                shlex.quote(sys.executable),
-                "-u",
-                shlex.quote(str(config.PROJECT_DIR / "tb.py")),
-                "agent",
-                "repl",
-                shlex.quote(agent_name),
-            ])
-            ok, err = sessions.new_session(session_name, cwd=str(config.PROJECT_DIR), cmd=cmd)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-        tls_paths = getattr(self.server, "tls_paths", None)
-        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
-        ttyd_result = ttyd.start(session_name, tls_paths=tls_paths, bind_addr=bind_addr)
-        if not ttyd_result.get("ok"):
-            self._send_json(ttyd_result, status=400)
-            return
-        self._send_json({
-            "ok": True,
-            "agent": agent_name,
-            "session": session_name,
-            "port": ttyd_result.get("port"),
-            "scheme": ttyd_result.get("scheme", "http"),
-            "url": f"{ttyd_result.get('scheme', 'http')}://localhost:{ttyd_result.get('port')}/",
-            "already": ttyd_result.get("already", False),
-        })
-
-    def _h_agent_conversation_fork(self, _parsed: ParseResult, body: dict) -> None:
-        agent_name = (body.get("name") or "").strip().lower()
-        if not agent_name:
-            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
-            return
-        try:
-            new_cid = agent_runtime.fork_conversation(agent_name)
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        # Launch a new REPL session with --fork
-        session_name = agent_runtime.conversation_session_name(agent_name)
-        fork_session = f"{session_name}-fork"
-        if not sessions.exists(fork_session):
-            cmd = " ".join([
-                shlex.quote(sys.executable), "-u",
-                shlex.quote(str(config.PROJECT_DIR / "tb.py")),
-                "agent", "repl", "--fork", shlex.quote(agent_name),
-            ])
-            ok, err = sessions.new_session(fork_session, cwd=str(config.PROJECT_DIR), cmd=cmd)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-        tls_paths = getattr(self.server, "tls_paths", None)
-        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
-        ttyd_result = ttyd.start(fork_session, tls_paths=tls_paths, bind_addr=bind_addr)
-        self._send_json({
-            "ok": True,
-            "agent": agent_name,
-            "conversation_id": new_cid,
-            "session": fork_session,
-            "port": ttyd_result.get("port"),
-        })
-
-    def _h_agent_hooks_get(self, _parsed: ParseResult) -> None:
-        self._send_json({"ok": True, "hooks": agent_hooks.load()})
-
-    def _h_agent_hooks_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        try:
-            saved = agent_hooks.save(body.get("hooks", body))
-            self._send_json({"ok": True, "hooks": saved})
-        except TBError as e:
-            self._send_tb_error(e)
-
-    def _h_agent_notifications(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        try:
-            limit = int(query.get("limit", ["50"])[0])
-        except (ValueError, TypeError):
-            limit = 50
-        self._send_json({
-            "ok": True,
-            "notifications": agent_hooks.read_notifications(
-                limit=max(1, min(200, limit))),
-        })
-
-    def _h_agent_conductor_get(self, _parsed: ParseResult) -> None:
-        self._send_json({
-            "ok": True,
-            "rules": agent_conductor.load_rules(),
-        })
-
-    def _h_agent_conductor_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        payload = body.get("rules")
-        if payload is None:
-            payload = body
-        try:
-            saved = agent_conductor.save_rules(
-                {"rules": payload} if isinstance(payload, list) else payload)
-            self._send_json({"ok": True, "rules": saved})
-        except ValueError as e:
-            self._send_json({"ok": False, "error": str(e)}, status=400)
-
-    def _h_agent_cycle_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip().lower()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
-            return
-        try:
-            agent = agent_store.get_agent(name)
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        goal_text = (body.get("goal_text") or "").strip() or None
-        goal_path = (body.get("goal") or "").strip() or None
-        try:
-            steps = int(body.get("steps") or 20)
-        except (TypeError, ValueError):
-            steps = 20
-        # Run in a daemon thread so the HTTP request returns quickly.
-        # The run itself is visible via the run index as the user reloads.
-        result_holder: dict = {}
-        def _go():
-            try:
-                result = _cycle_mode.run(
-                    agent, goal_path=goal_path, goal_text=goal_text,
-                    steps=max(1, steps))
-                result_holder["result"] = result
-            except Exception as e:
-                result_holder["error"] = str(e)
-        thread = threading.Thread(target=_go, daemon=True)
-        thread.start()
-        # Wait briefly for the plan phase so the caller gets the plan
-        # summary; execute phase continues in the background.
-        thread.join(timeout=2.0)
-        if "result" in result_holder:
-            self._send_json({
-                "ok": True, "finished": True,
-                "plan_run_id": result_holder["result"].plan_run_id,
-                "exec_run_id": result_holder["result"].exec_run_id,
-                "plan": result_holder["result"].plan_message[:500],
-            })
-        elif "error" in result_holder:
-            self._send_json({"ok": False,
-                             "error": result_holder["error"]}, status=500)
-        else:
-            self._send_json({"ok": True, "finished": False,
-                             "note": "cycle running in background"})
-
-    def _h_agent_work_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip().lower()
-        tasks_path = (body.get("tasks") or "").strip()
-        if not name or not tasks_path:
-            self._send_json({"ok": False, "error": "missing 'name' or 'tasks'"},
-                            status=400)
-            return
-        try:
-            agent = agent_store.get_agent(name)
-        except TBError as e:
-            self._send_tb_error(e)
-            return
-        try:
-            max_total = int(body.get("max_total_steps") or 200)
-        except (TypeError, ValueError):
-            max_total = 200
-        stop_on_error = bool(body.get("stop_on_error"))
-
-        def _go():
-            try:
-                _work_mode.run(
-                    agent, tasks_path=tasks_path,
-                    max_total_steps=max(1, max_total),
-                    stop_on_error=stop_on_error)
-            except Exception:
-                pass
-        threading.Thread(target=_go, daemon=True).start()
-        self._send_json({"ok": True, "started": True})
-
-    def _h_agent_work_stop(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip().lower()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
-            return
-        _work_mode.request_stop(name)
-        self._send_json({"ok": True, "stop_requested": True})
-
-    def _h_agent_repl_context(self, parsed: ParseResult) -> None:
-        q = parse_qs(parsed.query)
-        name = (q.get("name", [""])[0] or "").strip().lower()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"}, status=400)
-            return
-        ctx = agent_repl_context.load(name)
-        kb = agent_kb.list_files(name)
-        self._send_json({
-            "ok": True,
-            "context": ctx,
-            "kb": kb,
-            "kb_total_bytes": sum(f["size"] for f in kb),
-            "kb_cap_bytes": agent_kb.TOTAL_BYTES_CAP,
-        })
-
-    def _h_agent_conductor_events(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        try:
-            limit = int(query.get("limit", ["50"])[0])
-        except (ValueError, TypeError):
-            limit = 50
-        agent = (query.get("agent", [""])[0] or "").strip()
-        self._send_json({
-            "ok": True,
-            "decisions": agent_conductor.read_decisions(
-                limit=max(1, min(500, limit)), agent=agent),
-        })
-
-    def _h_agent_costs(self, parsed: ParseResult) -> None:
-        q = parse_qs(parsed.query)
-
-        def _first(key: str) -> str | None:
-            vals = q.get(key)
-            return vals[0].strip() if vals else None
-
-        def _int(key: str) -> int | None:
-            v = _first(key)
-            if v is None:
-                return None
-            try:
-                return int(v)
-            except ValueError:
-                return None
-
-        try:
-            cfg = dashboard_config.load()
-            self._send_json({
-                "ok": True,
-                "per_agent": agent_costs.per_agent_totals(
-                    since=_int("since"), until=_int("until")),
-                "daily": agent_costs.daily_totals(
-                    since=_int("since"), until=_int("until")),
-                "global_daily_budget": int(cfg.get("global_daily_token_budget") or 0),
-            })
-        except TBError as e:
-            self._send_tb_error(e)
 
     def _h_clients(self, _parsed: ParseResult) -> None:
         my_id = _touch_client(self)
@@ -1390,21 +906,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/sessions":           _h_sessions,
         "/api/ports":              _h_ports,
         "/api/dashboard-config":   _h_dashboard_config_get,
-        "/api/agents":             _h_agents_get,
-        "/api/agent-log":          _h_agent_log,
-        "/api/agent-log-json":     _h_agent_log_json,
-        "/api/agent-workflows":    _h_agent_workflows_get,
-        "/api/agent-workflow-state": _h_agent_workflow_state,
-        "/api/agent-workflow-runs":  _h_agent_workflow_runs,
-        "/api/agent-runs":           _h_agent_runs,
-        "/api/agent-run":            _h_agent_run,
         "/api/session/log":        _h_session_log,
-        "/api/agent-costs":        _h_agent_costs,
-        "/api/agent-hooks":        _h_agent_hooks_get,
-        "/api/agent-notifications": _h_agent_notifications,
-        "/api/agent-conductor":    _h_agent_conductor_get,
-        "/api/agent-conductor-events": _h_agent_conductor_events,
-        "/api/agent-repl-context": _h_agent_repl_context,
         "/api/clients":            _h_clients,
         "/api/clients/inbox":      _h_clients_inbox,
         "/api/qr":                 _h_qr,
@@ -1425,16 +927,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/session/type":       _h_session_type,
         "/api/session/key":        _h_session_key,
         "/api/dashboard-config":   _h_dashboard_config_post,
-        "/api/agents":             _h_agents_post,
-        "/api/agents/remove":      _h_agents_remove,
-        "/api/agent-workflows":    _h_agent_workflows_post,
-        "/api/agent-hooks":        _h_agent_hooks_post,
-        "/api/agent-conductor":    _h_agent_conductor_post,
-        "/api/agent-cycle":        _h_agent_cycle_post,
-        "/api/agent-work":         _h_agent_work_post,
-        "/api/agent-work/stop":    _h_agent_work_stop,
-        "/api/agent-conversation":      _h_agent_conversation_open,
-        "/api/agent-conversation-fork": _h_agent_conversation_fork,
         "/api/clients/nickname":   _h_clients_nickname,
         "/api/clients/send-config": _h_clients_send_config,
         "/api/config-lock":        _h_config_lock_set,
@@ -1496,6 +988,9 @@ def serve(bind: str, port: int, verbose: bool = False,
 
     # Load optional extensions. A failing extension is logged and
     # skipped; a route / verb / slot collision with core is fatal.
+    # First-boot bootstrap auto-enables every bundled extension so the
+    # post-split dashboard matches the pre-split monolith out of the box.
+    extensions.bootstrap_default_enabled()
     core_get = set(Handler._GET_ROUTES)
     core_post = set(Handler._POST_ROUTES)
     try:
@@ -1520,14 +1015,6 @@ def serve(bind: str, port: int, verbose: bool = False,
         except Exception as exc:  # noqa: broad — per-extension isolation
             extensions.record_error(name, f"startup failed: {exc}")
 
-    # Start the background workflow scheduler.
-    sched = agent_scheduler.Scheduler(repo_root=config.PROJECT_DIR)
-    httpd.scheduler = sched
-    if sched.start():
-        print("  scheduler: STARTED (this process owns workflow execution)")
-    else:
-        print("  scheduler: passive (another process holds the lock)")
-
     # Graceful shutdown on SIGTERM (systemd, container runtimes, kill).
     # serve_forever() only breaks on KeyboardInterrupt out of the box;
     # moving it to a worker thread lets the main thread wait on an Event
@@ -1548,7 +1035,11 @@ def serve(bind: str, port: int, verbose: bool = False,
         shutdown_event.wait()
     finally:
         print("\nshutting down")
-        sched.stop()
+        for name, fn in httpd.extension_registry.shutdown:
+            try:
+                fn()
+            except Exception as exc:  # noqa: broad — per-extension isolation
+                extensions.record_error(name, f"shutdown failed: {exc}")
         httpd.shutdown()             # unblocks serve_forever()
         server_thread.join(timeout=5)
         _clear_dashboard_state()

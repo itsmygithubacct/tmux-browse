@@ -5,10 +5,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO = Path(__file__).resolve().parents[3]
+_EXT = _REPO / "extensions" / "agent"
+for _p in (_REPO, _EXT):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 
-from lib import agent_runner  # noqa: E402
-from lib.agent_providers import ProviderResult  # noqa: E402
+from agent import runner as agent_runner  # noqa: E402
+from agent.providers import ProviderResult  # noqa: E402
 from lib.errors import UsageError  # noqa: E402
 
 
@@ -33,8 +38,8 @@ class ExtractJsonTests(unittest.TestCase):
             ProviderResult(content="Here's what I found in the panes."),
             ProviderResult(content='{"type":"final","message":"done"}'),
         ])
-        with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=lambda *a, **k: next(replies)), mock.patch(
-            "lib.agent_runner.agent_logs.append_entry",
+        with mock.patch("agent.runner.agent_providers.complete", side_effect=lambda *a, **k: next(replies)), mock.patch(
+            "agent.runner.agent_logs.append_entry",
         ) as append_entry:
             result = agent_runner.run_agent(
                 {"name": "minimax", "model": "MiniMax-M2.7", "wire_api": "openai-chat"},
@@ -54,8 +59,8 @@ class ExtractJsonTests(unittest.TestCase):
         self.assertEqual(append_entry.call_args_list[1].args[1]["status"], "run_completed")
 
     def test_logs_error_run(self):
-        with mock.patch("lib.agent_runner.agent_providers.complete", side_effect=UsageError("bad response")), mock.patch(
-            "lib.agent_runner.agent_logs.append_entry",
+        with mock.patch("agent.runner.agent_providers.complete", side_effect=UsageError("bad response")), mock.patch(
+            "agent.runner.agent_logs.append_entry",
         ) as append_entry:
             with self.assertRaises(UsageError):
                 agent_runner.run_agent(
@@ -115,10 +120,10 @@ class SandboxIntegrationTests(unittest.TestCase):
         fake_sandbox.exec_tb.return_value = mock.Mock(
             ok=True, exit_code=0, stdout="", stderr="", json_data=None,
         )
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=fake_complete), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
-             mock.patch("lib.agent_runner.docker_sandbox.Sandbox",
+             mock.patch("agent.runner.agent_logs.append_entry"), \
+             mock.patch("agent.runner.docker_sandbox.Sandbox",
                         return_value=fake_sandbox):
             agent_runner.run_agent(
                 self._stub_agent(), "do work",
@@ -135,9 +140,9 @@ class SandboxIntegrationTests(unittest.TestCase):
             captured["system"] = messages[0]["content"]
             return ProviderResult(content='{"type":"final","message":"done"}')
 
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=fake_complete), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"):
+             mock.patch("agent.runner.agent_logs.append_entry"):
             agent_runner.run_agent(
                 self._stub_agent(), "do work",
                 repo_root=Path("/tmp"), max_steps=2, request_timeout=1.0,
@@ -154,12 +159,12 @@ class SandboxIntegrationTests(unittest.TestCase):
         fake_sandbox.exec_tb.return_value = mock.Mock(
             ok=True, exit_code=0, stdout='{"ok":true}', stderr="", json_data={"ok": True},
         )
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=lambda *a, **k: next(replies)), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
-             mock.patch("lib.agent_runner.docker_sandbox.Sandbox",
+             mock.patch("agent.runner.agent_logs.append_entry"), \
+             mock.patch("agent.runner.docker_sandbox.Sandbox",
                         return_value=fake_sandbox), \
-             mock.patch("lib.agent_runner._run_tb_command") as host_run:
+             mock.patch("agent.runner._run_tb_command") as host_run:
             agent_runner.run_agent(
                 self._stub_agent(), "do work",
                 repo_root=Path("/tmp"), max_steps=3, request_timeout=1.0,
@@ -176,12 +181,12 @@ class SandboxIntegrationTests(unittest.TestCase):
             ProviderResult(content='{"type":"final","message":"done"}'),
         ])
         host_result = mock.Mock(ok=True, exit_code=0, stdout='{}', stderr="", json_data={})
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=lambda *a, **k: next(replies)), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
-             mock.patch("lib.agent_runner._run_tb_command",
+             mock.patch("agent.runner.agent_logs.append_entry"), \
+             mock.patch("agent.runner._run_tb_command",
                         return_value=host_result) as host_run, \
-             mock.patch("lib.agent_runner.docker_sandbox.Sandbox") as sandbox_cls:
+             mock.patch("agent.runner.docker_sandbox.Sandbox") as sandbox_cls:
             agent_runner.run_agent(
                 self._stub_agent(), "do work",
                 repo_root=Path("/tmp"), max_steps=3, request_timeout=1.0,
@@ -191,10 +196,10 @@ class SandboxIntegrationTests(unittest.TestCase):
 
     def test_sandbox_closes_on_loop_exception(self):
         fake_sandbox = mock.Mock()
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=UsageError("boom")), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
-             mock.patch("lib.agent_runner.docker_sandbox.Sandbox",
+             mock.patch("agent.runner.agent_logs.append_entry"), \
+             mock.patch("agent.runner.docker_sandbox.Sandbox",
                         return_value=fake_sandbox):
             with self.assertRaises(UsageError):
                 agent_runner.run_agent(
@@ -207,8 +212,8 @@ class SandboxIntegrationTests(unittest.TestCase):
     def test_sandbox_creation_failure_records_failed_run(self):
         fake_sandbox = mock.Mock()
         fake_sandbox.create.side_effect = RuntimeError("docker daemon down")
-        with mock.patch("lib.agent_runner.agent_logs.append_entry") as append, \
-             mock.patch("lib.agent_runner.docker_sandbox.Sandbox",
+        with mock.patch("agent.runner.agent_logs.append_entry") as append, \
+             mock.patch("agent.runner.docker_sandbox.Sandbox",
                         return_value=fake_sandbox):
             with self.assertRaises(RuntimeError):
                 agent_runner.run_agent(
@@ -240,10 +245,10 @@ class ToolRegistryDispatchTests(unittest.TestCase):
         tool_host = mock.Mock(return_value=mock.Mock(
             ok=True, exit_code=0, stdout='{"ok":true}', stderr="",
             json_data={"ok": True}))
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=lambda *a, **k: next(replies)), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
-             mock.patch("lib.agent_runner._run_tb_command", tool_host):
+             mock.patch("agent.runner.agent_logs.append_entry"), \
+             mock.patch("agent.runner._run_tb_command", tool_host):
             agent_runner.run_agent(
                 self._agent(["tb_command"]), "check",
                 repo_root=Path("/tmp"), max_steps=3, request_timeout=1.0)
@@ -259,11 +264,11 @@ class ToolRegistryDispatchTests(unittest.TestCase):
         fake_host = mock.Mock(return_value=mock.Mock(
             ok=True, exit_code=0, stdout="content", stderr="",
             json_data=None))
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=lambda *a, **k: next(replies)), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
+             mock.patch("agent.runner.agent_logs.append_entry"), \
              mock.patch.dict(
-                 "lib.agent_runner.agent_tool_registry.TOOLS",
+                 "agent.runner.agent_tool_registry.TOOLS",
                  {"read_file": agent_runner.agent_tool_registry.ToolSpec(
                      name="read_file", description="",
                      run_host=fake_host, run_sandbox=None)}):
@@ -279,9 +284,9 @@ class ToolRegistryDispatchTests(unittest.TestCase):
                 '"args":{"path":"/tmp/x"},"stdin":""}')),
             ProviderResult(content='{"type":"final","message":"done"}'),
         ])
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=lambda *a, **k: next(replies)), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"):
+             mock.patch("agent.runner.agent_logs.append_entry"):
             with self.assertRaises(UsageError) as ctx:
                 agent_runner.run_agent(
                     self._agent(["tb_command"]), "do it",
@@ -295,9 +300,9 @@ class ToolRegistryDispatchTests(unittest.TestCase):
             captured["system"] = messages[0]["content"]
             return ProviderResult(content='{"type":"final","message":"done"}')
 
-        with mock.patch("lib.agent_runner.agent_providers.complete",
+        with mock.patch("agent.runner.agent_providers.complete",
                         side_effect=fake_complete), \
-             mock.patch("lib.agent_runner.agent_logs.append_entry"):
+             mock.patch("agent.runner.agent_logs.append_entry"):
             agent_runner.run_agent(
                 self._agent(["tb_command", "read_file"]), "x",
                 repo_root=Path("/tmp"), max_steps=2, request_timeout=1.0)
