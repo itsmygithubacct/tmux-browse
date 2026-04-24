@@ -84,6 +84,18 @@ async function enterCopyMode(session) {
     }
 }
 
+// Toggle tmux's pane-zoom on the active pane of the session.
+// Equivalent to the C-b z binding (`resize-pane -Z`). The same call
+// un-zooms if the pane is already zoomed.
+async function zoomPane(session) {
+    const msg = document.getElementById("msg-" + cssId(session));
+    const r = await api("POST", "/api/session/zoom", { session });
+    if (msg) {
+        msg.textContent = r.ok ? "pane zoom toggled" : ("error: " + (r.error || ""));
+        msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
+    }
+}
+
 
 function hotButtonsFor(session) {
     return state.hot.map(normalizeHotSlot);
@@ -994,6 +1006,19 @@ function createPane(s) {
         title: "enter tmux copy-mode (live scrollback — C-b [)",
     });
     scrollIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l3-3 3 3"/><path d="M5 12l3 3 3-3"/><line x1="8" y1="1" x2="8" y2="15"/></svg>';
+    const zoomIconBtn = el("button", {
+        class: "wc-btn wc-zoom-icon",
+        type: "button",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            zoomPane(s.name);
+        },
+        title: "toggle tmux pane zoom (C-b z — resize-pane -Z)",
+    });
+    // Four corner-arrows pointing outward — the familiar fullscreen/zoom
+    // glyph, drawn to match the other wc-icon strokes.
+    zoomIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4"/><path d="M14 6V2h-4"/><path d="M2 10v4h4"/><path d="M14 10v4h-4"/></svg>';
     const moveBtn = el("button", {
         class: "btn blue summary-move",
         type: "button",
@@ -1098,7 +1123,7 @@ function createPane(s) {
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
-            summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
+            summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, zoomIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
     );
     const bodyKillBtn = el("button", {
         class: "btn red", onclick: () => killSession(s.name),
@@ -1284,7 +1309,7 @@ function createPane(s) {
 
     return {
         details, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
-        summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad,
+        summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, zoomIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,

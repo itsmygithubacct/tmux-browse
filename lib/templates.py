@@ -176,6 +176,7 @@ def render_index() -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-move-icon" /><span>Move-to (folder-arrow)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-log-icon" /><span>Log (document)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-scroll-icon" /><span>Scroll (copy-mode)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-zoom-icon" /><span>Zoom (pane zoom, C-b z)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-idle-icon" /><span>Idle alert (eye)</span></label>
                 <div class="dim" style="font-size:0.72rem;margin:0.3rem 0 0.1rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent)">Textual pane controls</div>
                 <label class="check-row"><input type="checkbox" id="cfg-show-idle-alert-button" /><span>Idle Alert button</span></label>
