@@ -17,6 +17,7 @@ from . import (
     agent_logs,
     agent_providers,
     agent_run_index,
+    agent_tool_registry,
     docker_sandbox,
 )
 from .agent_runs import (
@@ -270,6 +271,12 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
         except Exception:
             pass
 
+    # Enabled tool set. Default ["tb_command"] keeps old agents bit-identical.
+    enabled_tools = agent_tool_registry.tool_names_for_agent(agent)
+    if enabled_tools != ["tb_command"]:
+        system_prompt = system_prompt + "\n---\n\n" \
+            + agent_tool_registry.tool_prompt_block(enabled_tools)
+
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_prompt},
     ]
@@ -374,24 +381,43 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
                     "run_completed", agent["name"],
                     run_id=run_id, prompt=prompt)
                 return out
-            if action.get("type") != "tool" or action.get("tool") != "tb_command":
-                raise UsageError("agent must return either a final action or a tb_command tool action")
+            if action.get("type") != "tool":
+                raise UsageError("agent must return either a final action or a tool action")
+            tool_name = action.get("tool") or ""
+            if tool_name not in enabled_tools:
+                raise UsageError(
+                    f"tool {tool_name!r} is not enabled for this agent; "
+                    f"enabled: {enabled_tools}")
             tool_args = action.get("args")
-            if not isinstance(tool_args, list) or not all(isinstance(x, str) for x in tool_args):
-                raise UsageError("tb_command args must be a list of strings")
             stdin_text = action.get("stdin")
             if stdin_text is not None and not isinstance(stdin_text, str):
-                raise UsageError("tb_command stdin must be a string when present")
-            if sandbox is not None:
-                tool_result = sandbox.exec_tb(tool_args, stdin_text, timeout=60)
+                raise UsageError("tool stdin must be a string when present")
+            if tool_name == "tb_command":
+                # Historical contract: list-of-strings args.
+                if not isinstance(tool_args, list) or not all(isinstance(x, str) for x in tool_args):
+                    raise UsageError("tb_command args must be a list of strings")
+                if sandbox is not None:
+                    tool_result = sandbox.exec_tb(tool_args, stdin_text, timeout=60)
+                else:
+                    tool_result = _run_tb_command(repo_root, tool_args, stdin_text)
             else:
-                tool_result = _run_tb_command(repo_root, tool_args, stdin_text)
+                # Registry dispatch for non-tb_command tools.
+                spec = agent_tool_registry.TOOLS.get(tool_name)
+                if spec is None:
+                    raise UsageError(f"unknown tool: {tool_name!r}")
+                if sandbox is not None:
+                    if spec.run_sandbox is None:
+                        raise UsageError(
+                            f"tool {tool_name!r} is not available in Docker mode")
+                    tool_result = spec.run_sandbox(sandbox, tool_args, stdin_text)
+                else:
+                    tool_result = spec.run_host(repo_root, tool_args, stdin_text)
             tool_payload = _compact_tool_payload(tool_result)
             transcript[-1]["tool_result"] = tool_payload
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append({
                 "role": "user",
-                "content": "Tool result for tb_command:\n" + json.dumps(tool_payload, ensure_ascii=True),
+                "content": f"Tool result for {tool_name}:\n" + json.dumps(tool_payload, ensure_ascii=True),
             })
         raise TmuxFailed(f"agent exceeded max steps ({max_steps})")
     except Exception as e:

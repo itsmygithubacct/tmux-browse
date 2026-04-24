@@ -224,5 +224,86 @@ class SandboxIntegrationTests(unittest.TestCase):
         self.assertIn("run_failed", statuses)
 
 
+class ToolRegistryDispatchTests(unittest.TestCase):
+
+    def _agent(self, tools):
+        return {"name": "opus", "model": "m", "wire_api": "openai-chat",
+                "tools": tools}
+
+    def test_tb_command_stays_default(self):
+        replies = iter([
+            ProviderResult(content=(
+                '{"type":"tool","tool":"tb_command",'
+                '"args":["snapshot","--json"],"stdin":""}')),
+            ProviderResult(content='{"type":"final","message":"done"}'),
+        ])
+        tool_host = mock.Mock(return_value=mock.Mock(
+            ok=True, exit_code=0, stdout='{"ok":true}', stderr="",
+            json_data={"ok": True}))
+        with mock.patch("lib.agent_runner.agent_providers.complete",
+                        side_effect=lambda *a, **k: next(replies)), \
+             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
+             mock.patch("lib.agent_runner._run_tb_command", tool_host):
+            agent_runner.run_agent(
+                self._agent(["tb_command"]), "check",
+                repo_root=Path("/tmp"), max_steps=3, request_timeout=1.0)
+        tool_host.assert_called_once()
+
+    def test_read_file_dispatches_through_registry(self):
+        replies = iter([
+            ProviderResult(content=(
+                '{"type":"tool","tool":"read_file",'
+                '"args":{"path":"/tmp/x","max_bytes":10},"stdin":""}')),
+            ProviderResult(content='{"type":"final","message":"done"}'),
+        ])
+        fake_host = mock.Mock(return_value=mock.Mock(
+            ok=True, exit_code=0, stdout="content", stderr="",
+            json_data=None))
+        with mock.patch("lib.agent_runner.agent_providers.complete",
+                        side_effect=lambda *a, **k: next(replies)), \
+             mock.patch("lib.agent_runner.agent_logs.append_entry"), \
+             mock.patch.dict(
+                 "lib.agent_runner.agent_tool_registry.TOOLS",
+                 {"read_file": agent_runner.agent_tool_registry.ToolSpec(
+                     name="read_file", description="",
+                     run_host=fake_host, run_sandbox=None)}):
+            agent_runner.run_agent(
+                self._agent(["tb_command", "read_file"]), "read something",
+                repo_root=Path("/tmp"), max_steps=3, request_timeout=1.0)
+        fake_host.assert_called_once()
+
+    def test_disabled_tool_is_rejected(self):
+        replies = iter([
+            ProviderResult(content=(
+                '{"type":"tool","tool":"read_file",'
+                '"args":{"path":"/tmp/x"},"stdin":""}')),
+            ProviderResult(content='{"type":"final","message":"done"}'),
+        ])
+        with mock.patch("lib.agent_runner.agent_providers.complete",
+                        side_effect=lambda *a, **k: next(replies)), \
+             mock.patch("lib.agent_runner.agent_logs.append_entry"):
+            with self.assertRaises(UsageError) as ctx:
+                agent_runner.run_agent(
+                    self._agent(["tb_command"]), "do it",
+                    repo_root=Path("/tmp"), max_steps=3, request_timeout=1.0)
+        self.assertIn("not enabled", str(ctx.exception))
+
+    def test_tools_block_appended_when_multiple_tools(self):
+        captured = {}
+
+        def fake_complete(agent, messages, **_):
+            captured["system"] = messages[0]["content"]
+            return ProviderResult(content='{"type":"final","message":"done"}')
+
+        with mock.patch("lib.agent_runner.agent_providers.complete",
+                        side_effect=fake_complete), \
+             mock.patch("lib.agent_runner.agent_logs.append_entry"):
+            agent_runner.run_agent(
+                self._agent(["tb_command", "read_file"]), "x",
+                repo_root=Path("/tmp"), max_steps=2, request_timeout=1.0)
+        self.assertIn("Enabled tools:", captured["system"])
+        self.assertIn("read_file", captured["system"])
+
+
 if __name__ == "__main__":
     unittest.main()
