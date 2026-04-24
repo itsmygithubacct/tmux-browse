@@ -112,11 +112,40 @@ function idleAlertFor(session) {
 }
 
 function visibleSessionNames() {
-    return state.sessions.map((s) => s.name).filter((n) => !state.hidden.has(n));
+    // Visible = not hidden AND not in a user-defined group.
+    return state.sessions.map((s) => s.name).filter((n) =>
+        !state.hidden.has(n) && !state.groups.membership[n]);
 }
 
 function hiddenSessionNames() {
     return state.sessions.map((s) => s.name).filter((n) => state.hidden.has(n));
+}
+
+function sessionsInGroup(groupName) {
+    return state.sessions
+        .map((s) => s.name)
+        .filter((n) => state.groups.membership[n] === groupName);
+}
+
+// Unified mover. Clears conflicting placements so a session is only in
+// one place at a time (Visible / Hidden / one user group).
+function moveSessionToGroup(sessionName, groupName) {
+    const isUserGroup = state.groups.defs[groupName] !== undefined;
+    if (groupName === "Visible") {
+        state.hidden.delete(sessionName);
+        delete state.groups.membership[sessionName];
+    } else if (groupName === "Hidden") {
+        delete state.groups.membership[sessionName];
+        state.hidden.add(sessionName);
+    } else if (isUserGroup) {
+        state.hidden.delete(sessionName);
+        state.groups.membership[sessionName] = groupName;
+    } else {
+        return;  // unknown group
+    }
+    saveHidden(state.hidden);
+    saveGroups();
+    refresh();
 }
 
 function flattenRows(rows) {
@@ -289,6 +318,35 @@ function renderLayout() {
             state.sessions.length === 0
                 ? "No tmux sessions. Create one above."
                 : "All sessions are hidden — open the list below."));
+    }
+
+    // User-defined pane groups render between the visible stack and the
+    // Hidden drawer. Each group is its own furled <details> with its own
+    // pane order derived from `state.order` but scoped to group members.
+    const groupsRoot = document.getElementById("sessions-groups");
+    if (groupsRoot) {
+        groupsRoot.textContent = "";
+        for (const groupName of state.groups.order) {
+            const def = state.groups.defs[groupName];
+            if (!def) continue;
+            const members = sortedSessionNames(sessionsInGroup(groupName));
+            const wrap = el("details", {
+                id: `group-wrap-${cssId(groupName)}`,
+                class: "group-wrap",
+                "data-group": groupName,
+            });
+            if (def.open !== false || members.length) wrap.open = def.open !== false;
+            const summary = el("summary", {},
+                `${def.label || groupName} (${members.length})`);
+            wrap.append(summary);
+            const body = el("div", { class: "group-body" });
+            for (const name of members) {
+                const rec = state.nodes.get(name);
+                if (rec) body.append(rec.details);
+            }
+            wrap.append(body);
+            groupsRoot.append(wrap);
+        }
     }
 
     const hiddenRoot = document.getElementById("sessions-hidden");
@@ -1300,12 +1358,22 @@ function refreshHiddenChrome() {
     for (const h of state.hidden) if (liveNames.has(h)) n += 1;
     count.textContent = String(n);
     wrap.hidden = n === 0;
+    // Keep the Config > Pane Groups editor counts fresh too.
+    if (typeof renderPaneGroupsEditor === "function") renderPaneGroupsEditor();
 }
 
 function toggleHidden(name) {
-    if (state.hidden.has(name)) state.hidden.delete(name);
-    else {
+    if (state.hidden.has(name)) {
+        state.hidden.delete(name);
+    } else {
         state.hidden.add(name);
+        // Hiding a pane also takes it out of any user-defined group so it's
+        // only in one place at a time. Unhiding returns it to Visible, not
+        // to its previous group (user can Move it back explicitly).
+        if (state.groups.membership[name]) {
+            delete state.groups.membership[name];
+            saveGroups();
+        }
         removeFromLayout(name);
     }
     saveHidden(state.hidden);
@@ -1410,6 +1478,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("cfg-qr-show-btn").addEventListener("click", showConfigQR);
     document.getElementById("cfg-qr-scan-btn").addEventListener("click", scanConfigQR);
     document.getElementById("cfg-clear-cache-btn").addEventListener("click", clearLocalCache);
+    document.getElementById("pane-group-add-btn").addEventListener("click", addPaneGroup);
+    document.getElementById("pane-group-new-name").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); addPaneGroup(); }
+    });
     document.getElementById("qr-close-btn").addEventListener("click", closeQRModal);
     document.getElementById("qr-modal").addEventListener("click", (e) => { if (e.target.id === "qr-modal") closeQRModal(); });
     document.getElementById("phone-key-add-btn").addEventListener("click", addPhoneKey);

@@ -39,6 +39,7 @@ def render_index() -> str:
     <button class="btn red" id="os-restart-btn" title="restart the dashboard server process" style="margin-left:auto" hidden>&#x23FB;</button>
 </div>
 <div id="sessions"></div>
+<div id="sessions-groups"></div>
 <details id="hidden-wrap" class="hidden-list" hidden>
     <summary>Hidden (<span id="hidden-count">0</span>)</summary>
     <div id="sessions-hidden"></div>
@@ -116,6 +117,17 @@ def render_index() -> str:
                         <button type="button" class="btn" id="cfg-sound-test" title="play the selected sound">Test</button>
                     </span>
                 </label>
+                <div class="pane-groups-editor">
+                    <div class="config-card-title" style="font-size:0.82rem;margin-top:0.6rem">Pane Groups</div>
+                    <div class="dim" style="font-size:0.75rem;margin-bottom:0.35rem">
+                        Named buckets for session panes. Visible and Hidden always exist.
+                    </div>
+                    <div id="pane-groups-list" style="display:grid;gap:0.25rem"></div>
+                    <div style="display:flex;gap:0.4rem;margin-top:0.45rem;flex-wrap:wrap">
+                        <input type="text" id="pane-group-new-name" placeholder="New group name" style="flex:1;min-width:120px;background:var(--surface);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.85rem" />
+                        <button class="btn green" id="pane-group-add-btn" type="button">Add</button>
+                    </div>
+                </div>
             </section>
             <section class="config-card">
                 <div class="config-card-title">Title Bar <button class="btn toggle-all-btn" type="button" id="cfg-toggle-all-topbar">All On</button></div>
