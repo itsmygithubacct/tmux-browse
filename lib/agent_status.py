@@ -23,6 +23,22 @@ from .agent_runs import (
 RUNNING_THRESHOLD_SECONDS = 300
 
 
+def _mode_and_phase(origin: str) -> tuple[str, str]:
+    """Extract a mode name + phase from a run's ``origin`` tag.
+
+    Returns (mode, phase) where either may be empty. Keeps the schema
+    string-based so future modes don't need parser updates here.
+    """
+    if not origin:
+        return "", ""
+    if origin.startswith("cycle"):
+        phase = origin.split("-", 1)[1] if "-" in origin else ""
+        return "cycle", phase
+    if origin in ("work", "drive"):
+        return origin, ""
+    return "", ""
+
+
 class AgentStatus:
     RUNNING = "running"
     IDLE = "idle"
@@ -71,53 +87,64 @@ def get_status(agent_name: str) -> dict[str, Any]:
                 "reason": "workflows defined but disabled",
                 "last_ts": 0,
                 "last_status": None,
+                "mode": "",
+                "mode_phase": "",
             }
         return {
             "status": AgentStatus.IDLE,
             "reason": "no activity recorded",
             "last_ts": 0,
             "last_status": None,
+            "mode": "",
+            "mode_phase": "",
         }
 
     entry_ts = int(entry.get("ts") or 0)
     entry_status = str(entry.get("status") or "")
+    origin = str(entry.get("origin") or "")
+    mode, phase = _mode_and_phase(origin)
     age = now - entry_ts
+
+    def _wrap(base: dict[str, Any]) -> dict[str, Any]:
+        base["mode"] = mode
+        base["mode_phase"] = phase
+        return base
 
     # Currently running: started recently and no completion/failure yet.
     if entry_status == STATUS_STARTED and age < RUNNING_THRESHOLD_SECONDS:
-        return {
+        return _wrap({
             "status": AgentStatus.RUNNING,
             "reason": _preview_prompt(entry),
             "last_ts": entry_ts,
             "last_status": entry_status,
-        }
+        })
 
     # Rate limited.
     if entry_status == STATUS_RATE_LIMITED:
-        return {
+        return _wrap({
             "status": AgentStatus.RATE_LIMITED,
             "reason": str(entry.get("error") or "rate limited"),
             "last_ts": entry_ts,
             "last_status": entry_status,
-        }
+        })
 
     # Failed (not rate-limited).
     if entry_status == STATUS_FAILED:
-        return {
+        return _wrap({
             "status": AgentStatus.ERROR,
             "reason": str(entry.get("error") or "run failed"),
             "last_ts": entry_ts,
             "last_status": entry_status,
-        }
+        })
 
     # Workflow paused takes precedence over idle.
     if _workflow_paused(name):
-        return {
+        return _wrap({
             "status": AgentStatus.WORKFLOW_PAUSED,
             "reason": "workflows defined but disabled",
             "last_ts": entry_ts,
             "last_status": entry_status,
-        }
+        })
 
     # Default: idle (completed or old started entry).
     reason = "idle"
@@ -127,12 +154,12 @@ def get_status(agent_name: str) -> dict[str, Any]:
     elif entry_status == STATUS_STARTED and age >= RUNNING_THRESHOLD_SECONDS:
         reason = "last run may have stalled"
 
-    return {
+    return _wrap({
         "status": AgentStatus.IDLE,
         "reason": reason,
         "last_ts": entry_ts,
         "last_status": entry_status,
-    }
+    })
 
 
 def get_all_statuses() -> dict[str, dict[str, Any]]:

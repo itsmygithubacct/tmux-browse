@@ -434,6 +434,8 @@ class Handler(BaseHTTPRequestHandler):
                     row["status"] = st["status"]
                     row["status_reason"] = st["reason"]
                     row["last_activity_ts"] = st["last_ts"]
+                    row["mode"] = st.get("mode", "")
+                    row["mode_phase"] = st.get("mode_phase", "")
                 budget = agent_budgets.get_budget_status(name)
                 row["budget_status"] = budget["worst_action"]
                 row["budget_daily"] = budget["daily"]
