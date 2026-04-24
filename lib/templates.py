@@ -95,6 +95,10 @@ def render_index() -> str:
                     <input type="checkbox" id="cfg-resize-row-together" />
                     <span>Resize row of panes together</span>
                 </label>
+                <label class="check-row">
+                    <input type="checkbox" id="cfg-show-agents-pane" />
+                    <span>Show Agents pane (off by default)</span>
+                </label>
                 <label class="field">
                     <span>Default ttyd height (vh)</span>
                     <input type="number" id="cfg-default-height" min="20" max="95" step="1" />
