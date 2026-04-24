@@ -116,6 +116,87 @@ Everything the agent does via `tb` in those panes happens on the remote
 host at the far end of the ssh — tmux just transports the terminal,
 tmux-browse transports tmux.
 
+## Built-in agent platform (under active development)
+
+> **Heads-up:** the agent layer described here is under active
+> development. The shapes below are stable enough to use but the
+> CLI options, defaults, and some endpoints may shift between patch
+> releases until the next minor-version bump.
+
+Beyond driving external agent CLIs through `tb`, tmux-browse ships a
+**first-class agent runtime** that turns named LLM agents into
+long-running, observable, sandbox-able workers. Everything still
+lives on top of the same `tb_command` tool surface, the same run
+index, and the same tmux primitives — but an agent is now a
+persistent record you can run, schedule, compose, and audit.
+
+**Agents**
+
+```bash
+# Add an agent (reads API key from stdin)
+printf '%s' "$ANTHROPIC_API_KEY" | tb agent add opus --api-key-stdin
+printf '%s' "$OPENAI_API_KEY"    | tb agent add gpt  --api-key-stdin
+
+# Run one-shot against a prompt
+tb agent opus "snapshot every tmux session and report idle ones"
+
+# Or open a persistent REPL (conversation + knowledge base + context)
+tb agent repl opus
+```
+
+Provider, model, base URL, and wire API are per-agent; switching from
+Anthropic to OpenAI to Kimi to MiniMax is a config-file change, not a
+code change.
+
+**Isolation**
+
+Each agent picks its sandbox mode: `host` (default), `worktree`
+(git-worktree isolation for task work), or `docker` (a short-lived
+container with its own tmux server inside). Docker mode is
+**fail-closed** — a missing daemon or a startup failure is a hard
+error, never a silent fallback to the host.
+
+**Modes**
+
+Long-running postures above the single-shot runner:
+
+- **Cycle** — one planning-then-execute turn per invocation. The
+  agent produces a short plan, then runs against that plan with the
+  normal tool budget.
+- **Work** — file-backed task queue runner. One task per line;
+  `.done` sibling makes it resumable across restarts.
+
+Each mode surfaces as both a CLI verb (`tb agent cycle`,
+`tb agent work`) and a dashboard button.
+
+**Conductor rule engine**
+
+Composite policy above per-event hooks: rolling-window counters
+("three failures within one hour"), cross-agent routing
+("on sonnet rate-limit, retry on opus"), and a decision log that
+records every firing so you can always answer *why* something
+happened.
+
+**Observability**
+
+Every run — CLI, REPL, scheduler, conductor, cycle, work, retry —
+lands in the same JSONL run index with its origin tagged, searchable
+from the Runs section of the dashboard. Per-agent idle detection
+uses a content-hash of each session's pipe-pane log, not tmux's
+cursor-activity proxy.
+
+**Extensible tool surface**
+
+Agents default to a single `tb_command` tool. A small registry
+(`lib/agent_tool_registry.py`) lets you add more — the first non-`tb`
+tool, `read_file`, ships today with bounded args and a path
+blocklist that matches Docker-mode mount validation. Per-agent
+`tools: [...]` declares what's enabled; everything else is rejected
+at dispatch with a clean error.
+
+See `docs/tb.md` for the full command surface and
+`docs/dashboard.md` for the UI.
+
 ## Same sessions, any device on your LAN
 
 The dashboard binds `0.0.0.0` by default, so every terminal you see in the
