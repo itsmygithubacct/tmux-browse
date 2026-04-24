@@ -167,6 +167,14 @@ function renderAgentsPane() {
             ),
             el("div", { class: "agent-card-status" },
                 el("span", { class: `agent-status-badge s-${st}` }, agentStatusLabel(st)),
+                row.mode
+                    ? el("span", {
+                        class: "agent-status-badge s-idle",
+                        title: "mode detected from most recent run's origin",
+                      }, row.mode_phase
+                          ? `${row.mode} / ${row.mode_phase}`
+                          : row.mode)
+                    : el("span"),
                 row.budget_status === "warn"
                     ? el("span", { class: "agent-status-badge s-rate_limited" }, "Budget Warning")
                     : row.budget_status === "stop"
