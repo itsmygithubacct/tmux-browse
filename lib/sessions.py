@@ -43,7 +43,7 @@ class PaneInfo(TypedDict, total=False):
 
 _SESSION_FORMAT = (
     "#{session_name}\t#{session_windows}\t#{session_attached}"
-    "\t#{session_created}\t#{session_activity}"
+    "\t#{session_created}\t#{session_activity}\t#{session_group}"
 )
 _PANE_FORMAT = (
     "#{session_name}\t#{window_index}\t#{window_name}\t#{pane_index}"
@@ -89,19 +89,41 @@ def list_sessions() -> list[Session]:
         return []
     if r.returncode != 0:
         return []
-    out: list[Session] = []
+    # ttyd_wrap.sh creates a per-viewer grouped session (same session group,
+    # different name) so each browser tab can size its own windows. Those
+    # viewer sessions shouldn't appear in the dashboard or CLI listing as
+    # if they were separate work — dedupe each session group to a single
+    # entry, preferring the primary (session name == group name). If no
+    # primary exists, any one viewer entry survives so the underlying work
+    # is still reachable.
+    raw: list[tuple[Session, str]] = []  # (row, group)
     for line in r.stdout.splitlines():
         parts = line.split("\t")
-        if len(parts) != 5:
+        if len(parts) != 6:
             continue
-        name, windows, attached, created, activity = parts
-        out.append({
-            "name": name,
-            "windows": int(windows),
-            "attached": int(attached),
-            "created": int(created),
-            "activity": int(activity),
-        })
+        name, windows, attached, created, activity, group = parts
+        raw.append((
+            {
+                "name": name,
+                "windows": int(windows),
+                "attached": int(attached),
+                "created": int(created),
+                "activity": int(activity),
+            },
+            group,
+        ))
+    by_group: dict[str, Session] = {}
+    out: list[Session] = []
+    for row, group in raw:
+        if not group:
+            out.append(row)
+            continue
+        existing = by_group.get(group)
+        # Primary (name == group) always wins; otherwise first-seen view
+        # holds the slot until a primary or we're done.
+        if existing is None or row["name"] == group:
+            by_group[group] = row
+    out.extend(by_group.values())
     out.sort(key=lambda s: s["name"])
     return out
 

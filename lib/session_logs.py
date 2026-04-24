@@ -60,13 +60,10 @@ def _list_panes(session: str) -> list[str]:
 
 
 def _list_sessions() -> list[str]:
-    r = subprocess.run(
-        ["tmux", "list-sessions", "-F", "#{session_name}"],
-        capture_output=True, text=True, timeout=5,
-    )
-    if r.returncode != 0:
-        return []
-    return [line.strip() for line in r.stdout.splitlines() if line.strip()]
+    # Defer to sessions.list_sessions() so ttyd_wrap's per-viewer grouped
+    # sessions are deduped — we don't want empty log files for those.
+    from . import sessions
+    return [s["name"] for s in sessions.list_sessions()]
 
 
 def ensure_logging(session: str) -> None:
