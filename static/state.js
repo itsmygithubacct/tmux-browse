@@ -218,6 +218,7 @@ const state = {
     hotEditor: { open: false, slot: 0, session: "" },
     idleAlerts: loadJSON(IDLE_KEY, {}),
     groups: normalizeGroups(loadJSON(GROUPS_KEY, {})),
+    agentHooksForShare: null,
     idleRuntime: {},
     idleEditor: { open: false, session: "" },
     splitPicker: { open: false, session: "", filter: "" },

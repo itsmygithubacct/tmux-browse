@@ -511,7 +511,12 @@ async function removeAgentConfig() {
 
 async function loadHooks() {
     const r = await api("GET", "/api/agent-hooks");
-    if (r.ok) renderHooksEditor(r.hooks || {});
+    if (r.ok) {
+        // Cache the hook config for QR/link share. This is purely a read
+        // cache — the source of truth stays on disk via /api/agent-hooks.
+        state.agentHooksForShare = r.hooks || {};
+        renderHooksEditor(r.hooks || {});
+    }
 }
 
 function renderHooksEditor(hooks) {
