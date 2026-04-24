@@ -6,10 +6,23 @@ import argparse
 import sys
 from pathlib import Path
 
-from .. import agent_kb, agent_repl_context, agent_runner, agent_runtime, agent_store, dashboard_config, output
-from ..agent_modes import cycle as cycle_mode
-from ..agent_modes import work as work_mode
-from ..errors import UsageError
+from agent import (
+    kb as agent_kb,
+    repl_context as agent_repl_context,
+    runner as agent_runner,
+    runtime as agent_runtime,
+    store as agent_store,
+)
+from agent.modes import cycle as cycle_mode
+from agent.modes import work as work_mode
+from lib import dashboard_config, output
+from lib.errors import UsageError
+
+
+def register_verb():
+    """Entry point the core loader calls. Maps the ``agent`` verb to
+    :func:`cmd_agent`, the argparse-style dispatch used by ``tb.py``."""
+    return {"agent": cmd_agent}
 
 
 class _Parser(argparse.ArgumentParser):

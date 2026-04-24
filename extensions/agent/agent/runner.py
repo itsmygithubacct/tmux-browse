@@ -11,23 +11,23 @@ from pathlib import Path
 from typing import Any
 
 from . import (
-    agent_budgets,
-    agent_costs,
-    agent_hooks,
-    agent_logs,
-    agent_providers,
-    agent_run_index,
-    agent_tool_registry,
-    docker_sandbox,
+    budgets as agent_budgets,
+    costs as agent_costs,
+    hooks as agent_hooks,
+    logs as agent_logs,
+    providers as agent_providers,
+    run_index as agent_run_index,
+    tool_registry as agent_tool_registry,
 )
-from .agent_runs import (
+from lib import docker_sandbox
+from .runs import (
     STATUS_COMPLETED,
     STATUS_FAILED,
     STATUS_RATE_LIMITED,
     STATUS_STARTED,
     new_run_id,
 )
-from .errors import TmuxFailed, UsageError
+from lib.errors import TmuxFailed, UsageError
 
 
 SYSTEM_PROMPT = """You are a tmux operations agent embedded in tb.py.
@@ -259,14 +259,14 @@ def run_agent(agent: dict[str, Any], prompt: str, *,
     # the model's system prompt.
     if repl_context:
         try:
-            from . import agent_repl_context
+            from . import repl_context
             system_prompt = system_prompt + agent_repl_context.render_block(repl_context)
         except Exception:
             pass
     agent_name = agent.get("name") or ""
     if agent_name:
         try:
-            from . import agent_kb
+            from . import kb
             system_prompt = system_prompt + agent_kb.render_block(agent_name)
         except Exception:
             pass

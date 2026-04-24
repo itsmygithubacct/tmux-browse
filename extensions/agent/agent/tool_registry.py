@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from . import docker_sandbox
+from lib import docker_sandbox
 
 
 READ_FILE_MAX_BYTES = 64 * 1024
@@ -60,7 +60,7 @@ class ToolSpec:
 # -----------------------------------------------------------------------------
 
 def _tb_command_host(repo_root, args, stdin):
-    from . import agent_runner
+    from . import runner
     return agent_runner._run_tb_command(repo_root, args, stdin)
 
 

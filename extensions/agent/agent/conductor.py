@@ -49,7 +49,7 @@ import threading
 import time
 from typing import Any
 
-from . import config
+from lib import config
 
 VALID_ACTIONS = {"log", "retry", "pause_workflow", "notify", "run_agent"}
 _WINDOW_RE = re.compile(r"^\s*(\d+)\s*([smhd])\s*$", re.IGNORECASE)
@@ -255,13 +255,13 @@ def _dispatch(actions: list[dict[str, Any]], *,
             if verb == "log":
                 continue  # decision log entry itself is the record
             if verb == "notify":
-                from . import agent_hooks
+                from . import hooks as agent_hooks
                 agent_hooks._append_notification(
                     "conductor", action.get("agent", agent),
                     context.get("run_id", ""),
                     str(action.get("message") or ""))
             elif verb == "pause_workflow":
-                from . import agent_hooks
+                from . import hooks as agent_hooks
                 agent_hooks._pause_agent_workflow(action.get("agent", agent))
             elif verb == "retry":
                 # retry semantics live in agent_runner's existing hook
@@ -295,7 +295,8 @@ def _dispatch_run_agent(action: dict[str, Any], *,
 
     def _run():
         try:
-            from . import agent_runner, agent_store, config as _cfg
+            from . import runner as agent_runner, store as agent_store
+            from lib import config as _cfg
             ag = agent_store.get_agent(target)
             agent_runner.run_agent(
                 ag, prompt,

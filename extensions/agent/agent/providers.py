@@ -16,7 +16,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from .errors import AuthError, StateError, UsageError
+from lib.errors import AuthError, StateError, UsageError
 
 
 @dataclass

@@ -27,8 +27,8 @@ import json
 import time
 from typing import Any
 
-from . import config
-from .errors import StateError
+from lib import config
+from lib.errors import StateError
 
 
 INDEX_FILE = config.STATE_DIR / "agent-run-index.jsonl"

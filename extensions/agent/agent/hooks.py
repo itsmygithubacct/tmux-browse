@@ -12,7 +12,8 @@ import json
 import time
 from typing import Any
 
-from . import agent_workflows, config
+from . import workflows as agent_workflows
+from lib import config
 
 
 HOOKS_FILE = config.AGENT_HOOKS_FILE
@@ -101,7 +102,7 @@ def execute(event_type: str, agent_name: str, *,
     # Also fan the event into the conductor's rule engine so cross-event
     # policy (rolling-window counters, cross-agent routing) can react.
     try:
-        from . import agent_conductor
+        from . import conductor
         agent_conductor.record_event(
             event_type, agent_name,
             context={"run_id": run_id, "prompt": prompt, "error": error})

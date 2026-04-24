@@ -7,9 +7,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import config
-from .agent_runs import LOG_SCHEMA_VERSION
-from .errors import StateError
+from lib import config
+from .runs import LOG_SCHEMA_VERSION
+from lib.errors import StateError
 
 
 def log_path(name: str) -> Path:
