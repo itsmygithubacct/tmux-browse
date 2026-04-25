@@ -83,7 +83,6 @@ def _render(js: str) -> str:
     <button class="btn red" id="os-restart-btn" title="restart the dashboard server process" style="margin-left:auto" hidden>&#x23FB;</button>
     <!--slot:topbar_extras-->
 </div>
-<div id="raw-shells"></div>
 <div id="sessions"></div>
 <div id="sessions-groups"></div>
 <details id="hidden-wrap" class="hidden-list" hidden>
