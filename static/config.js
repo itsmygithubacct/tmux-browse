@@ -54,6 +54,10 @@ function configFieldMap() {
         show_wc_close: document.getElementById("cfg-show-wc-close"),
         show_wc_maximize: document.getElementById("cfg-show-wc-maximize"),
         show_wc_minimize: document.getElementById("cfg-show-wc-minimize"),
+        show_wc_step_plus_w: document.getElementById("cfg-show-wc-step-plus-w"),
+        show_wc_step_plus_h: document.getElementById("cfg-show-wc-step-plus-h"),
+        show_wc_step_minus_w: document.getElementById("cfg-show-wc-step-minus-w"),
+        show_wc_step_minus_h: document.getElementById("cfg-show-wc-step-minus-h"),
         show_wc_hide_icon: document.getElementById("cfg-show-wc-hide-icon"),
         show_wc_log_icon: document.getElementById("cfg-show-wc-log-icon"),
         show_wc_idle_icon: document.getElementById("cfg-show-wc-idle-icon"),
@@ -159,7 +163,7 @@ const SUMMARY_TOGGLE_KEYS = [
     "show_idle_text", "show_idle_alert_button", "show_summary_open",
     "show_summary_log", "show_summary_scroll", "show_summary_split",
     "show_summary_hide", "show_summary_reorder", "show_summary_move",
-    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon", "show_wc_scroll_icon", "show_wc_move_icon",
+    "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon", "show_wc_scroll_icon", "show_wc_move_icon", "show_wc_step_plus_w", "show_wc_step_plus_h", "show_wc_step_minus_w", "show_wc_step_minus_h",
 ];
 const BODY_TOGGLE_KEYS = [
     "show_body_launch", "show_body_stop", "show_body_kill",
@@ -371,6 +375,10 @@ function applyDashboardConfigToPane(rec) {
     setVisible(rec.wcClose, cfg.show_wc_close, "inline-flex");
     setVisible(rec.wcMaximize, cfg.show_wc_maximize, "inline-flex");
     setVisible(rec.wcMinimize, cfg.show_wc_minimize, "inline-flex");
+    setVisible(rec.wcPlusW, cfg.show_wc_step_plus_w, "inline-flex");
+    setVisible(rec.wcPlusH, cfg.show_wc_step_plus_h, "inline-flex");
+    setVisible(rec.wcMinusW, cfg.show_wc_step_minus_w, "inline-flex");
+    setVisible(rec.wcMinusH, cfg.show_wc_step_minus_h, "inline-flex");
     setVisible(rec.hideIconBtn, cfg.show_wc_hide_icon, "inline-flex");
     setVisible(rec.logIconBtn, cfg.show_wc_log_icon, "inline-flex");
     setVisible(rec.scrollIconBtn, cfg.show_wc_scroll_icon, "inline-flex");
