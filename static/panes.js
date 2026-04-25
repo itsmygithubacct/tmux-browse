@@ -36,6 +36,37 @@ async function resizePane(session, cols) {
     rec.iframeWrap.style.height = cur === maxH ? defaultH : maxH;
 }
 
+// Approximate ttyd/xterm.js cell size at the default font (Menlo 13pt).
+// Real ttyd reports a wider range (8-10 px wide, 16-19 px tall) depending
+// on the browser; the values below are conservative middle estimates so
+// the resulting tmux window slightly under-fills rather than over-flows
+// the iframe (over-fill produces an unreachable scrollbar inside the
+// embedded terminal).
+const TTYD_CELL_W_PX = 9;
+const TTYD_CELL_H_PX = 18;
+
+// Resize the tmux window to match the iframe's actual dimensions so the
+// embedded terminal fills its visible area instead of leaving blank
+// borders. Used by both the maximize button and the dedicated tmux-
+// resize chrome icon.
+async function fitTmuxToIframe(session) {
+    const rec = state.nodes.get(session);
+    if (!rec || !rec.iframeWrap || !rec.iframe) return;
+    const w = rec.iframe.clientWidth || rec.iframeWrap.clientWidth;
+    const h = rec.iframe.clientHeight || rec.iframeWrap.clientHeight;
+    if (!w || !h) return;
+    const cols = Math.max(20, Math.min(500, Math.floor(w / TTYD_CELL_W_PX)));
+    const rows = Math.max(5, Math.min(200, Math.floor(h / TTYD_CELL_H_PX)));
+    const r = await api("POST", "/api/session/resize", { session, cols, rows });
+    const msg = document.getElementById("msg-" + cssId(session));
+    if (msg) {
+        msg.textContent = r.ok
+            ? `tmux window → ${cols}×${rows}`
+            : ("resize error: " + (r.error || "unknown"));
+        msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
+    }
+}
+
 async function launch(session) {
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) msg.textContent = "starting…";
@@ -1257,25 +1288,34 @@ function createPane(s) {
         title: "minimize (furl pane)",
         onclick: (e) => { e.preventDefault(); e.stopPropagation(); if (details.open) details.open = false; },
     }, "\u2013");
-    // Standalone tmux-resize (zoom) button, sits to the LEFT of the
-    // maximize chrome icon. Same effect as C-b z (resize-pane -Z).
+    // Standalone tmux-resize button \u2014 fits the tmux window dimensions
+    // to the iframe's actual pixel area (cols/rows derived from xterm
+    // cell size). The previous ``resize-pane -Z`` toggle was a no-op
+    // for the common single-pane window case, so this is the action
+    // operators actually want here.
     const wcTmuxResize = el("button", {
         class: "wc-btn wc-tmux-resize", type: "button",
-        title: "tmux resize-pane -Z (toggle pane zoom)",
-        onclick: (e) => { e.preventDefault(); e.stopPropagation(); zoomPane(s.name); },
+        title: "fit tmux window dimensions to the iframe area",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); fitTmuxToIframe(s.name); },
     });
     wcTmuxResize.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4"/><path d="M14 6V2h-4"/><path d="M2 10v4h4"/><path d="M14 10v4h-4"/></svg>';
     const wcMaximize = el("button", {
         class: "wc-btn wc-maximize", type: "button",
-        title: "maximize (resize iframe to 160 columns + tmux zoom)",
+        title: "maximize: stretch iframe to 90vh and fit tmux to it",
         onclick: (e) => {
             e.preventDefault();
             e.stopPropagation();
-            // Browser-side iframe resize AND tmux pane-zoom together so
-            // the embedded terminal actually reflows to fill the new
-            // width.
-            resizePane(s.name, 160);
-            zoomPane(s.name);
+            // Step 1: grow the iframe wrapper to (almost) the full
+            // viewport. Step 2: wait one frame for the layout to
+            // settle, then resize tmux to match the new iframe area.
+            const rec = state.nodes.get(s.name);
+            if (rec && rec.iframeWrap) {
+                const cur = rec.iframeWrap.style.height;
+                const maxH = "90vh";
+                const defaultH = `${state.config.default_ttyd_height_vh || 70}vh`;
+                rec.iframeWrap.style.height = cur === maxH ? defaultH : maxH;
+            }
+            requestAnimationFrame(() => fitTmuxToIframe(s.name));
         },
     }, "\u25a1");
     // Raw shells aren't tmux \u2014 closing them stops the ttyd directly
