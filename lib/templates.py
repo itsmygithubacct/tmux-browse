@@ -217,6 +217,10 @@ def _render(js: str) -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-close" /><span>Close (x)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-maximize" /><span>Maximize</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-minimize" /><span>Minimize</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-step-plus-w" /><span>+W (grow iframe width)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-step-plus-h" /><span>+H (grow iframe height)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-step-minus-w" /><span>-W (shrink iframe width)</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-wc-step-minus-h" /><span>-H (shrink iframe height)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-hide-icon" /><span>Hide (incognito)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-move-icon" /><span>Move-to (folder-arrow)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-log-icon" /><span>Log (document)</span></label>

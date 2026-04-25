@@ -36,6 +36,38 @@ async function resizePane(session, cols) {
     rec.iframeWrap.style.height = cur === maxH ? defaultH : maxH;
 }
 
+// Step sizes for the ±W / ±H buttons next to the fit icon. Roughly
+// 10 cells of width and 3 cells of height at the default cell metrics
+// (7.7 × 17 px) — small enough to feel like fine-tuning, large enough
+// that one click is visibly different.
+const STEP_PX_W = 80;
+const STEP_PX_H = 60;
+
+// Adjust the iframe wrapper's pixel size in one axis, then re-fit
+// tmux to the new dimensions. Bottom of the iframe is the only
+// edge that can grow vertically without affecting other panes;
+// horizontal grow goes beyond the layout row's natural share, which
+// is intentional — operators who want a single pane wider can
+// override the row's even-share behavior by hand.
+function stepIframeSize(session, axis, deltaPx) {
+    const rec = state.nodes.get(session);
+    if (!rec || !rec.iframeWrap) return;
+    const wrap = rec.iframeWrap;
+    if (axis === "w") {
+        // Anchor to current pixel width before applying delta — without
+        // this the very first click loses the percentage-based default.
+        const curW = wrap.getBoundingClientRect().width;
+        const next = Math.max(160, Math.round(curW + deltaPx));
+        wrap.style.width = next + "px";
+        wrap.style.maxWidth = "none";  // override layout-row constraints
+    } else if (axis === "h") {
+        const curH = wrap.getBoundingClientRect().height;
+        const next = Math.max(120, Math.round(curH + deltaPx));
+        wrap.style.height = next + "px";
+    }
+    requestAnimationFrame(() => fitTmuxToIframe(session));
+}
+
 // Resize the tmux window to match the iframe's actual dimensions so the
 // embedded terminal fills its visible area instead of leaving blank
 // borders. Used by both the maximize button and the dedicated tmux-
@@ -1278,6 +1310,24 @@ function createPane(s) {
         title: "minimize (furl pane)",
         onclick: (e) => { e.preventDefault(); e.stopPropagation(); if (details.open) details.open = false; },
     }, "\u2013");
+    // Step buttons \u2014 adjust the iframe wrapper's pixel dimensions in
+    // fixed increments, then run fit-to-iframe so tmux dimensions
+    // catch up. Width is bounded to the parent layout row's width;
+    // overshooting just clips. Height is unbounded.
+    const mkStepBtn = (label, title, axis, delta) => {
+        const btn = el("button", {
+            class: "wc-btn wc-step", type: "button", title,
+            onclick: (e) => {
+                e.preventDefault(); e.stopPropagation();
+                stepIframeSize(s.name, axis, delta);
+            },
+        }, label);
+        return btn;
+    };
+    const wcMinusW = mkStepBtn("-w", "shrink iframe width by " + STEP_PX_W + "px", "w", -STEP_PX_W);
+    const wcPlusW  = mkStepBtn("+w", "grow iframe width by "   + STEP_PX_W + "px", "w", +STEP_PX_W);
+    const wcMinusH = mkStepBtn("-h", "shrink iframe height by " + STEP_PX_H + "px", "h", -STEP_PX_H);
+    const wcPlusH  = mkStepBtn("+h", "grow iframe height by "   + STEP_PX_H + "px", "h", +STEP_PX_H);
     // Standalone tmux-resize button \u2014 fits the tmux window dimensions
     // to the iframe's actual pixel area (cols/rows derived from xterm
     // cell size). The previous ``resize-pane -Z`` toggle was a no-op
@@ -1319,7 +1369,8 @@ function createPane(s) {
         onclick: (e) => { e.preventDefault(); e.stopPropagation(); closeAction(); },
     }, "\u00d7");
     const wcControls = el("span", { class: "wc-controls" },
-        wcMinimize, wcTmuxResize, wcMaximize, wcClose);
+        wcMinimize, wcMinusW, wcPlusW, wcMinusH, wcPlusH,
+        wcTmuxResize, wcMaximize, wcClose);
 
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
@@ -1529,6 +1580,7 @@ function createPane(s) {
         summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize, wcTmuxResize,
+        wcPlusW, wcMinusW, wcPlusH, wcMinusH,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
         iframe, iframeWrap, sendBar, sendStatus, phoneKeys, fPort, fPid, fCreated, footer,
         hotPairs,
