@@ -16,15 +16,15 @@ async function loadExtensions() {
     const r = await api("GET", "/api/extensions");
     if (!r || !r.ok) return;
     state.extensions = r.extensions || [];
-    // If any row comes back with restart_pending=true (server-side
-    // memory), reflect that into the banner counter.
+    // Trust the server's per-extension ``restart_pending`` flag as the
+    // source of truth. The dict is in-memory on the server and gets
+    // wiped on dashboard restart, so a fresh count after restart
+    // correctly drops to 0.
     let pending = 0;
     for (const row of state.extensions) {
         if (row.restart_pending) pending += 1;
     }
-    if (pending > 0 && state.extensionsPendingRestart === 0) {
-        state.extensionsPendingRestart = pending;
-    }
+    state.extensionsPendingRestart = pending;
     renderExtensionsCard();
     renderRestartBanner();
 }
@@ -195,7 +195,6 @@ async function manageUpdate() {
         return;
     }
     if (r.changed) {
-        state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
         state.extensionsBannerDismissed = false;
         setManageStatus(`Updated ${r.from_version || "?"} → ${r.to_version}. Restart to activate.`);
     } else {
@@ -218,7 +217,6 @@ async function manageToggle() {
         setManageStatus("");
         return;
     }
-    state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
     state.extensionsBannerDismissed = false;
     setManageStatus(`${verb.charAt(0).toUpperCase() + verb.slice(1)}d. Restart to activate.`);
     await loadExtensions();
@@ -246,7 +244,6 @@ async function manageUninstall() {
         setManageStatus("");
         return;
     }
-    state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
     state.extensionsBannerDismissed = false;
     const removed = (r.summary && r.summary.state_removed) || [];
     const tail = removeState
@@ -298,7 +295,6 @@ async function installExtension(name) {
         return;
     }
     delete state.extensionRowError[name];
-    state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
     state.extensionsBannerDismissed = false;
     await loadExtensions();
 }
@@ -313,7 +309,6 @@ async function enableExtension(name) {
         return;
     }
     delete state.extensionRowError[name];
-    state.extensionsPendingRestart = (state.extensionsPendingRestart || 0) + 1;
     state.extensionsBannerDismissed = false;
     await loadExtensions();
 }

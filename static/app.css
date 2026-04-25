@@ -49,7 +49,12 @@ h1 {
     display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
     margin-bottom: 1rem;
 }
-.ext-restart-banner {
+/* ``:not([hidden])`` — the HTML5 ``hidden`` attribute applies
+   ``display: none``, but a base ``display: flex`` here would
+   override it and keep the banner visible at all times. Constrain
+   the flex layout to the not-hidden state so JS toggling
+   ``node.hidden`` actually shows/hides the bar. */
+.ext-restart-banner:not([hidden]) {
     display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
     margin-bottom: 0.75rem; padding: 0.55rem 0.75rem;
     border: 1px solid var(--green); border-radius: 4px;
