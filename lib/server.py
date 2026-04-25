@@ -573,21 +573,29 @@ class Handler(BaseHTTPRequestHandler):
     def _h_session_resize(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("session") or "").strip()
         cols = int(body.get("cols") or 0)
+        # ``rows`` is optional — old callers only sent ``cols`` and got a
+        # window-width-only resize; the new fit-to-iframe button on the
+        # dashboard sends both so the terminal actually fills its
+        # container vertically too.
+        rows = int(body.get("rows") or 0)
         if not name:
             self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
             return
         if cols < 20 or cols > 500:
             self._send_json({"ok": False, "error": "cols must be 20-500"}, status=400)
             return
+        if rows and (rows < 5 or rows > 200):
+            self._send_json({"ok": False, "error": "rows must be 5-200"}, status=400)
+            return
         import subprocess
-        r = subprocess.run(
-            ["tmux", "resize-window", "-t", f"={name}", "-x", str(cols)],
-            capture_output=True, text=True, timeout=10,
-        )
+        argv = ["tmux", "resize-window", "-t", f"={name}", "-x", str(cols)]
+        if rows:
+            argv += ["-y", str(rows)]
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=10)
         if r.returncode != 0:
             self._send_json({"ok": False, "error": r.stderr.strip() or "resize failed"}, status=400)
             return
-        self._send_json({"ok": True})
+        self._send_json({"ok": True, "cols": cols, "rows": rows or None})
 
     def _h_session_scroll(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("session") or "").strip()
