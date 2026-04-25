@@ -438,7 +438,6 @@ All JSON responses use a stable `{ok, …}` envelope.
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
 | GET    | `/api/extensions`   | — | `{ok, extensions: [{name, label, description, repo, installed, enabled, version, submodule, restart_pending, last_error}, …]}` |
 | GET    | `/api/extensions/available` | — | `{ok, available}` — full catalog |
-| GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
 | POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
 | POST   | `/api/ttyd/raw`     | `{}` | `{ok, port, pid, name, scheme, url}` — launches a standalone shell ttyd |
 | POST   | `/api/ttyd/stop`    | `{session}` | `{ok, pid?, already_stopped?}` |
