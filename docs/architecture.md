@@ -24,6 +24,8 @@ the way."
 
 ## Module map
 
+Core (everything in this repo):
+
 ```
 lib/config.py              ports + paths (one place to tune)
 lib/dashboard_config.py    validated dashboard UI config file helpers
@@ -32,55 +34,61 @@ lib/sessions.py            everything tmux-related (enumerate, capture, send)
 lib/session_logs.py        per-session pipe-pane capture + SHA-256 tail hashing for idle
 lib/ttyd.py                spawn/stop/track per-session ttyd, PID files, port probes
 lib/ttyd_installer.py      fetch the ttyd static binary from GitHub releases
-lib/server.py              http.server handler + JSON API + scheduler lifecycle
-lib/templates.py           dashboard HTML
-lib/static.py              asset loader for static/app.css + static/app.js
+lib/server.py              http.server handler + JSON API + extension dispatch
+lib/templates.py           dashboard HTML + slot substitution for extension UI
+lib/static.py              asset loader; concatenates core JS + extension JS bundles
 lib/targeting.py           Target dataclass + parser for session[:window[.pane]]
 lib/errors.py              typed exceptions → stable exit codes
 lib/output.py              table/JSON emitters with TTY-aware colour
 lib/exec_runner.py         `tb exec` sentinel + idle strategies
 lib/auth.py                optional Bearer-token auth
 lib/tls.py                 optional TLS: cert/key resolve, SSLContext builder
-lib/agent_store.py         secure agent metadata + API-key + sandbox persistence
-lib/agent_providers.py     wire-API adapters (openai-chat, anthropic-messages)
-lib/agent_runner.py        LLM tool-use loop with run_id, lifecycle events, cost tracking
-lib/agent_runtime.py       conversation session management (create, load, fork, clear)
-lib/agent_conversations.py append-only JSONL conversation turn storage
-lib/agent_logs.py          per-agent execution log with schema versioning
-lib/agent_run_index.py     searchable run index (agent, status, time, text, tool)
-lib/agent_runs.py          run_id generation + lifecycle status constants
-lib/agent_status.py        live status derivation from logs + workflow config
-lib/agent_costs.py         per-run token/cost tracking with per-agent + daily totals
-lib/agent_scheduler.py     background daemon thread for server-side workflow execution
-lib/agent_scheduler_lock.py PID-based file lock for single-owner scheduling
-lib/agent_workflows.py     workflow schedule config (load/save/normalize)
-lib/agent_workflow_runs.py workflow execution history + per-workflow runtime state
-lib/tasks.py               optional task abstraction (title, repo, worktree, agent)
-lib/worktrees.py           git worktree create/list/remove helpers
-lib/qr.py                  pure-Python QR code generator (Reed-Solomon, no deps)
-lib/tb_cmds/               one module per tb verb group (read/write/lifecycle/agent/…)
+lib/tasks.py               lightweight task store (title, repo, agent ref)
+lib/extensions/            extension loader + catalog + submodule helpers
+lib/extensions/__main__.py argparse driver behind ``python3 -m lib.extensions``
+lib/tb_cmds/               one module per core tb verb group (read/write/lifecycle/observe/web/bulk/config_cmd)
 ```
 
-Frontend JS is split into 10 focused modules under `static/`, concatenated
-at import time by `lib/static.py` into one inlined `<script>` block:
+Optional modules ship as submodules under `extensions/`, each pinned at
+a tag in core's `.gitmodules`. Catalog entries live in
+`lib/extensions/catalog.py`:
+
+```
+extensions/agent/          tmux-browse-agent — LLM agents, REPL, conductor,
+                           workflow scheduler, cycle/work modes, knowledge
+                           base, agent CRUD UI, /api/agent-* endpoints
+extensions/sandbox/        tmux-browse-sandbox — Docker execution sandbox
+                           (library-only; agent imports it when an agent
+                           is configured with sandbox: docker)
+extensions/qr/             tmux-browse-qr — QR config sharing (Show QR /
+                           Read QR buttons, /api/qr endpoint)
+```
+
+Frontend JS in core is concatenated at import time by `lib/static.py`
+into one inlined `<script>` block:
 
 ```
 static/util.js             DOM helpers, formatting, API wrapper
 static/state.js            constants, normalizers, global state object
 static/config.js           config form, apply, load/save, lock
 static/audio.js            idle alert sound synthesis
-static/agents.js           agent CRUD, status badges, steps, workflows
-static/tasks.js            task CRUD
-static/runs.js             run search and display
 static/phone-keys.js       mobile key customization with drag-to-reorder
-static/sharing.js          QR config transfer, connected endpoints
+static/sharing.js          ?import-cfg URL handling, view-config serializer
 static/panes.js            pane builder, layout, drag-drop, modals, refresh, init
+static/extensions.js       Config > Extensions card, install/manage modal, restart banner
 ```
+
+When extensions are loaded, each one's `static/*.js` is appended to
+the bundle after a `window.__tbExtensions = window.__tbExtensions || []`
+footer, so extension code can register against core globals safely.
 
 Entry points:
 
 - `tmux_browse.py` — dashboard CLI (serve, list, ports, start/stop ttyd, …)
-- `tb.py` — general CLI, thin dispatch over `lib/tb_cmds/`
+- `tb.py` — general CLI, thin dispatch over `lib/tb_cmds/` plus
+  whichever verbs each enabled extension's `tb_cmds/` registers
+- `python3 -m lib.extensions` / `make {install,update,enable,disable,uninstall}-agent`
+  — headless extension management
 
 ## Why `http.server` instead of a framework
 
