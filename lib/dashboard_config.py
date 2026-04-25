@@ -80,6 +80,15 @@ DEFAULTS: dict[str, Any] = {
     "show_wc_close": True,
     "show_wc_maximize": True,
     "show_wc_minimize": False,
+    # Iframe size step buttons. ±W / ±H sit in the window-chrome row
+    # left of the maximize square. The plus side ships on by default
+    # (the common operation: "this pane is too small"); the minus
+    # side ships off so the chrome stays compact for operators who
+    # rarely need to shrink a pane.
+    "show_wc_step_plus_w": True,
+    "show_wc_step_plus_h": True,
+    "show_wc_step_minus_w": False,
+    "show_wc_step_minus_h": False,
     "show_body_launch": True,
     "show_body_stop": True,
     "show_body_kill": True,
