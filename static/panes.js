@@ -51,11 +51,118 @@ async function launch(session) {
     state.openPanes.add(session);
 }
 
-async function sendToPane(session, inputEl) {
+const SEND_QUEUE_COOLDOWN_SECONDS = 60;
+
+async function sendToPane(session, inputEl, countEl) {
     const text = inputEl.value.trim();
     if (!text) return;
+    const count = Math.max(1, Math.min(99, Number(countEl?.value) || 1));
     const r = await api("POST", "/api/session/type", { session, text });
-    if (r.ok) inputEl.value = "";
+    if (!r.ok) {
+        const msgEl = document.getElementById("msg-" + cssId(session));
+        if (msgEl) {
+            msgEl.textContent = "send error: " + (r.error || "unknown");
+            msgEl.className = "inline-msg err";
+        }
+        return;
+    }
+    inputEl.value = "";
+    if (count <= 1) return;
+    // Repeat sends are queued: each subsequent send waits for the
+    // pane to go idle plus a one-minute cooldown, with a re-check of
+    // idle right before sending. ``checkSendQueue`` runs on every
+    // refresh tick.
+    state.sendQueue = state.sendQueue || {};
+    state.sendQueue[session] = {
+        text,
+        remaining: count - 1,
+        idleConfirmedAt: 0,  // epoch seconds when current cooldown began
+        busy: false,
+    };
+    if (countEl) countEl.value = "1";
+    renderSendQueueStatus(session);
+}
+
+// Idle-gated repeat for ``sendToPane``. Walks any pending queues each
+// refresh tick and either advances them (idle confirmed → set
+// cooldown clock; cooldown elapsed AND still idle → fire next send;
+// remaining hits 0 → drop entry) or sits tight.
+async function checkSendQueue(rows) {
+    state.sendQueue = state.sendQueue || {};
+    if (!Object.keys(state.sendQueue).length) return;
+    const idleThreshold = state.config.hot_loop_idle_seconds || 5;
+    const now = Math.floor(Date.now() / 1000);
+    const byName = new Map(rows.map((r) => [r.name, r]));
+    for (const [session, entry] of Object.entries(state.sendQueue)) {
+        const row = byName.get(session);
+        if (!row) {
+            delete state.sendQueue[session];
+            renderSendQueueStatus(session);
+            continue;
+        }
+        if (entry.busy) continue;
+        const idleSecs = row.idle_seconds || 0;
+        if (idleSecs < idleThreshold) {
+            // Pane went active again — restart the cooldown clock so
+            // the next send waits a fresh minute.
+            entry.idleConfirmedAt = 0;
+            renderSendQueueStatus(session);
+            continue;
+        }
+        if (!entry.idleConfirmedAt) {
+            entry.idleConfirmedAt = now;
+            renderSendQueueStatus(session);
+            continue;
+        }
+        if (now - entry.idleConfirmedAt < SEND_QUEUE_COOLDOWN_SECONDS) {
+            renderSendQueueStatus(session);
+            continue;
+        }
+        // Re-check idle one more time right before sending.
+        if (idleSecs < idleThreshold) continue;
+        entry.busy = true;
+        try {
+            const r = await api("POST", "/api/session/type",
+                                { session, text: entry.text });
+            if (!r.ok) {
+                const msgEl = document.getElementById("msg-" + cssId(session));
+                if (msgEl) {
+                    msgEl.textContent = "queued send error: " + (r.error || "unknown");
+                    msgEl.className = "inline-msg err";
+                }
+                delete state.sendQueue[session];
+                renderSendQueueStatus(session);
+                continue;
+            }
+            entry.remaining = Math.max(0, entry.remaining - 1);
+            entry.idleConfirmedAt = 0;
+            if (entry.remaining === 0) {
+                delete state.sendQueue[session];
+            }
+        } finally {
+            entry.busy = false;
+        }
+        renderSendQueueStatus(session);
+    }
+}
+
+function renderSendQueueStatus(session) {
+    const rec = state.nodes.get(session);
+    if (!rec || !rec.sendStatus) return;
+    const entry = (state.sendQueue || {})[session];
+    if (!entry) {
+        rec.sendStatus.textContent = "";
+        return;
+    }
+    if (entry.busy) {
+        rec.sendStatus.textContent = `sending… (${entry.remaining} more queued)`;
+    } else if (!entry.idleConfirmedAt) {
+        rec.sendStatus.textContent = `${entry.remaining} more queued · waiting for idle`;
+    } else {
+        const left = Math.max(0,
+            SEND_QUEUE_COOLDOWN_SECONDS - (Math.floor(Date.now() / 1000) - entry.idleConfirmedAt));
+        rec.sendStatus.textContent = `${entry.remaining} more queued · idle, ${left}s cooldown`;
+    }
 }
 
 async function sendKeysToPane(session, keys) {
@@ -1017,7 +1124,7 @@ function createPane(s) {
         target: "_blank", rel: "noopener",
         title: "tmux scrollback for this session",
         onclick: stopSummaryToggle,
-        href: `/api/session/log?session=${encodeURIComponent(s.name)}`,
+        href: `/api/session/log?session=${encodeURIComponent(s.name)}&html=1`,
         style: "text-decoration:none",
     }, "Log");
     const logIconBtn = el("a", {
@@ -1025,7 +1132,7 @@ function createPane(s) {
         target: "_blank", rel: "noopener",
         title: "view tmux log (scrollback dump)",
         onclick: stopSummaryToggle,
-        href: `/api/session/log?session=${encodeURIComponent(s.name)}`,
+        href: `/api/session/log?session=${encodeURIComponent(s.name)}&html=1`,
     });
     logIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2 1h8l4 4v10H2V1zm8 0v4h4M4 8h8M4 11h6"/><path d="M2 1h8l4 4v10H2V1z" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1"/><line x1="4" y1="10.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/><line x1="4" y1="6" x2="8" y2="6" stroke="currentColor" stroke-width="1"/></svg>';
     const scrollBtn = el("button", {
@@ -1150,10 +1257,26 @@ function createPane(s) {
         title: "minimize (furl pane)",
         onclick: (e) => { e.preventDefault(); e.stopPropagation(); if (details.open) details.open = false; },
     }, "\u2013");
+    // Standalone tmux-resize (zoom) button, sits to the LEFT of the
+    // maximize chrome icon. Same effect as C-b z (resize-pane -Z).
+    const wcTmuxResize = el("button", {
+        class: "wc-btn wc-tmux-resize", type: "button",
+        title: "tmux resize-pane -Z (toggle pane zoom)",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); zoomPane(s.name); },
+    });
+    wcTmuxResize.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4"/><path d="M14 6V2h-4"/><path d="M2 10v4h4"/><path d="M14 10v4h-4"/></svg>';
     const wcMaximize = el("button", {
         class: "wc-btn wc-maximize", type: "button",
-        title: "maximize (resize to 160 columns)",
-        onclick: (e) => { e.preventDefault(); e.stopPropagation(); resizePane(s.name, 160); },
+        title: "maximize (resize iframe to 160 columns + tmux zoom)",
+        onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Browser-side iframe resize AND tmux pane-zoom together so
+            // the embedded terminal actually reflows to fill the new
+            // width.
+            resizePane(s.name, 160);
+            zoomPane(s.name);
+        },
     }, "\u25a1");
     // Raw shells aren't tmux \u2014 closing them stops the ttyd directly
     // instead of running ``tmux kill-session`` (which would error).
@@ -1165,7 +1288,8 @@ function createPane(s) {
         title: isRaw ? "close (stop ttyd shell)" : "close (kill session)",
         onclick: (e) => { e.preventDefault(); e.stopPropagation(); closeAction(); },
     }, "\u00d7");
-    const wcControls = el("span", { class: "wc-controls" }, wcMinimize, wcMaximize, wcClose);
+    const wcControls = el("span", { class: "wc-controls" },
+        wcMinimize, wcTmuxResize, wcMaximize, wcClose);
 
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
@@ -1243,9 +1367,21 @@ function createPane(s) {
         type: "text", class: "send-bar-input",
         placeholder: `Send to ${s.name}...`,
     });
-    const sendBtn = el("button", { class: "btn green", onclick: () => sendToPane(s.name, sendInput) }, "Send");
-    sendInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendToPane(s.name, sendInput); });
-    const sendBar = el("div", { class: "send-bar" }, sendInput, sendBtn);
+    const sendCount = el("input", {
+        type: "number", class: "send-bar-count",
+        min: "1", max: "99", step: "1", value: "1",
+        title: ("send N times — repeats wait for the pane to go idle "
+            + "plus a 60s cooldown, with a re-check before each send"),
+    });
+    const sendBtn = el("button",
+        { class: "btn green", onclick: () => sendToPane(s.name, sendInput, sendCount) },
+        "Send");
+    sendInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendToPane(s.name, sendInput, sendCount);
+    });
+    const sendStatus = el("span", { class: "send-bar-status dim" });
+    const sendBar = el("div", { class: "send-bar" },
+        sendInput, sendCount, sendBtn, sendStatus);
 
     const phoneKeys = el("div", { class: "phone-keys" },
         ...loadPhoneKeys().map((def) =>
@@ -1362,9 +1498,9 @@ function createPane(s) {
         details, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
         summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, zoomIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
-        wcClose, wcMaximize, wcMinimize,
+        wcClose, wcMaximize, wcMinimize, wcTmuxResize,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
-        iframe, iframeWrap, sendBar, phoneKeys, fPort, fPid, fCreated, footer,
+        iframe, iframeWrap, sendBar, sendStatus, phoneKeys, fPort, fPid, fCreated, footer,
         hotPairs,
     };
 }
@@ -1564,6 +1700,7 @@ async function refresh() {
     state.sessions = sessions;
     checkIdleAlerts(sessions);
     await checkHotLoops(sessions);
+    await checkSendQueue(sessions);
     const root = document.getElementById("sessions");
     const seen = new Set();
 
