@@ -68,53 +68,23 @@ async function openRawTtyd() {
         alert("Error: " + (r.error || "unknown"));
         return;
     }
-    appendRawShellPane({
-        name: r.name || "",
-        port: r.port,
-        scheme: r.scheme || "http",
-    });
-}
-
-function appendRawShellPane({ name, port, scheme }) {
-    const root = document.getElementById("raw-shells");
-    if (!root) return;
-    const url = `${scheme}://${window.location.hostname}:${port}/`;
-
-    const stopBtn = el("button",
-        { class: "btn red", type: "button", title: "stop the ttyd and close this pane" },
-        "Stop");
-    const openBtn = el("a",
-        { class: "btn", href: url, target: "_blank", rel: "noopener",
-          title: "open the raw shell in its own tab" },
-        "Open Direct");
-    const summary = el("summary", { class: "pane-summary" },
-        el("span", { class: "pane-name" }, `raw shell · ${name}`),
-        el("span", { class: "dim", style: "font-size:0.78rem;margin-left:0.5rem" },
-            `port ${port}`),
-        el("span", { style: "margin-left:auto;display:flex;gap:0.4rem" },
-            openBtn, stopBtn));
-
-    const iframe = el("iframe", {
-        class: "pane-iframe",
-        src: url,
-        allow: "clipboard-read; clipboard-write",
-        style: "width:100%;height:480px;border:0;background:#000",
-    });
-
-    const details = el("details", { class: "pane raw-shell-pane", open: "" },
-        summary, iframe);
-
-    stopBtn.addEventListener("click", async () => {
-        stopBtn.disabled = true;
-        stopBtn.textContent = "stopping…";
-        try {
-            await api("POST", "/api/ttyd/stop", { session: name });
-        } catch (_e) { /* best-effort */ }
-        details.remove();
-    });
-
-    root.appendChild(details);
-    iframe.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // The new shell appears in /api/sessions on the next refresh and
+    // gets rendered through the standard pane pipeline — same move /
+    // snap / drag affordances as a tmux pane.
+    if (r.name) {
+        state.openPanes.add(r.name);
+        if (!state.order.includes(r.name)) {
+            state.order.push(r.name);
+            saveOrder(state.order);
+        }
+    }
+    await refresh();
+    if (r.name) {
+        const rec = state.nodes.get(r.name);
+        if (rec && rec.details) {
+            rec.details.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+    }
 }
 
 async function enterCopyMode(session) {
@@ -959,6 +929,21 @@ async function killSession(session) {
     refresh();
 }
 
+// Counterpart to killSession for raw ttyd shells: there's no tmux
+// session to kill, just a ttyd process to stop. The pane is removed
+// on the next refresh because the server drops the shell from
+// /api/sessions when its pidfile is gone.
+async function stopRawShell(name) {
+    const r = await api("POST", "/api/ttyd/stop", { session: name });
+    const msg = document.getElementById("msg-" + cssId(name));
+    if (msg && r) {
+        msg.textContent = r.ok ? "stopped" : ("error: " + (r.error || ""));
+        msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
+    }
+    state.openPanes.delete(name);
+    refresh();
+}
+
 async function newSession() {
     const input = document.getElementById("new-name");
     const name = input.value.trim();
@@ -988,7 +973,12 @@ async function restartDashboard() {
 // iframes aren't torn down and rebuilt every 5 s.
 function createPane(s) {
     const id = cssId(s.name);
-    const sname = el("span", { class: "sname" }, s.name);
+    const isRaw = s.kind === "raw";
+    // Display label: raw shells get the friendly "shell · <uid>" prefix
+    // (the underlying name keeps its ``raw-shell-`` prefix because that's
+    // what every server-side pidfile / port-registry / stop call expects).
+    const displayName = isRaw ? `shell · ${s.name}` : s.name;
+    const sname = el("span", { class: "sname" }, displayName);
     const sbadges = el("span", { class: "sbadges" });
     const idle = el("span", { class: "dim" });
     const idleAlertBtn = el("button", {
@@ -1165,10 +1155,15 @@ function createPane(s) {
         title: "maximize (resize to 160 columns)",
         onclick: (e) => { e.preventDefault(); e.stopPropagation(); resizePane(s.name, 160); },
     }, "\u25a1");
+    // Raw shells aren't tmux \u2014 closing them stops the ttyd directly
+    // instead of running ``tmux kill-session`` (which would error).
+    const closeAction = isRaw
+        ? () => stopRawShell(s.name)
+        : () => killSession(s.name);
     const wcClose = el("button", {
         class: "wc-btn wc-close", type: "button",
-        title: "close (kill session)",
-        onclick: (e) => { e.preventDefault(); e.stopPropagation(); killSession(s.name); },
+        title: isRaw ? "close (stop ttyd shell)" : "close (kill session)",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); closeAction(); },
     }, "\u00d7");
     const wcControls = el("span", { class: "wc-controls" }, wcMinimize, wcMaximize, wcClose);
 
@@ -1178,8 +1173,9 @@ function createPane(s) {
             summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, zoomIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
     );
     const bodyKillBtn = el("button", {
-        class: "btn red", onclick: () => killSession(s.name),
-    }, "Kill");
+        class: "btn red",
+        onclick: closeAction,
+    }, isRaw ? "Stop" : "Kill");
     const workflowBtn = el("button", {
         class: "btn blue", onclick: () => openWorkflowEditor(s.agent_name || ""),
         title: "edit scheduled prompts for this conversation-mode agent pane",
@@ -1264,7 +1260,10 @@ function createPane(s) {
     const footer = el("div", { class: "pane-footer" }, fPort, fPid, fCreated);
 
     const dropOverlay = el("div", { class: "drop-overlay" });
-    const details = el("details", { class: "session", "data-session": s.name },
+    const details = el("details", {
+        class: isRaw ? "session session-raw" : "session",
+        "data-session": s.name,
+    },
         summary, el("div", { class: "pane-body" }, actions, iframeWrap, sendBar, phoneKeys, footer),
         dropOverlay,
     );

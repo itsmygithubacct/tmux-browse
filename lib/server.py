@@ -100,8 +100,10 @@ def _session_summary() -> list[dict]:
         except TBError:
             pass
     out: list[dict] = []
+    tmux_names: set[str] = set()
     for s in sessions.list_sessions():
         name = s["name"]
+        tmux_names.add(name)
         port = assignments.get(name)
         pid = ttyd.read_pid(name)
         agent_name = agent_runtime.agent_name_from_session(name) if agent_runtime is not None else None
@@ -111,6 +113,7 @@ def _session_summary() -> list[dict]:
         idle = hash_idle if hash_idle is not None else max(0, now - s["activity"])
         out.append({
             "name": name,
+            "kind": "tmux",
             "windows": s["windows"],
             "attached": s["attached"],
             "created": s["created"],
@@ -122,6 +125,31 @@ def _session_summary() -> list[dict]:
             "ttyd_running": pid is not None,
             "conversation_mode": bool(agent_name and agent_name in configured_agents),
             "agent_name": agent_name if agent_name in configured_agents else None,
+        })
+    # Raw ttyd shells aren't tmux sessions but the dashboard treats them
+    # as peer panes (movable/snap-able alongside tmux ones). Surface any
+    # name with a port assignment + live pidfile that isn't a tmux session
+    # — by convention these are ``raw-shell-*``.
+    for name, port in assignments.items():
+        if name in tmux_names or not name.startswith("raw-shell-"):
+            continue
+        pid = ttyd.read_pid(name)
+        if pid is None:
+            continue
+        out.append({
+            "name": name,
+            "kind": "raw",
+            "windows": 0,
+            "attached": False,
+            "created": now,
+            "activity": now,
+            "idle_seconds": 0,
+            "created_seconds_ago": 0,
+            "port": port,
+            "pid": pid,
+            "ttyd_running": True,
+            "conversation_mode": False,
+            "agent_name": None,
         })
     return out
 
