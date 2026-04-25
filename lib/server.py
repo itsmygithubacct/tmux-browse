@@ -167,6 +167,39 @@ def _client_id(ip: str, ua: str) -> str:
     return hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:12]
 
 
+def _html_escape(s: str) -> str:
+    return (s.replace("&", "&amp;").replace("<", "&lt;")
+             .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _log_html(name: str, content: str) -> str:
+    """Wrap a plain-text scrollback in an HTML page that scrolls to
+    the bottom on load — operator's eye lands on the most recent
+    output instead of the top of the buffer."""
+    title = _html_escape(f"log · {name}")
+    body = _html_escape(content)
+    return (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        f"<title>{title}</title>"
+        "<style>html,body{margin:0;background:#0d1117;color:#e6edf3;}"
+        "pre{margin:0;padding:0.6rem 0.9rem;font:13px/1.4 ui-monospace,"
+        "SFMono-Regular,Menlo,Consolas,monospace;white-space:pre;"
+        "min-height:100vh;}</style></head><body>"
+        f"<pre id=\"log\">{body}</pre>"
+        "<script>window.scrollTo(0, document.body.scrollHeight);</script>"
+        "</body></html>"
+    )
+
+
+def _log_error_html(name: str, msg: str) -> str:
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        f"<title>log · {_html_escape(name)} (error)</title></head>"
+        "<body style=\"font:14px ui-monospace,monospace;background:#0d1117;color:#f85149;padding:1rem\">"
+        f"<pre>{_html_escape(msg)}</pre></body></html>"
+    )
+
+
 def _touch_client(handler: "Handler") -> str:
     """Record a client heartbeat. Returns the client_id."""
     ip = handler.client_address[0]
@@ -451,12 +484,24 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             lines = 2000
         lines = max(1, min(lines, 50000))
+        # ``html=1`` wraps the scrollback in a minimal HTML page that
+        # auto-scrolls to the bottom. The dashboard's Log buttons pass
+        # this so the operator lands at the most recent output instead
+        # of the top of the file. Without the flag the response stays
+        # ``text/plain`` for any scripted callers.
+        as_html = (query.get("html", ["0"])[0] or "0").strip().lower() in ("1", "true", "yes")
         if not name:
             self._send_text("missing 'session' query parameter", status=400)
             return
         ok, content = sessions.capture_target(Target(session=name), lines=lines)
         if not ok:
-            self._send_text(content, status=404)
+            if as_html:
+                self._send_html(_log_error_html(name, content), status=404)
+            else:
+                self._send_text(content, status=404)
+            return
+        if as_html:
+            self._send_html(_log_html(name, content))
             return
         self._send_text(content)
 
