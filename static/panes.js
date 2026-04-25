@@ -663,17 +663,24 @@ function closeHotButtons() {
 
 
 function renderWorkflowEditor() {
+    // The workflow modal HTML lives in the agent extension's
+    // ui_blocks.html. When that extension isn't loaded the IDs below
+    // don't exist; bail out instead of crashing on null.textContent.
+    const title = document.getElementById("workflow-modal-title");
+    const list = document.getElementById("workflow-slot-list");
+    const nameInp = document.getElementById("workflow-name");
+    const promptInp = document.getElementById("workflow-prompt");
+    const intervalInp = document.getElementById("workflow-interval");
+    if (!title || !list || !nameInp || !promptInp || !intervalInp) return;
     const agent = state.workflowEditor.agent;
     const slot = state.workflowEditor.slot;
     const entry = workflowEntry(agent);
     const slots = entry.workflows;
-    const title = document.getElementById("workflow-modal-title");
-    const list = document.getElementById("workflow-slot-list");
     const row = slots[slot] || { name: "", prompt: "", interval_seconds: 300 };
     title.textContent = `Agent Workflows · ${agent}`;
-    document.getElementById("workflow-name").value = row.name;
-    document.getElementById("workflow-prompt").value = row.prompt;
-    document.getElementById("workflow-interval").value = row.interval_seconds;
+    nameInp.value = row.name;
+    promptInp.value = row.prompt;
+    intervalInp.value = row.interval_seconds;
     list.textContent = "";
     slots.forEach((workflow, idx) => {
         const present = !!workflow.prompt.trim();
@@ -693,18 +700,21 @@ function renderWorkflowEditor() {
 }
 
 function openWorkflowEditor(agentName, slot = 0) {
+    const modal = document.getElementById("workflow-modal");
+    if (!modal) return;
     state.workflowEditor.open = true;
     state.workflowEditor.agent = (agentName || "").trim().toLowerCase();
     state.workflowEditor.slot = slot;
     workflowEntry(state.workflowEditor.agent);
     renderWorkflowEditor();
-    document.getElementById("workflow-modal").hidden = false;
+    modal.hidden = false;
     syncModalChrome();
 }
 
 function closeWorkflowEditor() {
+    const modal = document.getElementById("workflow-modal");
     state.workflowEditor.open = false;
-    document.getElementById("workflow-modal").hidden = true;
+    if (modal) modal.hidden = true;
     syncModalChrome();
 }
 
@@ -1560,6 +1570,19 @@ async function refresh() {
     if (state.splitPicker.open) renderSplitPicker();
 }
 
+// Null-safe wiring helper. Many of the bindings below target DOM IDs
+// or handler functions that only exist when an extension is loaded
+// (the agent extension contributes the workflow / step-viewer / agent
+// editor markup and code; without it those getElementById calls return
+// null and the surrounding init would crash, taking the whole
+// dashboard with it). ``bind`` skips silently when either side is
+// missing so a no-extensions install still boots.
+function bind(id, event, handler) {
+    const el = document.getElementById(id);
+    if (!el || typeof handler !== "function") return;
+    el.addEventListener(event, handler);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     // Shield iframes during any drag so drag events reach parent panes
     document.addEventListener("dragstart", () => document.body.classList.add("dragging"));
@@ -1617,24 +1640,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         primeAudio();
         playIdleTone(document.getElementById("cfg-idle-sound").value);
     });
-    document.getElementById("cfg-agent-save-btn").addEventListener("click", saveAgentConfig);
-    document.getElementById("cfg-agent-reload-btn").addEventListener("click", async () => {
+    // Agent-extension-only bindings — null-safe via ``bind`` so a
+    // dashboard without the agent extension still finishes init.
+    bind("cfg-agent-save-btn", "click", typeof saveAgentConfig === "function" ? saveAgentConfig : null);
+    bind("cfg-agent-reload-btn", "click", async () => {
+        if (typeof loadAgents !== "function") return;
         const ok = await loadAgents();
-        if (ok) setAgentStatus("reloaded agent list", "ok");
+        if (ok && typeof setAgentStatus === "function") {
+            setAgentStatus("reloaded agent list", "ok");
+        }
     });
-    document.getElementById("cfg-agent-remove-btn").addEventListener("click", removeAgentConfig);
-    document.getElementById("agent-steps-close-btn").addEventListener("click", closeAgentSteps);
-    document.getElementById("runs-search-btn").addEventListener("click", searchRuns);
-    document.getElementById("runs-search-q").addEventListener("keydown", (e) => { if (e.key === "Enter") searchRuns(); });
-    document.getElementById("task-create-btn").addEventListener("click", createTask);
-    agentFieldMap().existing.addEventListener("change", loadExistingAgentIntoForm);
-    agentFieldMap().preset.addEventListener("change", applyAgentPreset);
-    agentFieldMap().name.addEventListener("input", () => {
-        const fields = agentFieldMap();
-        if (fields.existing.value && fields.name.value.trim() !== fields.existing.value) fields.existing.value = "";
-        const constraint = enforceAgentConstraint();
-        if (constraint) setAgentStatus(constraint.message, "dim");
+    bind("cfg-agent-remove-btn", "click", typeof removeAgentConfig === "function" ? removeAgentConfig : null);
+    bind("agent-steps-close-btn", "click", typeof closeAgentSteps === "function" ? closeAgentSteps : null);
+    bind("runs-search-btn", "click", typeof searchRuns === "function" ? searchRuns : null);
+    bind("runs-search-q", "keydown", (e) => {
+        if (e.key === "Enter" && typeof searchRuns === "function") searchRuns();
     });
+    bind("task-create-btn", "click", typeof createTask === "function" ? createTask : null);
+    if (typeof agentFieldMap === "function") {
+        const fm = agentFieldMap();
+        if (fm.existing) fm.existing.addEventListener("change", loadExistingAgentIntoForm);
+        if (fm.preset) fm.preset.addEventListener("change", applyAgentPreset);
+        if (fm.name) fm.name.addEventListener("input", () => {
+            const fields = agentFieldMap();
+            if (fields.existing.value && fields.name.value.trim() !== fields.existing.value) fields.existing.value = "";
+            const constraint = enforceAgentConstraint();
+            if (constraint) setAgentStatus(constraint.message, "dim");
+        });
+    }
     for (const input of Object.values(configFieldMap())) {
         if (!input) continue;
         input.addEventListener("input", previewDashboardConfig);
@@ -1643,9 +1676,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("hot-close-btn").addEventListener("click", closeHotButtons);
     document.getElementById("hot-save-btn").addEventListener("click", saveHotButton);
     document.getElementById("hot-clear-btn").addEventListener("click", clearHotButton);
-    document.getElementById("workflow-close-btn").addEventListener("click", closeWorkflowEditor);
-    document.getElementById("workflow-save-btn").addEventListener("click", saveWorkflowEditor);
-    document.getElementById("workflow-clear-btn").addEventListener("click", clearWorkflowEditor);
+    bind("workflow-close-btn", "click", closeWorkflowEditor);
+    bind("workflow-save-btn", "click", typeof saveWorkflowEditor === "function" ? saveWorkflowEditor : null);
+    bind("workflow-clear-btn", "click", typeof clearWorkflowEditor === "function" ? clearWorkflowEditor : null);
     document.getElementById("idle-close-btn").addEventListener("click", closeIdleEditor);
     document.getElementById("idle-save-btn").addEventListener("click", saveIdleEditor);
     document.getElementById("idle-clear-btn").addEventListener("click", clearIdleEditor);
@@ -1654,14 +1687,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.splitPicker.filter = e.target.value || "";
         renderSplitPicker();
     });
-    document.getElementById("agent-steps-modal").addEventListener("click", (e) => {
-        if (e.target.id === "agent-steps-modal") closeAgentSteps();
+    bind("agent-steps-modal", "click", (e) => {
+        if (e.target.id === "agent-steps-modal" && typeof closeAgentSteps === "function") {
+            closeAgentSteps();
+        }
+    });
+    bind("workflow-modal", "click", (e) => {
+        if (e.target.id === "workflow-modal") closeWorkflowEditor();
     });
     document.getElementById("hot-modal").addEventListener("click", (e) => {
         if (e.target.id === "hot-modal") closeHotButtons();
-    });
-    document.getElementById("workflow-modal").addEventListener("click", (e) => {
-        if (e.target.id === "workflow-modal") closeWorkflowEditor();
     });
     document.getElementById("idle-modal").addEventListener("click", (e) => {
         if (e.target.id === "idle-modal") closeIdleEditor();
@@ -1675,11 +1710,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.addEventListener("pointerdown", primeAudio, { passive: true });
     document.addEventListener("keydown", primeAudio);
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && state.stepViewer.open) closeAgentSteps();
-        if (e.key === "Escape" && state.hotEditor.open) closeHotButtons();
-        if (e.key === "Escape" && state.workflowEditor.open) closeWorkflowEditor();
-        if (e.key === "Escape" && state.idleEditor.open) closeIdleEditor();
-        if (e.key === "Escape" && state.splitPicker.open) closeSplitPicker();
+        if (e.key !== "Escape") return;
+        if (state.stepViewer && state.stepViewer.open && typeof closeAgentSteps === "function") closeAgentSteps();
+        if (state.hotEditor.open) closeHotButtons();
+        if (state.workflowEditor && state.workflowEditor.open) closeWorkflowEditor();
+        if (state.idleEditor.open) closeIdleEditor();
+        if (state.splitPicker.open) closeSplitPicker();
     });
     renderConfigForm();
     checkImportCfgParam();

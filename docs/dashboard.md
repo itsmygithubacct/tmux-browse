@@ -254,9 +254,13 @@ It covers:
   (disabled) when an existing agent already has it set, so saved configs
   are visible instead of silently rewritten
 - **Lock config pane:** optional password that gates both the Config
-  pane UI *and* every server-side mutation endpoint
-  (`/api/agents`, `/api/agent-hooks`, `/api/agent-workflows`,
-  `/api/dashboard-config`, `/api/tasks`, `/api/config-lock` itself).
+  pane UI *and* every server-side mutation endpoint. Core-gated
+  endpoints include `/api/dashboard-config`, `/api/tasks`,
+  `/api/extensions/*` (install/update/enable/disable/uninstall), and
+  `/api/config-lock` itself. Each enabled extension's mutation
+  endpoints (e.g. agent's `/api/agents`, `/api/agent-hooks`,
+  `/api/agent-workflows`, `/api/agent-conductor`) are also gated —
+  the extension handlers call `handler._check_unlock()` directly.
   `/api/config-lock/verify` issues a 32-byte unlock token with a
   12-hour TTL; the browser sends it as `X-TB-Unlock-Token` on every
   non-GET request. Password stored as SHA-256 hash at
@@ -289,13 +293,19 @@ It covers:
   `make install-agent`, `make update-agent`, `make disable-agent`,
   `make uninstall-agent`, or `make uninstall-agent-with-state`.
 
-Action buttons: **Save Config**, **Load From File**, **Defaults**,
-**Show QR** (generate QR code of current view config), **Read QR**
-(scan QR code from camera to import config from another device).
+Action buttons: **Save Config**, **Load From File**, **Defaults**.
+The QR config-share feature ships in the
+[tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr)
+extension — install it from Config > Extensions to add **Show QR**
+(generate QR code of current view config) and **Read QR** (scan from
+another device's camera to import).
 
-Agent actions are separate: **Save Agent**, **Reload Agents**, and
-**Remove Agent** write `~/.tmux-browse/agents.json` plus the private
-`~/.tmux-browse/agent-secrets.json` secret store. The same dashboard
+Agent actions live in the
+[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
+extension and only appear when it's installed: **Save Agent**,
+**Reload Agents**, and **Remove Agent** write
+`~/.tmux-browse/agents.json` plus the private
+`~/.tmux-browse/agent-secrets.json` secret store. The dashboard
 config file can also be inspected and edited from the CLI via
 `tb config show|get|set|reset`.
 
@@ -412,50 +422,87 @@ A session keeps its port forever, or until you explicitly drop it via
 
 All JSON responses use a stable `{ok, …}` envelope.
 
+### Core endpoints (always present)
+
 | Method | Path | Body / Query | Returns |
 |--------|------|--------------|---------|
 | GET    | `/`                 | — | HTML dashboard |
 | GET    | `/health`           | — | `{ok: true}` |
-| GET    | `/api/sessions`     | — | `{ok, sessions: [{name, windows, attached, created, activity, port, pid, ttyd_running}, …]}` |
+| GET    | `/api/sessions`     | — | `{ok, sessions: [{name, windows, attached, created, activity, port, pid, ttyd_running, conversation_mode?, agent_name?}, …]}` (last two only when the agent extension is enabled) |
 | GET    | `/api/ports`        | — | `{ok, assignments: {name: port}}` |
 | GET    | `/api/dashboard-config` | — | `{ok, path, config}` |
-| GET    | `/api/agents`       | — | `{ok, agents, defaults, paths}` — each agent includes `status`, `status_reason`, `last_activity_ts` |
-| GET    | `/api/agent-log`    | `?name=AGENT&limit=N` | `text/plain` formatted agent action log |
-| GET    | `/api/agent-workflows` | — | `{ok, path, config}` |
-| GET    | `/api/agent-workflow-state` | — | `{ok, state, scheduler_running}` |
-| GET    | `/api/agent-workflow-runs` | `?limit=N` | `{ok, runs}` — workflow execution history |
-| GET    | `/api/agent-runs`   | `?agent=&status=&since=&until=&q=&tool=&limit=` | `{ok, runs}` — searchable run index |
-| GET    | `/api/agent-run`    | `?run_id=X` | `{ok, run}` — single run detail |
-| GET    | `/api/agent-costs`  | `?agent=&since=&until=` | `{ok, per_agent, daily}` — token usage totals |
 | GET    | `/api/tasks`        | — | `{ok, tasks}` — task list (excludes archived) |
 | GET    | `/api/clients`      | — | `{ok, clients, you}` — connected browser endpoints |
 | GET    | `/api/clients/inbox` | — | `{ok, messages}` — pending config shares for this client |
-| GET    | `/api/qr`           | `?data=TEXT` | `image/svg+xml` — QR code SVG for the given text |
 | GET    | `/api/config-lock`  | — | `{ok, locked}` — whether config pane is password-locked |
 | GET    | `/api/session/log`  | `?session=NAME&lines=N` | `text/plain` scrollback (N ∈ [1, 50 000], default 2 000) |
+| GET    | `/api/extensions`   | — | `{ok, extensions: [{name, label, description, repo, installed, enabled, version, submodule, restart_pending, last_error}, …]}` |
+| GET    | `/api/extensions/available` | — | `{ok, available}` — full catalog |
 | GET    | `/raw-ttyd`         | `?name=NAME&port=N&scheme=http|https` | HTML wrapper page for a managed raw ttyd shell |
 | POST   | `/api/ttyd/start`   | `{session}` | `{ok, port, pid, already, scheme, url}` |
 | POST   | `/api/ttyd/raw`     | `{}` | `{ok, port, pid, name, scheme, url}` — launches a standalone shell ttyd |
 | POST   | `/api/ttyd/stop`    | `{session}` | `{ok, pid?, already_stopped?}` |
 | POST   | `/api/dashboard-config` | `{config}` | `{ok, path, config}` |
-| POST   | `/api/agents`       | `{agent: {name, provider, model, base_url, wire_api, api_key?}}` | `{ok, agent}` |
-| POST   | `/api/agents/remove` | `{name}` | `{ok, removed, name}` |
-| POST   | `/api/agent-workflows` | `{config}` | `{ok, path, config}` |
-| POST   | `/api/agent-conversation` | `{name}` | `{ok, agent, session, port, scheme, already}` |
-| POST   | `/api/agent-conversation-fork` | `{name}` | `{ok, agent, conversation_id, session, port}` |
-| POST   | `/api/tasks`        | `{title, repo_path, agent?, branch?, use_worktree?}` | `{ok, task}` |
+| POST   | `/api/tasks`        | `{title, repo_path, agent?, worktree_path?, branch?}` | `{ok, task}` |
 | POST   | `/api/tasks/update`  | `{id, status?, agent?, ...}` | `{ok, task}` |
-| POST   | `/api/tasks/launch`  | `{id}` | `{ok, task_id, session, port}` |
+| POST   | `/api/tasks/launch`  | `{id}` | `{ok, task_id, session, port}` — 409 if the agent extension isn't enabled |
 | POST   | `/api/session/new`  | `{name}` | `{ok, name}` |
 | POST   | `/api/session/kill` | `{session}` | `{ok}` — also stops the ttyd |
 | POST   | `/api/session/scroll` | `{session}` | `{ok}` — equivalent to `C-b [` |
+| POST   | `/api/session/zoom` | `{session}` | `{ok}` — equivalent to `C-b z` |
+| POST   | `/api/session/resize` | `{session, width, height}` | `{ok}` |
 | POST   | `/api/session/type` | `{session, text}` | `{ok}` — sends `text` to the active pane and presses Enter |
 | POST   | `/api/session/key`  | `{session, keys: [...]}` | `{ok}` — sends tmux key names (e.g. `Up`, `C-c`, `Escape`) |
 | POST   | `/api/clients/nickname` | `{nickname}` | `{ok, client_id, nickname}` |
-| POST   | `/api/clients/send-config` | `{target, config_url}` | `{ok, sent}` — push config to another client |
+| POST   | `/api/extensions/install`   | `{name}` | `{ok, name, version, via, restart_required, message}` (config-lock gated) |
+| POST   | `/api/extensions/enable`    | `{name}` | `{ok, name, entry, restart_required}` |
+| POST   | `/api/extensions/disable`   | `{name}` | `{ok, name, entry, restart_required}` |
+| POST   | `/api/extensions/update`    | `{name}` | `{ok, name, from_version, to_version, changed, via, restart_required, message}` |
+| POST   | `/api/extensions/uninstall` | `{name, remove_state?}` | `{ok, name, restart_required, summary, message}` |
+| POST   | `/api/clients/send-config`  | `{target, config_url}` | `{ok, sent}` — push config to another client |
 | POST   | `/api/config-lock`  | `{password}` | `{ok, locked}` — set or clear (empty password = clear) |
-| POST   | `/api/config-lock/verify` | `{password}` | `{ok, unlocked}` or 403 |
+| POST   | `/api/config-lock/verify` | `{password}` | `{ok, unlocked, unlock_token, ttl_seconds}` or 403 |
 | POST   | `/api/server/restart` | `{}` | `{ok, restarting}` — re-exec the server process |
+
+### Agent extension endpoints (only when `agent` is enabled)
+
+Routes contributed by [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent).
+All POSTs are config-lock gated.
+
+| Method | Path | Body / Query | Returns |
+|--------|------|--------------|---------|
+| GET    | `/api/agents`       | — | `{ok, agents, defaults, paths, docker_supported}` — each agent includes `status`, `status_reason`, `last_activity_ts`, `mode`, `mode_phase` |
+| GET    | `/api/agent-log`    | `?name=AGENT&limit=N` | `text/plain` formatted agent action log |
+| GET    | `/api/agent-log-json` | `?name=AGENT&limit=N` | `{ok, entries, path}` |
+| GET    | `/api/agent-workflows` | — | `{ok, path, config}` |
+| GET    | `/api/agent-workflow-state` | — | `{ok, state, scheduler_running}` |
+| GET    | `/api/agent-workflow-runs` | `?limit=N` | `{ok, runs}` — workflow execution history |
+| GET    | `/api/agent-runs`   | `?agent=&status=&since=&until=&q=&tool=&limit=` | `{ok, runs}` — searchable run index |
+| GET    | `/api/agent-run`    | `?run_id=X` | `{ok, run}` |
+| GET    | `/api/agent-costs`  | `?agent=&since=&until=` | `{ok, per_agent, daily, global_daily_budget}` |
+| GET    | `/api/agent-hooks`  | — | `{ok, hooks, defaults}` — event-hook config |
+| GET    | `/api/agent-notifications` | `?limit=N` | `{ok, notifications}` |
+| GET    | `/api/agent-conductor` | — | `{ok, rules}` — conductor rule set |
+| GET    | `/api/agent-conductor-events` | `?limit=N` | `{ok, events}` — decision log |
+| GET    | `/api/agent-repl-context` | `?name=AGENT` | `{ok, context, kb}` — REPL context + attached KB files |
+| POST   | `/api/agents`       | `{agent: {name, provider, model, base_url, wire_api, sandbox?, api_key?, ...}}` | `{ok, agent}` |
+| POST   | `/api/agents/remove` | `{name}` | `{ok, removed, name}` |
+| POST   | `/api/agent-workflows` | `{config}` | `{ok, path, config}` |
+| POST   | `/api/agent-hooks`  | `{hooks}` | `{ok, hooks}` |
+| POST   | `/api/agent-conductor` | `{rules}` | `{ok, rules}` |
+| POST   | `/api/agent-cycle`  | `{name, directive?, max_steps?, ...}` | `{ok, run_id, ...}` — fire one cycle (plan → execute) |
+| POST   | `/api/agent-work`   | `{name, directive?, ...}` | `{ok, ...}` — start work mode |
+| POST   | `/api/agent-work/stop` | `{name}` | `{ok, stop_requested}` |
+| POST   | `/api/agent-conversation`      | `{name}` | `{ok, agent, session, port, scheme, already}` |
+| POST   | `/api/agent-conversation-fork` | `{name}` | `{ok, agent, conversation_id, session, port}` |
+
+### QR extension endpoints (only when `qr` is enabled)
+
+Routes contributed by [tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr).
+
+| Method | Path | Body / Query | Returns |
+|--------|------|--------------|---------|
+| GET    | `/api/qr` | `?data=TEXT` | `image/svg+xml` — QR code SVG for the given text |
 
 ## CLI companion
 

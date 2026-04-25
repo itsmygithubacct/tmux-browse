@@ -49,7 +49,7 @@ Install via the Config pane or the Makefile.
 
 ### Net diff in core
 
-~670 lines leave `lib/` (docker_sandbox, qr, worktrees, plus their
+~915 lines leave `lib/` (docker_sandbox + qr + worktrees source, plus their
 tests). `lib/tasks.py` loses the worktree-creation path but keeps
 the same on-disk schema. `lib/server.py` loses one import, one
 handler, one route entry. `lib/templates.py` adds two slots and

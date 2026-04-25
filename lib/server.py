@@ -32,7 +32,7 @@ from . import (
     ttyd,
 )
 from .extensions import MergedRegistry, RegistryConflict
-from .errors import TBError, UsageError
+from .errors import TBError
 from .targeting import Target
 
 
@@ -904,6 +904,20 @@ class Handler(BaseHTTPRequestHandler):
         agent_name = (task.get("agent") or "").strip()
         if not agent_name:
             self._send_json({"ok": False, "error": "no agent assigned to task"}, status=400)
+            return
+        # Task launch shells out to ``tb agent repl ...`` — that verb is
+        # contributed by the agent extension. Refuse here when it isn't
+        # registered, otherwise the spawned tmux session crashes silently
+        # with "tb: unknown verb agent" and the operator has nothing to
+        # debug.
+        ext_verbs = self.server.extension_registry.cli_verbs
+        if "agent" not in ext_verbs:
+            self._send_json({
+                "ok": False,
+                "error": ("the agent extension isn't enabled — install or "
+                          "enable it from Config > Extensions before "
+                          "launching agent tasks"),
+            }, status=409)
             return
         cwd = task.get("worktree_path") or task.get("repo_path") or str(config.PROJECT_DIR)
         session_name = f"task-{task_id}"

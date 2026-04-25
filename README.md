@@ -212,11 +212,13 @@ cursor-activity proxy.
 **Extensible tool surface**
 
 Agents default to a single `tb_command` tool. A small registry
-(`lib/agent_tool_registry.py`) lets you add more — the first non-`tb`
-tool, `read_file`, ships today with bounded args and a path
-blocklist that matches Docker-mode mount validation. Per-agent
-`tools: [...]` declares what's enabled; everything else is rejected
-at dispatch with a clean error.
+inside the agent extension (`agent/tool_registry.py` in the
+[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
+repo) lets you add more — the first non-`tb` tool, `read_file`,
+ships today with bounded args and a path blocklist that matches
+Docker-mode mount validation. Per-agent `tools: [...]` declares
+what's enabled; everything else is rejected at dispatch with a
+clean error.
 
 See `docs/tb.md` for the full command surface and
 `docs/dashboard.md` for the UI.
