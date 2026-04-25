@@ -63,16 +63,58 @@ async function sendKeysToPane(session, keys) {
 }
 
 async function openRawTtyd() {
-    const tab = window.open("about:blank", "_blank", "noopener");
     const r = await api("POST", "/api/ttyd/raw", {});
     if (!r.ok) {
-        if (tab) tab.close();
         alert("Error: " + (r.error || "unknown"));
         return;
     }
-    const pageUrl = `/raw-ttyd?name=${encodeURIComponent(r.name || "")}&port=${encodeURIComponent(r.port || "")}&scheme=${encodeURIComponent(r.scheme || "")}`;
-    if (tab) tab.location = pageUrl;
-    else window.open(pageUrl, "_blank", "noopener");
+    appendRawShellPane({
+        name: r.name || "",
+        port: r.port,
+        scheme: r.scheme || "http",
+    });
+}
+
+function appendRawShellPane({ name, port, scheme }) {
+    const root = document.getElementById("raw-shells");
+    if (!root) return;
+    const url = `${scheme}://${window.location.hostname}:${port}/`;
+
+    const stopBtn = el("button",
+        { class: "btn red", type: "button", title: "stop the ttyd and close this pane" },
+        "Stop");
+    const openBtn = el("a",
+        { class: "btn", href: url, target: "_blank", rel: "noopener",
+          title: "open the raw shell in its own tab" },
+        "Open Direct");
+    const summary = el("summary", { class: "pane-summary" },
+        el("span", { class: "pane-name" }, `raw shell · ${name}`),
+        el("span", { class: "dim", style: "font-size:0.78rem;margin-left:0.5rem" },
+            `port ${port}`),
+        el("span", { style: "margin-left:auto;display:flex;gap:0.4rem" },
+            openBtn, stopBtn));
+
+    const iframe = el("iframe", {
+        class: "pane-iframe",
+        src: url,
+        allow: "clipboard-read; clipboard-write",
+        style: "width:100%;height:480px;border:0;background:#000",
+    });
+
+    const details = el("details", { class: "pane raw-shell-pane", open: "" },
+        summary, iframe);
+
+    stopBtn.addEventListener("click", async () => {
+        stopBtn.disabled = true;
+        stopBtn.textContent = "stopping…";
+        try {
+            await api("POST", "/api/ttyd/stop", { session: name });
+        } catch (_e) { /* best-effort */ }
+        details.remove();
+    });
+
+    root.appendChild(details);
+    iframe.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function enterCopyMode(session) {
