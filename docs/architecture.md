@@ -254,14 +254,16 @@ Dashboard behavior settings are different: they live in
 web config pane and `tmux-browse config` CLI both operate on the same file.
 
 The UI now also carries more interaction state than the original dashboard:
-side-by-side layout rows, split placement, hot-button loop settings, idle
-alerts, and the raw-ttyd wrapper flow all live in the same no-build frontend
-rather than being pushed into a separate asset pipeline.
+side-by-side layout rows, split placement, hot-button loop settings, and idle
+alerts all live in the same no-build frontend rather than being pushed into
+a separate asset pipeline.
 
 Raw ttyd sessions are the exception to the normal "one ttyd per tmux
 session" rule. They are still tracked in the same pid/scheme machinery, but
-the browser opens them through a small wrapper page (`/raw-ttyd`) that can
-stop the shell explicitly or send a best-effort stop on page close.
+they render as inline pane cards in a dedicated `#raw-shells` container
+above the main session list — clicking the **Raw ttyd** topbar button
+spawns a shell, mounts an iframe pane in place, and exposes a **Stop**
+button that calls ``/api/ttyd/stop`` and removes the card.
 
 ## Failure modes we actively guard against
 

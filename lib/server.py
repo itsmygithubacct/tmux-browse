@@ -401,21 +401,6 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _h_raw_ttyd(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        name = (query.get("name", [""])[0] or "").strip()
-        scheme = (query.get("scheme", [""])[0] or "").strip().lower()
-        try:
-            port = int(query.get("port", ["0"])[0])
-        except ValueError:
-            port = 0
-        if not name or port <= 0:
-            self._send_json({"ok": False, "error": "missing raw ttyd name or port"}, status=400)
-            return
-        if scheme not in {"http", "https"}:
-            scheme = "http"
-        self._send_html(templates.render_raw_ttyd(name, port, scheme))
-
     def _h_sessions(self, _parsed: ParseResult) -> None:
         self._send_json({"ok": True, "sessions": _session_summary()})
 
@@ -1004,7 +989,6 @@ class Handler(BaseHTTPRequestHandler):
         "/":                       _h_index,
         "/favicon.ico":            _h_favicon,
         "/favicon.svg":            _h_favicon,
-        "/raw-ttyd":               _h_raw_ttyd,
         "/api/sessions":           _h_sessions,
         "/api/ports":              _h_ports,
         "/api/dashboard-config":   _h_dashboard_config_get,
