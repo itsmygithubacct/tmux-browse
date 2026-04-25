@@ -22,6 +22,13 @@ DEFAULTS: dict[str, Any] = {
     "launch_on_expand": True,
     "default_ttyd_height_vh": 70,
     "default_ttyd_min_height_px": 200,
+    # Approximate xterm.js cell size used by the dashboard's "fit tmux
+    # to iframe" buttons. Defaults match ttyd's default 15px monospace
+    # font on a 1× DPI display (~7.7 px wide × 17 px tall, rounded down
+    # to slightly under-fill rather than over-flow). Operators on
+    # different fonts / browser zoom can tune.
+    "ttyd_cell_width_px": 7.7,
+    "ttyd_cell_height_px": 17,
     "day_mode": False,
     "idle_sound": "bell",
     "show_topbar": True,
@@ -96,6 +103,11 @@ _INT_RANGES = {
     "global_daily_token_budget": (0, 100_000_000),
 }
 
+_FLOAT_RANGES = {
+    "ttyd_cell_width_px": (4.0, 20.0),
+    "ttyd_cell_height_px": (8.0, 40.0),
+}
+
 
 def _coerce_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
@@ -119,6 +131,14 @@ def _coerce_int(value: Any, default: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, num))
 
 
+def _coerce_float(value: Any, default: float, lo: float, hi: float) -> float:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, num))
+
+
 def _coerce_choice(value: Any, default: str, choices: tuple[str, ...]) -> str:
     if isinstance(value, str) and value in choices:
         return value
@@ -133,6 +153,8 @@ def normalize(raw: Any) -> dict[str, Any]:
         out[key] = _coerce_bool(raw.get(key), DEFAULTS[key])
     for key, (lo, hi) in _INT_RANGES.items():
         out[key] = _coerce_int(raw.get(key), DEFAULTS[key], lo, hi)
+    for key, (lo, hi) in _FLOAT_RANGES.items():
+        out[key] = _coerce_float(raw.get(key), DEFAULTS[key], lo, hi)
     out["idle_sound"] = _coerce_choice(raw.get("idle_sound"), DEFAULTS["idle_sound"], IDLE_SOUND_CHOICES)
     out["launch_cwd"] = str(raw.get("launch_cwd") or "").strip()
     return out

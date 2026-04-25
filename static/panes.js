@@ -36,32 +36,35 @@ async function resizePane(session, cols) {
     rec.iframeWrap.style.height = cur === maxH ? defaultH : maxH;
 }
 
-// Approximate ttyd/xterm.js cell size at the default font (Menlo 13pt).
-// Real ttyd reports a wider range (8-10 px wide, 16-19 px tall) depending
-// on the browser; the values below are conservative middle estimates so
-// the resulting tmux window slightly under-fills rather than over-flows
-// the iframe (over-fill produces an unreachable scrollbar inside the
-// embedded terminal).
-const TTYD_CELL_W_PX = 9;
-const TTYD_CELL_H_PX = 18;
-
 // Resize the tmux window to match the iframe's actual dimensions so the
 // embedded terminal fills its visible area instead of leaving blank
 // borders. Used by both the maximize button and the dedicated tmux-
 // resize chrome icon.
+//
+// Cell-size dimensions live in dashboard config (ttyd_cell_width_px /
+// ttyd_cell_height_px) so operators on different fonts / browser zoom
+// can tune. Defaults match ttyd's default 15px monospace at 1× DPI
+// (~7.7 × 17). Math.round (not floor) is intentional — under-fill by
+// half a cell is better than the visible blank gutter Math.floor
+// produced.
 async function fitTmuxToIframe(session) {
     const rec = state.nodes.get(session);
     if (!rec || !rec.iframeWrap || !rec.iframe) return;
+    // The iframe's content box gives us the actual pixels available to
+    // ttyd's xterm.js. iframeWrap.clientWidth includes padding/borders
+    // so prefer iframe.clientWidth when present.
     const w = rec.iframe.clientWidth || rec.iframeWrap.clientWidth;
     const h = rec.iframe.clientHeight || rec.iframeWrap.clientHeight;
     if (!w || !h) return;
-    const cols = Math.max(20, Math.min(500, Math.floor(w / TTYD_CELL_W_PX)));
-    const rows = Math.max(5, Math.min(200, Math.floor(h / TTYD_CELL_H_PX)));
+    const cellW = Number(state.config.ttyd_cell_width_px) || 7.7;
+    const cellH = Number(state.config.ttyd_cell_height_px) || 17;
+    const cols = Math.max(20, Math.min(500, Math.round(w / cellW)));
+    const rows = Math.max(5, Math.min(200, Math.round(h / cellH)));
     const r = await api("POST", "/api/session/resize", { session, cols, rows });
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) {
         msg.textContent = r.ok
-            ? `tmux window → ${cols}×${rows}`
+            ? `tmux ${cols}×${rows} (iframe ${w}×${h}px, cell ${cellW}×${cellH}px)`
             : ("resize error: " + (r.error || "unknown"));
         msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
     }
