@@ -369,20 +369,23 @@ a.wc-log-icon { text-decoration: none; }
     border: 0;
     background: #000;
 }
-.raw-shell-pane {
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.4rem 0.6rem;
-    margin-bottom: 0.6rem;
-    background: var(--card);
-}
-.raw-shell-pane > summary {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    list-style: none;
-}
-.raw-shell-pane > summary::-webkit-details-marker { display: none; }
+/* Raw shells render via the same createPane() pipeline as tmux
+   sessions, but several summary-row controls don't apply (no tmux
+   server-activity to track, no session log to dump, no copy-mode to
+   enter, no in-pane key-send bar). Hide them here rather than
+   threading "isRaw" through every button definition. */
+.session.session-raw .summary-idle-wrap,
+.session.session-raw .summary-log,
+.session.session-raw .wc-log-icon,
+.session.session-raw .summary-scroll,
+.session.session-raw .wc-scroll-icon,
+.session.session-raw .summary-link,
+.session.session-raw .wc-zoom-icon,
+.session.session-raw .send-bar,
+.session.session-raw .phone-keys,
+.session.session-raw .pane-footer,
+.session.session-raw .summary-hide,
+.session.session-raw .wc-hide-icon { display: none !important; }
 /* Transparent shield over iframes during drag — iframes swallow drag
    events, so this overlay catches them and lets them bubble to <details> */
 .drag-shield {

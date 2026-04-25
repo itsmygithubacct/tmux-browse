@@ -394,24 +394,37 @@ def start_raw(tls_paths: tuple[Path, Path] | None = None,
 
     The name includes 8 hex bytes of randomness so two clicks within the
     same millisecond never collide on pidfile / per-session-lock identity.
+    The port is persisted via ``ports.assign`` so the shell shows up in
+    the dashboard's session list and survives a page reload — the
+    cleanup path on the dashboard side calls ``ports.release`` after
+    stopping the ttyd.
     """
     name = f"raw-shell-{int(time.time() * 1000)}-{secrets.token_hex(4)}"
-    port = _find_free_port()
+    port = ports.assign(name)
     argv_tail = ["-W", "bash", "-lc", 'exec "${SHELL:-bash}" -il']
     return _spawn_ttyd(name, port, argv_tail, tls_paths=tls_paths, bind_addr=bind_addr)
 
 
 def stop(session: str) -> dict:
+    # Raw shells own their port assignment too; release it on stop so a
+    # subsequent ``ports.assign`` doesn't trip "already assigned" or have
+    # the dashboard show a stale row. Tmux sessions keep their port (the
+    # ttyd may be re-spawned later); only raw shells get the release.
+    is_raw = session.startswith("raw-shell-")
     pid = read_pid(session)
     if pid is None:
         _pidfile(session).unlink(missing_ok=True)
         _schemefile(session).unlink(missing_ok=True)
+        if is_raw:
+            ports.release(session)
         return {"ok": True, "already_stopped": True}
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError as e:
         _pidfile(session).unlink(missing_ok=True)
         _schemefile(session).unlink(missing_ok=True)
+        if is_raw:
+            ports.release(session)
         return {"ok": False, "error": f"kill failed: {e}"}
     # Wait briefly; escalate to SIGKILL if needed.
     deadline = time.time() + 2.0
@@ -426,6 +439,8 @@ def stop(session: str) -> dict:
             pass
     _pidfile(session).unlink(missing_ok=True)
     _schemefile(session).unlink(missing_ok=True)
+    if is_raw:
+        ports.release(session)
     return {"ok": True, "pid": pid}
 
 
@@ -458,6 +473,13 @@ def gc_orphans() -> dict:
     # into a hot-path import cycle for ttyd.
     from . import sessions
     active = {s["name"] for s in sessions.list_sessions()}
+    # Raw shells aren't tmux sessions but their port assignment is still
+    # live as long as their pidfile exists; keep them in the active set
+    # so prune() doesn't strip them.
+    for pf in config.PID_DIR.glob("raw-shell-*.pid"):
+        name = _unsafe(pf.stem)
+        if read_pid(name) is not None:
+            active.add(name)
     dropped = ports.prune(active)
     return {"stale_pids_removed": stale_pids, "ports_dropped": len(dropped)}
 
