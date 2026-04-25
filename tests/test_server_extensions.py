@@ -181,6 +181,93 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
                 p.stop()
             tmp.cleanup()
 
+    def test_update_endpoint_rejects_missing_name(self):
+        fake = _FakeHandler(_FakeServer())
+        server.Handler._h_extensions_update(
+            fake, urlparse("/api/extensions/update"), {})
+        self.assertEqual(fake.status, 400)
+
+    def test_update_endpoint_surfaces_update_error_with_stage(self):
+        fake = _FakeHandler(_FakeServer())
+        with mock.patch.object(
+            extensions, "update",
+            side_effect=extensions.UpdateError("fetch", "no network"),
+        ):
+            server.Handler._h_extensions_update(
+                fake, urlparse("/api/extensions/update"), {"name": "demo"})
+        self.assertEqual(fake.status, 500)
+        self.assertEqual(fake.payload["stage"], "fetch")
+        self.assertIn("no network", fake.payload["error"])
+
+    def test_update_endpoint_changed_response_signals_restart(self):
+        from pathlib import Path as _Path
+        result = extensions.UpdateResult(
+            name="demo", from_version="0.1.0", to_version="0.2.0",
+            path=_Path("/tmp/demo"), via="clone", changed=True)
+        fake = _FakeHandler(_FakeServer())
+        with mock.patch.object(extensions, "update", return_value=result):
+            server.Handler._h_extensions_update(
+                fake, urlparse("/api/extensions/update"), {"name": "demo"})
+        self.assertEqual(fake.status, 200)
+        self.assertTrue(fake.payload["ok"])
+        self.assertTrue(fake.payload["changed"])
+        self.assertTrue(fake.payload["restart_required"])
+        self.assertEqual(fake.payload["from_version"], "0.1.0")
+        self.assertEqual(fake.payload["to_version"], "0.2.0")
+
+    def test_update_endpoint_unchanged_skips_restart_flag(self):
+        from pathlib import Path as _Path
+        result = extensions.UpdateResult(
+            name="demo", from_version="0.2.0", to_version="0.2.0",
+            path=_Path("/tmp/demo"), via="clone", changed=False)
+        fake = _FakeHandler(_FakeServer())
+        with mock.patch.object(extensions, "update", return_value=result):
+            server.Handler._h_extensions_update(
+                fake, urlparse("/api/extensions/update"), {"name": "demo"})
+        self.assertEqual(fake.status, 200)
+        self.assertFalse(fake.payload["changed"])
+        self.assertFalse(fake.payload["restart_required"])
+
+
+class TasksLaunchAgentExtensionGuardTests(unittest.TestCase):
+    """`_h_tasks_launch` shells out to ``tb agent repl ...``. Refuse
+    cleanly when the agent extension hasn't registered the verb,
+    instead of spawning a tmux session that crashes silently."""
+
+    def _server_without_agent_verb(self):
+        s = _FakeServer()
+        # Empty cli_verbs — no extension registered "agent".
+        return s
+
+    def _server_with_agent_verb(self):
+        s = _FakeServer()
+        s.extension_registry.cli_verbs["agent"] = lambda *a, **kw: None
+        return s
+
+    def test_refuses_when_agent_verb_not_registered(self):
+        from lib import tasks as tasks_mod
+        with mock.patch.object(tasks_mod, "get_task", return_value={
+            "id": "t1", "agent": "opus", "repo_path": "/tmp",
+        }):
+            fake = _FakeHandler(self._server_without_agent_verb())
+            server.Handler._h_tasks_launch(
+                fake, urlparse("/api/tasks/launch"), {"id": "t1"})
+        self.assertEqual(fake.status, 409)
+        self.assertIn("agent extension", fake.payload["error"])
+
+    def test_proceeds_when_agent_verb_registered(self):
+        from lib import sessions, tasks as tasks_mod, ttyd
+        with mock.patch.object(tasks_mod, "get_task", return_value={
+            "id": "t1", "agent": "opus", "repo_path": "/tmp",
+        }), mock.patch.object(tasks_mod, "update"), \
+             mock.patch.object(sessions, "exists", return_value=True), \
+             mock.patch.object(ttyd, "start", return_value={"port": 9999}):
+            fake = _FakeHandler(self._server_with_agent_verb())
+            server.Handler._h_tasks_launch(
+                fake, urlparse("/api/tasks/launch"), {"id": "t1"})
+        self.assertEqual(fake.status, 200)
+        self.assertTrue(fake.payload["ok"])
+
 
 class RouteTableRegistrationTests(unittest.TestCase):
 
@@ -191,6 +278,7 @@ class RouteTableRegistrationTests(unittest.TestCase):
         self.assertIn("/api/extensions/enable", server.Handler._POST_ROUTES)
         self.assertIn("/api/extensions/disable", server.Handler._POST_ROUTES)
         self.assertIn("/api/extensions/uninstall", server.Handler._POST_ROUTES)
+        self.assertIn("/api/extensions/update", server.Handler._POST_ROUTES)
 
 
 if __name__ == "__main__":

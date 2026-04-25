@@ -13,7 +13,7 @@ import time
 from typing import TypedDict
 
 from .errors import UsageError
-from .targeting import Target, parse
+from .targeting import Target
 
 
 # -----------------------------------------------------------------------------

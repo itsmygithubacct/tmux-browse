@@ -357,6 +357,13 @@ HTTPS ttyd URLs as well.
 
 ### Agent
 
+The `tb agent ...` verb is contributed by the
+[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
+extension. Install it from the dashboard's Config > Extensions, or
+on a headless host with `make install-agent`. Until installed, the
+verbs below aren't registered and `tb agent` errors with "unknown
+verb".
+
 #### `tb agent defaults`
 
 Prints the built-in agent aliases and their default provider/model/base URL.
