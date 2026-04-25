@@ -18,6 +18,8 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     launch_on_expand: true,
     default_ttyd_height_vh: 70,
     default_ttyd_min_height_px: 200,
+    ttyd_cell_width_px: 7.7,
+    ttyd_cell_height_px: 17,
     day_mode: false,
     idle_sound: "bell",
     show_topbar: true,
