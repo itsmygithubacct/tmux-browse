@@ -266,11 +266,6 @@ a.wc-log-icon { text-decoration: none; }
     border-color: rgba(139, 148, 158, 0.3);
     color: var(--accent);
 }
-.wc-zoom-icon:hover {
-    background: rgba(139, 148, 158, 0.15);
-    border-color: rgba(139, 148, 158, 0.3);
-    color: var(--accent);
-}
 .wc-move-icon:hover {
     background: rgba(139, 148, 158, 0.15);
     border-color: rgba(139, 148, 158, 0.3);
@@ -380,7 +375,6 @@ a.wc-log-icon { text-decoration: none; }
 .session.session-raw .summary-scroll,
 .session.session-raw .wc-scroll-icon,
 .session.session-raw .summary-link,
-.session.session-raw .wc-zoom-icon,
 .session.session-raw .send-bar,
 .session.session-raw .phone-keys,
 .session.session-raw .pane-footer,
