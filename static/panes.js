@@ -1780,6 +1780,7 @@ async function refresh() {
     const r = await api("GET", "/api/sessions");
     const sessions = (r && r.sessions) || [];
     state.sessions = sessions;
+    showTmuxUnreachableBanner(!!(r && r.tmux_unreachable));
     checkIdleAlerts(sessions);
     await checkHotLoops(sessions);
     await checkSendQueue(sessions);
@@ -1828,6 +1829,31 @@ async function refresh() {
     if (typeof renderPaneAdmin === "function") renderPaneAdmin();
     renderLayout();
     if (state.splitPicker.open) renderSplitPicker();
+}
+
+// Surface "tmux server is unreachable" prominently — without this the
+// dashboard silently shows "0 sessions" when tmux is hung (memory
+// pressure, stuck client) and operators chase ghosts in the dashboard
+// code. The banner is purely informational; raw-shell rows still render
+// normally underneath.
+function showTmuxUnreachableBanner(show) {
+    let banner = document.getElementById("tmux-unreachable-banner");
+    if (!show) {
+        if (banner) banner.hidden = true;
+        return;
+    }
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "tmux-unreachable-banner";
+        banner.className = "ext-restart-banner";
+        banner.style.background = "#3b1117";
+        banner.style.borderColor = "#8b1e2d";
+        banner.textContent = "tmux server is not responding — session list is unavailable. " +
+            "Check `tmux ls` from a shell; the server may be wedged (memory pressure, stuck client).";
+        const sessionsEl = document.getElementById("sessions");
+        sessionsEl.parentNode.insertBefore(banner, sessionsEl);
+    }
+    banner.hidden = false;
 }
 
 // Null-safe wiring helper. Many of the bindings below target DOM IDs

@@ -74,18 +74,34 @@ def _redact_token(s: str) -> str:
     return _TOKEN_PARAM_RE.sub(r"\1token=<redacted>", s)
 
 
-def _session_summary() -> list[dict]:
+def _session_summary() -> tuple[list[dict], bool]:
     """Session list enriched with port assignment + ttyd running flag.
+
+    Returns ``(rows, tmux_unreachable)``. ``tmux_unreachable`` is True when
+    tmux's socket exists but the server isn't responding — the dashboard
+    surfaces a banner so operators don't see "0 sessions" and assume the
+    session list is authoritative. Raw-shell rows are still returned in
+    that case (their state lives in the port registry, not tmux).
 
     Age fields are also computed server-side (``idle_seconds``,
     ``created_seconds_ago``) so the browser doesn't need to trust its
     own clock — useful across VMs or laptops waking from sleep.
     """
     now = int(time.time())
-    # Ensure pipe-pane logging is active for every session — cheap and
-    # throttled internally, so calling on every request is fine. This
-    # catches panes/windows that were added after the session was created.
-    session_logs.ensure_logging_all()
+    # Cheap probe before the heavier list-sessions call — if tmux is
+    # unresponsive, every subsequent tmux subprocess will eat its full
+    # timeout budget. Skip them and report degradation instead.
+    tmux_unreachable = not sessions.server_responsive()
+    if not tmux_unreachable:
+        # Ensure pipe-pane logging is active for every session — cheap and
+        # throttled internally, so calling on every request is fine. This
+        # catches panes/windows that were added after the session was created.
+        try:
+            session_logs.ensure_logging_all()
+        except Exception:
+            # Logging best-effort — don't fail the whole request because
+            # one tmux pipe-pane call hiccuped.
+            pass
     assignments = ports.all_assignments()
     # Agent metadata is only populated when the agent extension is loaded;
     # core treats its absence as "no agents configured".
@@ -101,7 +117,8 @@ def _session_summary() -> list[dict]:
             pass
     out: list[dict] = []
     tmux_names: set[str] = set()
-    for s in sessions.list_sessions():
+    tmux_rows = [] if tmux_unreachable else sessions.list_sessions()
+    for s in tmux_rows:
         name = s["name"]
         tmux_names.add(name)
         port = assignments.get(name)
@@ -151,7 +168,7 @@ def _session_summary() -> list[dict]:
             "conversation_mode": False,
             "agent_name": None,
         })
-    return out
+    return out, tmux_unreachable
 
 
 # --- Connected client tracking ---
@@ -463,7 +480,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _h_sessions(self, _parsed: ParseResult) -> None:
-        self._send_json({"ok": True, "sessions": _session_summary()})
+        rows, tmux_unreachable = _session_summary()
+        self._send_json({
+            "ok": True,
+            "sessions": rows,
+            "tmux_unreachable": tmux_unreachable,
+        })
 
     def _h_ports(self, _parsed: ParseResult) -> None:
         self._send_json({"ok": True, "assignments": ports.all_assignments()})
