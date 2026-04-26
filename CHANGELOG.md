@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.7.1.5 — Fresh-clone init fixes + tmux-unreachable banner (2026-04-26)
+
+Patch release on top of 0.7.1.4. Three init crashes that surfaced
+on a brand-new clone with no extensions installed are fixed; a new
+banner replaces the silent "0 sessions" mode the dashboard fell into
+when tmux's socket existed but the server had stopped responding;
+and the core docs are slimmed to point at the extension repos
+instead of inlining their surface. No public API or extension
+contract changes.
+
+### Fresh-clone init no longer crashes without the agent extension
+
+- `static/panes.js` referenced four agent-extension button IDs
+  (`hooks-save-btn`, `hooks-reset-btn`, `conductor-save-btn`,
+  `conductor-reload-btn`) and 11 agent-extension-only init helpers
+  (`renderAgentSelectors`, `loadAgents`, `populateRunAgentFilter`,
+  `populateTaskAgentSelect`, `loadAgentWorkflows`, `searchRuns`,
+  `loadTasks`, `loadCostSummary`, `loadHooks`, `loadConductor`,
+  `loadNotifications`) directly. On a fresh clone without the
+  agent extension installed those identifiers do not exist —
+  `getElementById` returned `null`, the helpers threw
+  `ReferenceError`, and the `DOMContentLoaded` handler aborted
+  partway through. Refresh, idle polling, and client tracking
+  never wired up; users saw a half-bootstrapped dashboard with
+  none of the JS-driven affordances working.
+- `refresh()` had the same problem with `renderAgentsPane()` and
+  `renderPaneAdmin()` — the `count` text was the only update that
+  survived each refresh tick.
+- All such call sites now go through the existing null-safe
+  `bind()` helper or a `typeof X === "function"` guard. Healthy
+  installs (with or without the agent extension) behave exactly
+  as before.
+
+### "tmux server unreachable" banner
+
+- When tmux's socket file exists but the server isn't responding
+  (memory pressure, stuck client, OOM-killed worker), every
+  `/api/sessions` request used to eat its full subprocess
+  timeout and ultimately render "0 sessions". Operators chased
+  ghosts in the dashboard code instead of looking at tmux.
+- `lib/sessions.py::server_responsive()` adds a cheap
+  `tmux display-message` probe with a 2 s timeout.
+  `server_running()` and `list_sessions()` now treat
+  `subprocess.TimeoutExpired` as "no usable server" instead of
+  raising, so a hung server can't take down `/api/sessions`.
+- `lib/server.py::_session_summary()` probes first; on failure
+  it short-circuits the heavier `list-sessions` calls, returns
+  `(rows, tmux_unreachable=True)`, and `/api/sessions` exposes
+  the flag. Raw-shell rows still render — their state lives in
+  the port registry, not tmux. `ensure_logging_all()` is wrapped
+  best-effort so a single pipe-pane hiccup can't fail the
+  request.
+- `static/panes.js::showTmuxUnreachableBanner()` injects a
+  top-of-page banner whenever `tmux_unreachable` is true and
+  hides it when tmux comes back. Healthy-case JSON shape is
+  unchanged for consumers that don't care about the flag.
+
+### Core docs slimmed to link out to extension repos
+
+- The README's ~80-line "Built-in agent platform" section is
+  replaced with a 12-line "Optional extensions" table covering
+  agent / qr / sandbox.
+- `README.md`'s Layout section is refreshed — the listed
+  `lib/agent_*.py` and `lib/qr.py` files no longer live in
+  core; agent code moved to `extensions/agent/` in 0.7.1.
+- `docs/dashboard.md`: the **Agents / Runs / Tasks** sections
+  collapse to one pointer paragraph, the agent endpoint table
+  becomes a one-line pointer, and the per-extension state-file
+  enumeration is replaced with a single bullet noting that
+  extensions write under `~/.tmux-browse/`.
+- `docs/tb.md`: the ~200-line `tb agent ...` reference (subverbs,
+  REPL slash-commands, sandbox modes) collapses to a 10-line
+  pointer to `tmux-browse-agent`.
+- Net result: -393 lines from core docs, with readers now
+  routed to each extension repo for depth instead of reading
+  duplicated content drifting from upstream.
+
+Full suite: 592 tests green.
+
 ## 0.7.1.4 — Inline raw shells, fit-to-iframe controls, send-bar repeater (2026-04-26)
 
 Round of dashboard polish on top of 0.7.1.3. No extension contract
