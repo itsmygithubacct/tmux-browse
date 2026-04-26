@@ -9,6 +9,7 @@ Subcommands:
     stop <name>    Stop the ttyd for a session.
     cleanup        Stop every managed ttyd.
     install-ttyd   Download the ttyd static binary into ~/.local/bin.
+    doctor         Check that prerequisite packages (tmux, ttyd) are present.
     status         Combined status view (sessions + ttyds + port budget).
     config         Inspect or modify dashboard config file.
 """
@@ -29,6 +30,7 @@ from lib import (
     auth,
     config,
     dashboard_config,
+    doctor,
     ports,
     server,
     sessions,
@@ -40,6 +42,18 @@ from lib.errors import TBError
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    if not args.skip_checks:
+        missing = doctor.required_missing()
+        if missing:
+            print("tmux-browse: missing prerequisites:", file=sys.stderr)
+            print(doctor.format_table(missing), file=sys.stderr)
+            print(
+                "\nRun `tmux-browse doctor` for the full report, "
+                "or `bin/install-prereqs.sh` to install everything at once. "
+                "Pass --skip-checks to start anyway.",
+                file=sys.stderr,
+            )
+            return 8
     token = auth.load_token(cli_token=args.auth, cli_token_file=args.auth_file)
     tls_paths = tls.load_tls_paths(cli_cert=args.cert, cli_key=args.key)
     server.serve(
@@ -47,6 +61,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
         expected_token=token, tls_paths=tls_paths,
     )
     return 0
+
+
+def cmd_doctor(_args: argparse.Namespace) -> int:
+    results = doctor.check()
+    print(doctor.format_table(results))
+    return 0 if all(r.ok for r in results) else 8
 
 
 def cmd_list(_args: argparse.Namespace) -> int:
@@ -217,6 +237,8 @@ def _build_parser() -> argparse.ArgumentParser:
                               "inherit the same cert/key.")
     s_serve.add_argument("--key", metavar="PATH", default=None,
                          help="TLS private key (PEM). Also honours $TMUX_BROWSE_KEY.")
+    s_serve.add_argument("--skip-checks", action="store_true",
+                         help="skip the tmux/ttyd prereq check on startup")
     s_serve.set_defaults(func=cmd_serve)
 
     s_list = sub.add_parser("list", help="show tmux sessions and ttyd state")
@@ -248,6 +270,10 @@ def _build_parser() -> argparse.ArgumentParser:
                                help="download the ttyd static binary into ~/.local/bin")
     s_install.add_argument("--force", action="store_true", help="reinstall even if present")
     s_install.set_defaults(func=cmd_install_ttyd)
+
+    s_doctor = sub.add_parser("doctor",
+                              help="check prerequisite packages (tmux, ttyd)")
+    s_doctor.set_defaults(func=cmd_doctor)
 
     s_status = sub.add_parser("status", help="combined status view")
     s_status.set_defaults(func=cmd_status)
