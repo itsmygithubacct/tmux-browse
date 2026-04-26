@@ -1,5 +1,122 @@
 # Changelog
 
+## 0.7.1.4 — Inline raw shells, fit-to-iframe controls, send-bar repeater (2026-04-26)
+
+Round of dashboard polish on top of 0.7.1.3. No extension contract
+changes — agent / sandbox / qr submodule pins are unchanged; this
+release is core-only.
+
+### Top-level launcher
+
+- New `./tmux-browse` shell script in the repo root. Runs the
+  dashboard with no args (same as `python3 tmux_browse.py serve`)
+  and forwards everything else to the existing CLI surface
+  (`./tmux-browse list`, `./tmux-browse install-ttyd`, etc.).
+  Resolves its own directory so a symlink in `~/.local/bin` works.
+
+### Raw ttyd shells become first-class panes
+
+- Clicking **Raw ttyd** previously navigated the browser to a
+  separate `/raw-ttyd?...` wrapper page. The shell now renders
+  inline as a regular pane in the session list, with the same
+  drag-to-reorder, ▲/▼ move buttons, snap-left/snap-right split
+  affordance, and `×` close button (routed to `/api/ttyd/stop`
+  instead of `tmux kill-session`). Display label is `shell ·
+  raw-shell-<uid>`; the underlying name format is unchanged.
+- `start_raw` now persists the port via `ports.assign(name)` so
+  the shell survives a page reload. `ttyd.stop` releases the port
+  for `raw-shell-*` names; `gc_orphans` keeps live raw-shell
+  assignments off the prune list.
+- `_sessions_payload` walks the port registry for `raw-shell-*`
+  entries with a live pidfile and emits them with `kind: "raw"`.
+  Tmux sessions get `kind: "tmux"`. CSS hides the tmux-only
+  summary controls (Idle Alert, Log, Scroll, Hide, send bar,
+  phone keys, footer) on raw-shell rows.
+- The legacy `/raw-ttyd` wrapper route + `render_raw_ttyd`
+  template function are gone. Bookmarks to that URL now 404;
+  relaunching from the dashboard is the path forward.
+
+### Fit-to-iframe + ±W / ±H step buttons
+
+- The window-chrome row gains a fit-to-iframe icon (corner
+  arrows) that runs `tmux resize-window` with both `-x cols` and
+  `-y rows` derived from the iframe's actual pixel dimensions.
+  The maximize square now stretches the wrapper to 90vh **and**
+  refits tmux on the next animation frame; the embedded terminal
+  visibly reflows to fill its container instead of leaving a
+  gutter.
+- New `±W` / `±H` step buttons sit left of the fit icon. Each
+  click adjusts the iframe's pixel size (80 px width, 60 px
+  height per step) and re-fits tmux. `+w` / `+h` ship visible by
+  default; `-w` / `-h` ship hidden. All four are individually
+  toggleable via Config > Expanded Pane > window controls.
+- `lib/dashboard_config.py` adds `ttyd_cell_width_px` (default
+  7.7) and `ttyd_cell_height_px` (default 17) so operators on
+  different fonts / browser zoom can tune the fit calculation.
+  The inline status message reports the actual numbers used:
+  e.g. `tmux 154×38 (iframe 1188×648px, cell 7.7×17px)`.
+- The redundant summary-row pane-zoom icon (`wc-zoom-icon`,
+  triggered `resize-pane -Z` — a no-op on single-pane windows)
+  is removed; same SVG, less-useful primitive.
+- `/api/session/resize` now accepts an optional `rows` parameter
+  alongside `cols` and emits `-y rows` to `tmux resize-window`
+  when present. Bounds: cols ∈ [20, 500], rows ∈ [5, 200].
+
+### Send-bar repeater
+
+- The send bar gets a number input (default 1, max 99) next to
+  the Send button. Bump it past 1: the first send fires
+  immediately, the rest queue. Each queued send waits for the
+  pane's `idle_seconds` to cross `hot_loop_idle_seconds`, holds
+  for a 60s cooldown, re-checks idle right before firing, then
+  posts. Inline status reports queue position (`waiting for
+  idle`, `idle, Ns cooldown`, `sending…`).
+- `checkSendQueue(rows)` runs each refresh tick; pane reactivation
+  during cooldown restarts the clock so a busy pane isn't
+  interrupted by a stray send.
+
+### Restart banner correctness
+
+- The restart banner used to render visible at all times — the
+  CSS rule had `display: flex` unconditionally, beating the HTML5
+  `hidden` attribute. JS toggling `node.hidden` had no visual
+  effect; the Dismiss button appeared dead; "Restart the dashboard
+  to activate 0 newly enabled extensions" rendered when nothing
+  was pending. Constrain the flex layout to `:not([hidden])` and
+  trust the server's `restart_pending` count on every refresh
+  rather than incrementing a local cumulative counter.
+
+### Log auto-scroll-to-bottom
+
+- `/api/session/log?html=1` returns a minimal HTML wrapper that
+  scrolls the buffer to the bottom on load. Both the core
+  dashboard's per-pane Log button and the agent extension's
+  per-agent Log button pass the flag; scripted callers without
+  `html=1` keep the unchanged `text/plain` response.
+
+### Other fixes from the post-split review
+
+- `_h_tasks_launch` now refuses with HTTP 409 when the agent
+  extension isn't enabled (instead of silently spawning a tmux
+  session running the unknown verb `tb agent`).
+- `lib/server.py` and `lib/sessions.py` lose two dead imports
+  (`UsageError`, `parse`).
+- `static/panes.js` init now uses a null-safe `bind()` helper for
+  every binding that targets agent-extension-only DOM IDs or
+  handlers — without this, a no-extensions install would crash
+  mid-init and leave the dashboard half-bootstrapped.
+- `/api/extensions/update` gains four endpoint-level tests
+  (missing name → 400, UpdateError surfaces stage,
+  changed=true signals restart, unchanged version skips it). The
+  route-table assertion now lists the update endpoint.
+- Stale doc references cleaned up across `docs/architecture.md`,
+  `docs/dashboard.md`, `docs/tb.md`, and `README.md` — module
+  layout reflects the post-split reality, the HTTP API table is
+  split into core / agent / qr sections, and `/api/tasks` POST
+  body shape matches what the server actually accepts.
+
+Full suite: 592 tests green.
+
 ## 0.7.1.3 — Docker sandbox + QR sharing carved out; lib lean pass (2026-04-24)
 
 Three modules leave core, in keeping with the E0-E4 extension
