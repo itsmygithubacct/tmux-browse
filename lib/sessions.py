@@ -71,6 +71,11 @@ def server_running() -> bool:
         )
     except FileNotFoundError:
         return False
+    except subprocess.TimeoutExpired:
+        # Server socket exists but the process isn't responding (memory
+        # pressure, stuck client). From the dashboard's perspective the
+        # right answer is "no usable server" — same as "not running".
+        return False
     if r.returncode == 0:
         return True
     stderr = (r.stderr or "").lower()
@@ -79,13 +84,34 @@ def server_running() -> bool:
     return "no server" not in stderr
 
 
+def server_responsive(timeout: float = 2.0) -> bool:
+    """Cheap liveness probe — ``tmux display-message`` with a short timeout.
+
+    Distinguishes "tmux is up and answering" from "socket exists but the
+    server isn't responding". Used by the dashboard to surface a banner
+    when a memory-pressured server has gone unresponsive but the socket
+    file is still on disk.
+    """
+    try:
+        r = subprocess.run(
+            ["tmux", "display-message", "-p", "ok"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0
+
+
 def list_sessions() -> list[Session]:
     try:
         r = subprocess.run(
             ["tmux", "list-sessions", "-F", _SESSION_FORMAT],
             capture_output=True, text=True, timeout=5,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # Treat a hung tmux server like an absent one. Memory-pressured
+        # boxes can leave the server unresponsive for tens of seconds;
+        # raising would take down /api/sessions and blank the dashboard.
         return []
     if r.returncode != 0:
         return []
@@ -133,7 +159,7 @@ def list_panes() -> list[PaneInfo]:
             ["tmux", "list-panes", "-a", "-F", _PANE_FORMAT],
             capture_output=True, text=True, timeout=5,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
     if r.returncode != 0:
         return []
