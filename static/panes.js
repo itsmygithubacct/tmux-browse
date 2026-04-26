@@ -1889,10 +1889,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("phone-key-reset-btn").addEventListener("click", resetPhoneKeys);
     document.getElementById("cfg-lock-set-btn").addEventListener("click", setConfigLock);
     document.getElementById("cfg-lock-clear-btn").addEventListener("click", clearConfigLock);
-    document.getElementById("hooks-save-btn").addEventListener("click", saveHooks);
-    document.getElementById("hooks-reset-btn").addEventListener("click", resetHooks);
-    document.getElementById("conductor-save-btn").addEventListener("click", saveConductor);
-    document.getElementById("conductor-reload-btn").addEventListener("click", loadConductor);
+    bind("hooks-save-btn", "click", typeof saveHooks === "function" ? saveHooks : null);
+    bind("hooks-reset-btn", "click", typeof resetHooks === "function" ? resetHooks : null);
+    bind("conductor-save-btn", "click", typeof saveConductor === "function" ? saveConductor : null);
+    bind("conductor-reload-btn", "click", typeof loadConductor === "function" ? loadConductor : null);
     document.getElementById("cfg-toggle-all-topbar").addEventListener("click", (e) => toggleAllSection(TOPBAR_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-summary").addEventListener("click", (e) => toggleAllSection(SUMMARY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-body").addEventListener("click", (e) => toggleAllSection(BODY_TOGGLE_KEYS, e.currentTarget));
