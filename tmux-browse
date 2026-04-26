@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Top-level launcher for tmux-browse.
+#
+# Lets you run the dashboard (or any other tmux-browse subcommand) from
+# anywhere as ``./tmux-browse [args]`` without having to remember to
+# invoke ``python3 tmux_browse.py``.
+#
+#   ./tmux-browse                     # same as ``serve`` — runs the dashboard
+#   ./tmux-browse serve --bind 127.0.0.1
+#   ./tmux-browse list
+#   ./tmux-browse install-ttyd
+#   ./tmux-browse --help              # full subcommand list
+#
+# Resolves its own directory so it works regardless of the caller's cwd.
+
+set -euo pipefail
+
+# Follow symlinks so a ``ln -s ~/portfolio/tmux-browse/tmux-browse ~/.local/bin/tmux-browse``
+# still resolves to the repo root.
+SCRIPT_DIR=$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
+
+PY=${PYTHON:-python3}
+
+if [[ $# -eq 0 ]]; then
+    exec "$PY" "$SCRIPT_DIR/tmux_browse.py" serve
+fi
+
+exec "$PY" "$SCRIPT_DIR/tmux_browse.py" "$@"
