@@ -41,29 +41,20 @@ python3 tb.py exec work --json -- pytest -q
 distro packages it (Debian/Ubuntu `apt install ttyd`, Homebrew `brew install
 ttyd`), that works too.
 
-### Installing the agent module
+### Optional extensions
 
-The agent platform lives in a separate repo
-[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
-and is opt-in. Three ways to enable it:
+Core stays small. Three optional extensions live in their own repos
+and load through the dashboard's **Config → Extensions** card (or
+`make install-<name>` on a headless host):
 
-```bash
-# 1. In the running dashboard: Config → Extensions → Agents
-#    module → Download and enable. Restart when the banner appears.
+| Extension | Repo | Adds |
+|---|---|---|
+| Agent | [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent) | `tb agent ...` CLI, agent runtime, REPL, runs index, conductor, scheduler, Agents/Runs/Tasks dashboard sections, `/api/agent-*` endpoints |
+| Sandbox | [tmux-browse-sandbox](https://github.com/itsmygithubacct/tmux-browse-sandbox) | Docker execution sandbox (library only; consumed by the agent extension when an agent has `sandbox: docker`) |
+| QR | [tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr) | **Show QR** / **Read QR** buttons in Config and a `/api/qr` endpoint for round-tripping view config between devices |
 
-# 2. Headless host with the dashboard not running:
-make install-agent            # uses the same install path as the UI
-
-# 3. Clone everything at once, then enable:
-git clone --recursive https://github.com/itsmygithubacct/tmux-browse.git
-cd tmux-browse
-make enable-agent             # flips the bit; restart the dashboard
-```
-
-Manage an already-installed agent with `make update-agent`,
-`make disable-agent`, `make uninstall-agent`, or (three-step
-confirmation to destroy state) `make uninstall-agent-with-state`.
-State files under `~/.tmux-browse/` are kept by every other path.
+Each extension's README documents its own surface. None of them are
+required to run the dashboard or `tb` CLI.
 
 ## Quick Start
 
@@ -139,89 +130,6 @@ tb type builder_b   "ssh builder-2.internal"
 Everything the agent does via `tb` in those panes happens on the remote
 host at the far end of the ssh — tmux just transports the terminal,
 tmux-browse transports tmux.
-
-## Built-in agent platform (under active development)
-
-> **Heads-up:** the agent layer described here is under active
-> development. The shapes below are stable enough to use but the
-> CLI options, defaults, and some endpoints may shift between patch
-> releases until the next minor-version bump.
-
-Beyond driving external agent CLIs through `tb`, tmux-browse ships a
-**first-class agent runtime** that turns named LLM agents into
-long-running, observable, sandbox-able workers. Everything still
-lives on top of the same `tb_command` tool surface, the same run
-index, and the same tmux primitives — but an agent is now a
-persistent record you can run, schedule, compose, and audit.
-
-**Agents**
-
-```bash
-# Add an agent (reads API key from stdin)
-printf '%s' "$ANTHROPIC_API_KEY" | tb agent add opus --api-key-stdin
-printf '%s' "$OPENAI_API_KEY"    | tb agent add gpt  --api-key-stdin
-
-# Run one-shot against a prompt
-tb agent opus "snapshot every tmux session and report idle ones"
-
-# Or open a persistent REPL (conversation + knowledge base + context)
-tb agent repl opus
-```
-
-Provider, model, base URL, and wire API are per-agent; switching from
-Anthropic to OpenAI to Kimi to MiniMax is a config-file change, not a
-code change.
-
-**Isolation**
-
-Each agent picks its sandbox mode: `host` (default), `worktree`
-(git-worktree isolation for task work), or `docker` (a short-lived
-container with its own tmux server inside). Docker mode is
-**fail-closed** — a missing daemon or a startup failure is a hard
-error, never a silent fallback to the host.
-
-**Modes**
-
-Long-running postures above the single-shot runner:
-
-- **Cycle** — one planning-then-execute turn per invocation. The
-  agent produces a short plan, then runs against that plan with the
-  normal tool budget.
-- **Work** — file-backed task queue runner. One task per line;
-  `.done` sibling makes it resumable across restarts.
-
-Each mode surfaces as both a CLI verb (`tb agent cycle`,
-`tb agent work`) and a dashboard button.
-
-**Conductor rule engine**
-
-Composite policy above per-event hooks: rolling-window counters
-("three failures within one hour"), cross-agent routing
-("on sonnet rate-limit, retry on opus"), and a decision log that
-records every firing so you can always answer *why* something
-happened.
-
-**Observability**
-
-Every run — CLI, REPL, scheduler, conductor, cycle, work, retry —
-lands in the same JSONL run index with its origin tagged, searchable
-from the Runs section of the dashboard. Per-agent idle detection
-uses a content-hash of each session's pipe-pane log, not tmux's
-cursor-activity proxy.
-
-**Extensible tool surface**
-
-Agents default to a single `tb_command` tool. A small registry
-inside the agent extension (`agent/tool_registry.py` in the
-[tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
-repo) lets you add more — the first non-`tb` tool, `read_file`,
-ships today with bounded args and a path blocklist that matches
-Docker-mode mount validation. Per-agent `tools: [...]` declares
-what's enabled; everything else is rejected at dispatch with a
-clean error.
-
-See `docs/tb.md` for the full command surface and
-`docs/dashboard.md` for the UI.
 
 ## Same sessions, any device on your LAN
 
@@ -370,35 +278,30 @@ tmux-browse/
 ├── tb.py                     # tmux CLI for humans + LLMs
 ├── lib/
 │   ├── config.py / ports.py / sessions.py / ttyd.py
+│   ├── session_logs.py                            # per-session pipe-pane + content-hash idle
 │   ├── server.py / templates.py / static.py        # dashboard internals
 │   ├── auth.py / tls.py                            # optional auth + HTTPS
 │   ├── dashboard_config.py                         # saved dashboard settings
-│   ├── agent_store.py / agent_providers.py        # agent config + wire adapters
-│   ├── agent_runner.py / agent_runtime.py         # execution loop + session mgmt
-│   ├── agent_logs.py / agent_run_index.py         # per-agent logs + searchable index
-│   ├── agent_conversations.py                      # persistent REPL turn history
-│   ├── agent_status.py                             # live status derivation
-│   ├── agent_costs.py                              # per-run token tracking
-│   ├── agent_runs.py                               # run_id + lifecycle constants
-│   ├── agent_scheduler.py / agent_scheduler_lock.py  # background workflow engine
-│   ├── agent_workflows.py / agent_workflow_runs.py   # workflow config + history
-│   ├── tasks.py / worktrees.py                     # optional task/worktree mode
-│   ├── qr.py                                       # pure-Python QR code generator
+│   ├── tasks.py                                    # task store (consumed by the agent extension)
+│   ├── extensions/                                 # extension loader, catalog, submodule helpers
 │   ├── ttyd_installer.py
 │   ├── targeting.py / errors.py / output.py       # tb primitives
 │   ├── exec_runner.py                             # tb exec strategies
 │   └── tb_cmds/                                   # one module per verb group
-│       ├── agent.py                               # tb agent subcommands
-│       ├── web.py / bulk.py / lifecycle.py
+│       ├── web.py / bulk.py / lifecycle.py / config_cmd.py
 │       └── read.py / write.py / observe.py
 ├── static/                                        # dashboard frontend assets
 │   ├── app.css / favicon.svg
 │   ├── util.js / state.js / config.js / audio.js  # core JS modules
-│   ├── agents.js / tasks.js / runs.js             # feature JS modules
 │   ├── phone-keys.js / sharing.js / panes.js      # UI JS modules
+│   └── extensions.js                              # Config > Extensions card + restart banner
+├── extensions/                                    # opt-in submodules (none required)
+│   ├── agent/                # tmux-browse-agent
+│   ├── qr/                   # tmux-browse-qr
+│   └── sandbox/              # tmux-browse-sandbox
 ├── bin/
 │   └── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
-├── tests/                    # 304 stdlib unittest tests
+├── tests/                    # stdlib unittest tests
 ├── docs/
 │   ├── dashboard.md
 │   ├── tb.md

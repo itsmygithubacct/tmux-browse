@@ -221,52 +221,37 @@ cannot contain whitespace, `:`, or `.`.
 
 ## Config section
 
-Below **Hidden** there is a furled **Config** pane. It includes both the
-server-backed dashboard config file at `~/.tmux-browse/dashboard-config.json`
-and an agent editor backed by the agent store under `~/.tmux-browse/`.
-
-It covers:
+Below **Hidden** there is a furled **Config** pane backed by
+`~/.tmux-browse/dashboard-config.json`. It covers:
 
 - **Behavior:** day/night mode, auto-refresh enable/seconds, hot-loop
-  idle wait, default agent step budget, launch-on-expand, furl side-by-
-  side panes together, resize row of panes together, default ttyd
-  height/min-height, idle alert sound
+  idle wait, launch-on-expand, furl side-by-side panes together, resize
+  row of panes together, default ttyd height/min-height, idle alert
+  sound.
 - **Title Bar** (with All On/All Off): master toggle for the whole bar,
   plus individual toggles for title text, session count, new session
-  field, Raw ttyd button, Refresh button, Restart button, status text
+  field, Raw ttyd button, Refresh button, Restart button, status text.
 - **Summary Row** (with All On/All Off): master toggle for all summary
   controls, plus session name, expand/collapse arrow, badges (attached,
   windows, port), idle text, idle alert button, Open/Log/Scroll/Split/
-  Hide buttons, reorder pad
+  Hide buttons, reorder pad.
 - **Expanded Pane** (with All On/All Off): master toggle for the action
   buttons row, plus Launch, Stop ttyd, Kill, send bar, phone keyboard
   addons, Hot Buttons manager, hot-button loop toggles, footer, inline
-  messages
+  messages.
 - **Phone Keys** (furled subsection): live draggable preview of the
   current mobile key layout. Add custom keys via label + tmux key name
   (e.g. `Tab`, `C-a`, `F5`). Click to remove, drag to reorder, reset
   to defaults. Stored in localStorage.
-- **Agent:** load a built-in preset or existing agent, edit provider/
-  model/base URL/wire API/sandbox mode, and save or remove the stored
-  definition. The Sandbox dropdown offers `host`, `worktree`, and
-  `docker`. On hosts without Docker installed, the `docker` option is
-  hidden for new agents but shown as `docker (unavailable on this host)`
-  (disabled) when an existing agent already has it set, so saved configs
-  are visible instead of silently rewritten
 - **Lock config pane:** optional password that gates both the Config
-  pane UI *and* every server-side mutation endpoint. Core-gated
-  endpoints include `/api/dashboard-config`, `/api/tasks`,
-  `/api/extensions/*` (install/update/enable/disable/uninstall), and
-  `/api/config-lock` itself. Each enabled extension's mutation
-  endpoints (e.g. agent's `/api/agents`, `/api/agent-hooks`,
-  `/api/agent-workflows`, `/api/agent-conductor`) are also gated —
-  the extension handlers call `handler._check_unlock()` directly.
+  pane UI *and* every server-side mutation endpoint
+  (`/api/dashboard-config`, `/api/tasks`, `/api/extensions/*`, and any
+  mutation endpoint contributed by an enabled extension).
   `/api/config-lock/verify` issues a 32-byte unlock token with a
   12-hour TTL; the browser sends it as `X-TB-Unlock-Token` on every
   non-GET request. Password stored as SHA-256 hash at
   `~/.tmux-browse/config-lock-secret` (0600). Tokens live in server
-  memory only — a restart forces re-unlock. Clearing the lock drops
-  all tokens.
+  memory only — a restart forces re-unlock.
 - **Pane Groups:** named buckets for sessions. Visible and Hidden
   always exist; create additional groups (e.g. Agents, Monitoring)
   with the editor in Config > Behavior. Each group renders as its
@@ -280,89 +265,31 @@ It covers:
   enabled bit in `~/.tmux-browse/extensions.json`. A restart banner
   appears at the top of the page until you click **Restart now**;
   the loader activates the extension on restart. Install is
-  config-lock gated. Failures surface verbatim in the card with a
-  stage tag (`clone` / `submodule_init` / `validate`) so you can
-  tell whether it's a network problem, a pin problem, or a core-
-  version mismatch. Once installed, each row grows a **Manage…**
+  config-lock gated. Once installed, each row grows a **Manage…**
   button that opens a modal exposing **Update to pinned ref**,
   **Disable** (or **Enable**), and **Uninstall**. State files under
   `~/.tmux-browse/` are kept by default — flip the *Also remove*
-  checkbox before Uninstall to delete them. That path takes a
-  `confirm()` prompt; no way to destroy state with one stray click.
-  Headless hosts can drive the same actions from the repo root via
-  `make install-agent`, `make update-agent`, `make disable-agent`,
-  `make uninstall-agent`, or `make uninstall-agent-with-state`.
+  checkbox before Uninstall to delete them. Headless hosts can drive
+  the same actions from the repo root via the
+  `make {install,update,enable,disable,uninstall}-<extension>` targets.
 
 Action buttons: **Save Config**, **Load From File**, **Defaults**.
-The QR config-share feature ships in the
-[tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr)
-extension — install it from Config > Extensions to add **Show QR**
-(generate QR code of current view config) and **Read QR** (scan from
-another device's camera to import).
 
-Agent actions live in the
+Extensions can extend this pane with their own subsections — e.g. the
+agent extension adds an **Agent** editor and **Save / Reload / Remove
+Agent** actions, and the QR extension adds **Show QR** / **Read QR**
+buttons. See each extension's README for the controls it contributes.
+
+## Agent / Runs / Tasks sections (extension)
+
+When the
 [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
-extension and only appear when it's installed: **Save Agent**,
-**Reload Agents**, and **Remove Agent** write
-`~/.tmux-browse/agents.json` plus the private
-`~/.tmux-browse/agent-secrets.json` secret store. The dashboard
-config file can also be inspected and edited from the CLI via
-`tb config show|get|set|reset`.
-
-## Agents section
-
-When one or more agents exist, the dashboard shows a furled **Agents**
-pane. Each configured agent gets:
-
-- a colored **status badge** (Running / Idle / Error / Rate Limited /
-  Paused) with reason text and relative last-activity timestamp
-- a **Steps** button to view the last run's tool transcript
-- a **Log** button that opens the persisted agent action log
-- a **Start REPL** / **Open REPL** button that creates or reuses a tmux
-  conversation session named `agent-repl-<agent>` and opens its ttyd
-- a **Fork REPL** button that branches the current conversation into a
-  new session with copied history — both can then diverge independently
-- a **Context** button that opens a read-only summary of the REPL's
-  exec target, observed panes, mode, and attached knowledge-base files
-  (managed via `tb agent repl <name>` slash-commands — see `tb.md`)
-- a **Conductor: N** grey badge when at least one rule in the
-  conductor config matches this agent (specifically or via `*`); click
-  it to see the recent decision-log entries scoped to this agent
-- **Cycle** / **Work** buttons launch the corresponding agent mode
-  (see `tb.md`). **Under active development** — behaviour and
-  defaults may shift between patch releases.
-- a grey mode badge (e.g. `cycle / plan`, `cycle / exec`, `work`)
-  alongside the status badge when the most recent run used a mode
-
-Below the agent cards, a **token usage summary** shows cumulative token
-counts per agent (when provider usage data is available).
-
-Those conversation sessions still appear in the main session grid like any
-other tmux session. When a session is in conversation mode, its expanded pane
-adds a **Workflows** button and a workflow on/off switch. Workflows are
-scheduled prompts saved server-side in `~/.tmux-browse/agent-workflows.json`.
-Workflow execution is **server-side** — a background scheduler thread
-evaluates due workflows every 10 seconds and runs them via `run_agent`,
-so workflows continue even when the browser tab is closed. The scheduler
-uses a PID-based lock file to prevent duplicate execution across multiple
-dashboard processes.
-
-## Runs section
-
-Below Agents, a **Runs** section provides a searchable index of all
-completed and failed agent runs. Filters: agent, status
-(completed/failed/rate limited), and free-text search across prompts
-and messages. Results show status badge, agent name, step count,
-duration, prompt preview, and relative timestamp.
-
-## Tasks section
-
-An optional **Tasks** section allows creating isolated coding tasks.
-Each task links a title, a git repo, an optional worktree, and an
-assigned agent. Creating a task with a worktree provisions a git
-worktree under `~/.tmux-browse/worktrees/` with a `tb-task/<slug>`
-branch. The **Launch** button opens the assigned agent's REPL in the
-task's worktree directory. Tasks can be marked done or archived.
+extension is installed, the dashboard adds three furled sections —
+**Agents**, **Runs**, and **Tasks** — for managing LLM agents, browsing
+their run history, and launching task-scoped REPLs. Without that
+extension installed, none of these sections render and core stays
+purely a tmux dashboard. See the extension's README for the full
+control layout.
 
 ## Connected Endpoints section
 
@@ -402,18 +329,14 @@ same per-browser localStorage that backs Hidden/Visible.
 - Combined stdout+stderr of each ttyd lives at
   `~/.tmux-browse/logs/<session>.log`.
 - Dashboard config lives at `~/.tmux-browse/dashboard-config.json`.
-- Agent metadata lives at `~/.tmux-browse/agents.json`.
-- Agent API keys live at `~/.tmux-browse/agent-secrets.json`.
-- Agent action logs live under `~/.tmux-browse/agent-logs/`.
-- Agent conversation turns live under `~/.tmux-browse/agent-conversations/`.
-- Agent workflow schedules live at `~/.tmux-browse/agent-workflows.json`.
-- Agent workflow run history lives at `~/.tmux-browse/agent-workflow-runs.jsonl`.
-- Agent workflow runtime state lives at `~/.tmux-browse/agent-workflow-state.json`.
-- Agent run index lives at `~/.tmux-browse/agent-run-index.jsonl`.
-- Agent cost tracking lives at `~/.tmux-browse/agent-costs.jsonl`.
 - Task definitions live at `~/.tmux-browse/tasks.json`.
-- Task worktrees live under `~/.tmux-browse/worktrees/`.
-- Scheduler lock lives at `~/.tmux-browse/agent-scheduler.lock`.
+- Per-session pipe-pane logs live under `~/.tmux-browse/session-logs/`.
+
+Extensions write their own state under `~/.tmux-browse/`. The agent
+extension, for example, adds files like `agents.json`,
+`agent-secrets.json`, `agent-run-index.jsonl`, and an `agent-logs/`
+directory; see its README for the full list. Uninstalling an extension
+keeps its state files unless you opt in to *Also remove*.
 
 A session keeps its port forever, or until you explicitly drop it via
 `tmux-browse ports --prune` (for sessions that no longer exist).
@@ -463,45 +386,17 @@ All JSON responses use a stable `{ok, …}` envelope.
 | POST   | `/api/config-lock/verify` | `{password}` | `{ok, unlocked, unlock_token, ttl_seconds}` or 403 |
 | POST   | `/api/server/restart` | `{}` | `{ok, restarting}` — re-exec the server process |
 
-### Agent extension endpoints (only when `agent` is enabled)
+### Extension endpoints
 
-Routes contributed by [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent).
-All POSTs are config-lock gated.
+Enabled extensions contribute their own routes through the loader; all
+POSTs from extensions go through the same config-lock gate as core.
 
-| Method | Path | Body / Query | Returns |
-|--------|------|--------------|---------|
-| GET    | `/api/agents`       | — | `{ok, agents, defaults, paths, docker_supported}` — each agent includes `status`, `status_reason`, `last_activity_ts`, `mode`, `mode_phase` |
-| GET    | `/api/agent-log`    | `?name=AGENT&limit=N` | `text/plain` formatted agent action log |
-| GET    | `/api/agent-log-json` | `?name=AGENT&limit=N` | `{ok, entries, path}` |
-| GET    | `/api/agent-workflows` | — | `{ok, path, config}` |
-| GET    | `/api/agent-workflow-state` | — | `{ok, state, scheduler_running}` |
-| GET    | `/api/agent-workflow-runs` | `?limit=N` | `{ok, runs}` — workflow execution history |
-| GET    | `/api/agent-runs`   | `?agent=&status=&since=&until=&q=&tool=&limit=` | `{ok, runs}` — searchable run index |
-| GET    | `/api/agent-run`    | `?run_id=X` | `{ok, run}` |
-| GET    | `/api/agent-costs`  | `?agent=&since=&until=` | `{ok, per_agent, daily, global_daily_budget}` |
-| GET    | `/api/agent-hooks`  | — | `{ok, hooks, defaults}` — event-hook config |
-| GET    | `/api/agent-notifications` | `?limit=N` | `{ok, notifications}` |
-| GET    | `/api/agent-conductor` | — | `{ok, rules}` — conductor rule set |
-| GET    | `/api/agent-conductor-events` | `?limit=N` | `{ok, events}` — decision log |
-| GET    | `/api/agent-repl-context` | `?name=AGENT` | `{ok, context, kb}` — REPL context + attached KB files |
-| POST   | `/api/agents`       | `{agent: {name, provider, model, base_url, wire_api, sandbox?, api_key?, ...}}` | `{ok, agent}` |
-| POST   | `/api/agents/remove` | `{name}` | `{ok, removed, name}` |
-| POST   | `/api/agent-workflows` | `{config}` | `{ok, path, config}` |
-| POST   | `/api/agent-hooks`  | `{hooks}` | `{ok, hooks}` |
-| POST   | `/api/agent-conductor` | `{rules}` | `{ok, rules}` |
-| POST   | `/api/agent-cycle`  | `{name, directive?, max_steps?, ...}` | `{ok, run_id, ...}` — fire one cycle (plan → execute) |
-| POST   | `/api/agent-work`   | `{name, directive?, ...}` | `{ok, ...}` — start work mode |
-| POST   | `/api/agent-work/stop` | `{name}` | `{ok, stop_requested}` |
-| POST   | `/api/agent-conversation`      | `{name}` | `{ok, agent, session, port, scheme, already}` |
-| POST   | `/api/agent-conversation-fork` | `{name}` | `{ok, agent, conversation_id, session, port}` |
+- **Agent** (`/api/agent-*` and `/api/agents*`) —
+  [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent)
+- **QR** (`GET /api/qr?data=TEXT` → SVG) —
+  [tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr)
 
-### QR extension endpoints (only when `qr` is enabled)
-
-Routes contributed by [tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr).
-
-| Method | Path | Body / Query | Returns |
-|--------|------|--------------|---------|
-| GET    | `/api/qr` | `?data=TEXT` | `image/svg+xml` — QR code SVG for the given text |
+Each extension's README documents its full route table.
 
 ## CLI companion
 
