@@ -25,7 +25,21 @@ Prerequisites:
 - `tmux`
 - `ttyd` on `$PATH`, or let `install-ttyd` fetch it into `~/.local/bin`
 
+The fastest path on a fresh box is the bundled prereq installer — it
+detects the host package manager (apt / dnf / pacman / zypper / apk /
+brew / port / pkg) and installs tmux from it, then fetches the ttyd
+static binary:
+
 ```bash
+bash bin/install-prereqs.sh
+```
+
+If you'd rather drive the steps yourself:
+
+```bash
+# Check what's missing
+python3 tmux_browse.py doctor
+
 # One-time: fetch the ttyd static binary into ~/.local/bin
 python3 tmux_browse.py install-ttyd
 
@@ -37,9 +51,10 @@ python3 tb.py ls
 python3 tb.py exec work --json -- pytest -q
 ```
 
-`install-ttyd` is only needed where `ttyd` isn't already on `$PATH`. If your
-distro packages it (Debian/Ubuntu `apt install ttyd`, Homebrew `brew install
-ttyd`), that works too.
+`serve` runs `doctor` as a startup preflight and refuses to start if
+tmux or ttyd is missing — pass `--skip-checks` to override. If your
+distro packages ttyd (Debian/Ubuntu `apt install ttyd`, Homebrew
+`brew install ttyd`), that works too.
 
 ### Optional extensions
 
@@ -284,7 +299,7 @@ tmux-browse/
 │   ├── dashboard_config.py                         # saved dashboard settings
 │   ├── tasks.py                                    # task store (consumed by the agent extension)
 │   ├── extensions/                                 # extension loader, catalog, submodule helpers
-│   ├── ttyd_installer.py
+│   ├── ttyd_installer.py / doctor.py             # ttyd fetcher + prereq checks
 │   ├── targeting.py / errors.py / output.py       # tb primitives
 │   ├── exec_runner.py                             # tb exec strategies
 │   └── tb_cmds/                                   # one module per verb group
@@ -300,7 +315,8 @@ tmux-browse/
 │   ├── qr/                   # tmux-browse-qr
 │   └── sandbox/              # tmux-browse-sandbox
 ├── bin/
-│   └── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
+│   ├── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
+│   └── install-prereqs.sh    # one-shot tmux + ttyd installer
 ├── tests/                    # stdlib unittest tests
 ├── docs/
 │   ├── dashboard.md
