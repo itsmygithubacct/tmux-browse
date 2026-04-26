@@ -1824,8 +1824,8 @@ async function refresh() {
 
     document.getElementById("count").textContent =
         `${sessions.length} session${sessions.length === 1 ? "" : "s"}`;
-    renderAgentsPane();
-    renderPaneAdmin();
+    if (typeof renderAgentsPane === "function") renderAgentsPane();
+    if (typeof renderPaneAdmin === "function") renderPaneAdmin();
     renderLayout();
     if (state.splitPicker.open) renderSplitPicker();
 }
