@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.7.1.6 — Prerequisite check, fail-fast preflight, install script (2026-04-26)
+
+A fresh-clone install on a host without `ttyd` (or `tmux`) used to
+fail mid-flight: `tmux_browse.py serve` started, the dashboard
+loaded, then expanding any pane returned the buried "ttyd binary
+not found" error. New machines hit this first thing. Surface it
+upfront and offer a one-shot installer.
+
+### `tmux-browse doctor`
+
+- `lib/doctor.py` runs a stdlib-only check for tmux and ttyd:
+  resolves the binary path, captures the `--version` line, and
+  emits a per-host install hint (apt / dnf / yum / pacman /
+  zypper / apk / brew / port / pkg) for anything missing. The
+  ttyd check prefers the bundled `~/.local/bin/ttyd` over `$PATH`
+  so the dashboard sees the same binary `lib/ttyd.py` will spawn.
+- `tmux-browse doctor` prints the report and exits 0 when both
+  prereqs are present, 8 (`ESTATE`) when something's missing.
+
+### `serve` preflight
+
+- `tmux_browse.py serve` calls `doctor.check()` before binding the
+  socket. If anything required is missing it prints the failing
+  rows + remediation hint and exits 8 instead of starting a
+  half-broken dashboard. Pass `--skip-checks` to override (useful
+  in container builds that install ttyd later).
+
+### `bin/install-prereqs.sh`
+
+- One-shot installer that detects the host package manager,
+  installs tmux from it (with `sudo` when needed, never
+  silently), then runs the bundled `install-ttyd` for the ttyd
+  static binary, then re-runs `doctor` to verify. Idempotent —
+  re-running after a partial success skips what's already
+  installed. Every command it runs is printed first.
+
+### Tests
+
+- `tests/test_doctor.py` covers nine cases: missing tmux,
+  present tmux returning a version, ttyd missing when neither
+  `~/.local/bin/ttyd` nor `$PATH` has it, ttyd preferring the
+  bundled path, the `required_missing` filter, the `format_table`
+  hint inclusion, and the apt / brew / no-manager hint
+  detection. Full suite: 601 tests green (was 592).
+
+### Docs
+
+- `README.md` Install section leads with `bin/install-prereqs.sh`
+  and documents the new `doctor` verb + `--skip-checks` flag.
+- Layout reflects the two new files (`lib/doctor.py`,
+  `bin/install-prereqs.sh`).
+
 ## 0.7.1.5 — Fresh-clone init fixes + tmux-unreachable banner (2026-04-26)
 
 Patch release on top of 0.7.1.4. Three init crashes that surfaced
