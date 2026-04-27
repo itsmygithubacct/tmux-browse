@@ -19,15 +19,16 @@
 // file (panes.js) loads last among the panes/* files, so its
 // DOMContentLoaded handler can call into anything declared earlier.
 
-async function refresh() {
-    const r = await api("GET", "/api/sessions");
-    const sessions = (r && r.sessions) || [];
+// applySessions is the DOM-update half of refresh(). Both the
+// polling path (refresh()) and the SSE path (startSessionStream())
+// feed this same function so they share the dedup, ordering,
+// hidden-set GC, and render-pane diff logic.
+async function applySessions(sessions, tmuxUnreachable) {
     state.sessions = sessions;
-    showTmuxUnreachableBanner(!!(r && r.tmux_unreachable));
+    showTmuxUnreachableBanner(!!tmuxUnreachable);
     checkIdleAlerts(sessions);
     await checkHotLoops(sessions);
     await checkSendQueue(sessions);
-    const root = document.getElementById("sessions");
     const seen = new Set();
 
     // Index the raw session list by name so we can walk it in user order.
@@ -72,6 +73,44 @@ async function refresh() {
     callExt("renderPaneAdmin");
     renderLayout();
     if (state.splitPicker.open) renderSplitPicker();
+}
+
+async function refresh() {
+    const r = await api("GET", "/api/sessions");
+    const sessions = (r && r.sessions) || [];
+    await applySessions(sessions, !!(r && r.tmux_unreachable));
+}
+
+// SSE subscriber. When the dashboard's refresh_strategy is "sse"
+// (default) and the browser supports EventSource, we hold open a
+// single long-lived /api/sessions/stream connection and feed each
+// pushed payload into applySessions(). Returns true on successful
+// open; false if SSE is unsupported or disabled by config (caller
+// falls back to interval polling).
+function startSessionStream() {
+    if (state.sessionStream) return true;  // already running
+    if (state.config.refresh_strategy === "poll") return false;
+    if (typeof EventSource === "undefined") return false;
+    let ev;
+    try {
+        ev = new EventSource("/api/sessions/stream");
+    } catch (_) {
+        return false;
+    }
+    ev.onmessage = (e) => {
+        let data;
+        try { data = JSON.parse(e.data); }
+        catch (_) { return; }
+        const sessions = (data && data.sessions) || [];
+        applySessions(sessions, !!(data && data.tmux_unreachable))
+            .catch(() => {});
+    };
+    ev.onerror = () => {
+        // EventSource auto-reconnects on transient failures. We log
+        // for diagnosis but don't tear down — the browser handles it.
+    };
+    state.sessionStream = ev;
+    return true;
 }
 
 // Surface "tmux server is unreachable" prominently — without this the
@@ -286,7 +325,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     await awaitExt("loadConductor");
     await awaitExt("loadNotifications");
     await loadClients();
-    scheduleRefreshLoop();
+    // Try SSE first (default); fall back to interval polling driven
+    // by the existing scheduleRefreshLoop when SSE is disabled,
+    // unsupported, or the config flag asks for polling.
+    if (!startSessionStream()) {
+        scheduleRefreshLoop();
+    }
     setInterval(pollIdleOnly, 60000);
     setInterval(loadClients, 15000);
     setInterval(checkClientInbox, 10000);

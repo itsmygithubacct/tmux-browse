@@ -221,6 +221,7 @@ const state = {
     config: normalizeDashboardConfig(DASHBOARD_CONFIG_DEFAULTS),
     configPath: "",
     refreshTimer: null,
+    sessionStream: null,  // EventSource handle when SSE refresh is active
     hot: normalizeHotButtons(loadJSON(HOT_KEY, [])),
     hotEditor: { open: false, slot: 0, session: "" },
     idleAlerts: loadJSON(IDLE_KEY, {}),
