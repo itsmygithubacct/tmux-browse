@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.7.2.0 — Remote-access recipes + README polish (2026-04-27)
+
+Docs-only release. First in the 0.7.2.x line; sub-version bump
+because it sets up subsequent releases (PWA, SSE, snapshots) that
+will all reference these recipes.
+
+### Remote-access recipes
+
+- `docs/recipes-remote.md` — five self-contained patterns for
+  reaching the dashboard from off-LAN: SSH tunnel, Tailscale
+  Funnel (with the "Funnel not enabled" tailnet-ACL fix surfaced
+  inline), Cloudflare quick tunnel, Cloudflare named tunnel
+  with operator-owned DNS, and reverse proxy. Each ends with a
+  security note pairing the recipe with `--auth`.
+- `README.md` Install section gains a one-line pointer to the
+  recipes doc.
+- `docs/dashboard.md`'s "Optional authentication" section gets a
+  cross-reference to the recipes for the "real perimeter" case.
+
+### README polish
+
+- New "Why this is shaped the way it is" subsection between the
+  optional-extensions table and Quick Start. Surfaces the
+  stdlib-only / no-build-step rationale and points at
+  `docs/architecture.md` for the full module map.
+
 ## 0.7.1.9 — Split static/panes.js by feature (2026-04-27)
 
 Pure refactor — no behaviour change. Phase B of the deferred
