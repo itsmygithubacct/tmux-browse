@@ -18,7 +18,10 @@ from types import MappingProxyType
 from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
-from .server_routes import meta as routes_meta
+from .server_routes import (
+    meta as routes_meta,
+    sessions as routes_sessions,
+)
 from . import (
     auth,
     tasks as tasks_mod,
@@ -482,13 +485,8 @@ class Handler(BaseHTTPRequestHandler):
     def _h_favicon(self, parsed: ParseResult) -> None:
         routes_meta.h_favicon(self, parsed)
 
-    def _h_sessions(self, _parsed: ParseResult) -> None:
-        summary = _session_summary()
-        self._send_json({
-            "ok": True,
-            "sessions": summary.rows,
-            "tmux_unreachable": summary.tmux_unreachable,
-        })
+    def _h_sessions(self, parsed: ParseResult) -> None:
+        routes_sessions.h_sessions(self, parsed)
 
     def _h_ports(self, _parsed: ParseResult) -> None:
         self._send_json({"ok": True, "assignments": ports.all_assignments()})
@@ -502,33 +500,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
     def _h_session_log(self, parsed: ParseResult) -> None:
-        query = parse_qs(parsed.query)
-        name = (query.get("session", [""])[0] or "").strip()
-        try:
-            lines = int(query.get("lines", ["2000"])[0])
-        except ValueError:
-            lines = 2000
-        lines = max(1, min(lines, 50000))
-        # ``html=1`` wraps the scrollback in a minimal HTML page that
-        # auto-scrolls to the bottom. The dashboard's Log buttons pass
-        # this so the operator lands at the most recent output instead
-        # of the top of the file. Without the flag the response stays
-        # ``text/plain`` for any scripted callers.
-        as_html = (query.get("html", ["0"])[0] or "0").strip().lower() in ("1", "true", "yes")
-        if not name:
-            self._send_text("missing 'session' query parameter", status=400)
-            return
-        ok, content = sessions.capture_target(Target(session=name), lines=lines)
-        if not ok:
-            if as_html:
-                self._send_html(_log_error_html(name, content), status=404)
-            else:
-                self._send_text(content, status=404)
-            return
-        if as_html:
-            self._send_html(_log_html(name, content))
-            return
-        self._send_text(content)
+        routes_sessions.h_session_log(self, parsed)
 
     def _h_health(self, parsed: ParseResult) -> None:
         routes_meta.h_health(self, parsed)
@@ -560,119 +532,23 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json(ttyd.stop(name))
 
-    @staticmethod
-    def _resolve_launch_cmd(cmd: str | None) -> str | None:
-        if not cmd:
-            return None
-        if cmd == "sysmon":
-            return f"bash {config.PROJECT_DIR / 'bin' / 'sysmon.sh'}"
-        if cmd == "systop":
-            for tool in ("glances", "htop", "btop", "top"):
-                if shutil.which(tool):
-                    return tool
-            # Fallback: run sysmon with a message
-            return (f"echo 'No top/htop/glances found. "
-                    f"Install: apt install htop glances'; "
-                    f"bash {config.PROJECT_DIR / 'bin' / 'sysmon.sh'}")
-        return cmd
+    def _h_session_new(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_new(self, parsed, body)
 
-    def _h_session_new(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("name") or "").strip()
-        cmd = self._resolve_launch_cmd((body.get("cmd") or "").strip() or None)
-        cwd = (body.get("cwd") or "").strip() or None
-        ok, err = sessions.new_session(name, cwd=cwd, cmd=cmd)
-        if not ok:
-            self._send_json({"ok": False, "error": err}, status=400)
-            return
-        # Auto-start ttyd if requested
-        if body.get("launch_ttyd"):
-            tls_paths = getattr(self.server, "tls_paths", None)
-            bind_addr = getattr(self.server, "ttyd_bind_addr", None)
-            ttyd_result = ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr)
-            self._send_json({"ok": True, "name": name,
-                             "port": ttyd_result.get("port"),
-                             "url": ttyd_result.get("url", "")})
-            return
-        self._send_json({"ok": True, "name": name})
+    def _h_session_resize(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_resize(self, parsed, body)
 
-    def _h_session_resize(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        cols = int(body.get("cols") or 0)
-        # ``rows`` is optional — old callers only sent ``cols`` and got a
-        # window-width-only resize; the new fit-to-iframe button on the
-        # dashboard sends both so the terminal actually fills its
-        # container vertically too.
-        rows = int(body.get("rows") or 0)
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        if cols < 20 or cols > 500:
-            self._send_json({"ok": False, "error": "cols must be 20-500"}, status=400)
-            return
-        if rows and (rows < 5 or rows > 200):
-            self._send_json({"ok": False, "error": "rows must be 5-200"}, status=400)
-            return
-        import subprocess
-        argv = ["tmux", "resize-window", "-t", f"={name}", "-x", str(cols)]
-        if rows:
-            argv += ["-y", str(rows)]
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=10)
-        if r.returncode != 0:
-            self._send_json({"ok": False, "error": r.stderr.strip() or "resize failed"}, status=400)
-            return
-        self._send_json({"ok": True, "cols": cols, "rows": rows or None})
+    def _h_session_scroll(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_scroll(self, parsed, body)
 
-    def _h_session_scroll(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        ok, err = sessions.enter_copy_mode(name)
-        if not ok:
-            self._send_json({"ok": False, "error": err}, status=400)
-            return
-        self._send_json({"ok": True})
+    def _h_session_zoom(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_zoom(self, parsed, body)
 
-    def _h_session_zoom(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        ok, err = sessions.zoom_pane(name)
-        if not ok:
-            self._send_json({"ok": False, "error": err}, status=400)
-            return
-        self._send_json({"ok": True})
+    def _h_session_type(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_type(self, parsed, body)
 
-    def _h_session_type(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        text = body.get("text")
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        if not isinstance(text, str) or not text.strip():
-            self._send_json({"ok": False, "error": "missing 'text'"}, status=400)
-            return
-        ok, err = sessions.type_line(Target(session=name), text)
-        if not ok:
-            self._send_json({"ok": False, "error": err}, status=400)
-            return
-        self._send_json({"ok": True})
-
-    def _h_session_key(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        keys = body.get("keys")
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        if not isinstance(keys, list) or not keys:
-            self._send_json({"ok": False, "error": "missing 'keys' (list of tmux key names)"}, status=400)
-            return
-        ok, err = sessions.send_keys(Target(session=name), *[str(k) for k in keys])
-        if not ok:
-            self._send_json({"ok": False, "error": err}, status=400)
-            return
-        self._send_json({"ok": True})
+    def _h_session_key(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_key(self, parsed, body)
 
     def _h_dashboard_config_post(self, _parsed: ParseResult, body: dict) -> None:
         if not self._check_unlock():
@@ -1036,18 +912,8 @@ class Handler(BaseHTTPRequestHandler):
     def _h_server_restart(self, parsed: ParseResult, body: dict) -> None:
         routes_meta.h_server_restart(self, parsed, body)
 
-    def _h_session_kill(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        # Stop ttyd first so the wrapper exits cleanly, then kill tmux.
-        ttyd.stop(name)
-        ok, err = sessions.kill(name)
-        if not ok:
-            self._send_json({"ok": False, "error": err}, status=400)
-            return
-        self._send_json({"ok": True})
+    def _h_session_kill(self, parsed: ParseResult, body: dict) -> None:
+        routes_sessions.h_session_kill(self, parsed, body)
 
     # --- dispatch ----------------------------------------------------------
 
