@@ -241,10 +241,19 @@ function createPane(s) {
         wcMinimize, wcMinusW, wcPlusW, wcMinusH, wcPlusH,
         wcTmuxResize, wcMaximize, wcClose);
 
+    // The snapshot tile sits inside the summary so it shows when the
+    // <details> is collapsed (peer-feature parity with muxplex's
+    // preview tiles). CSS hides it when [open] so the live ttyd
+    // iframe isn't competing with a static snapshot.
+    const snapshotEl = el("pre", {
+        class: "pane-snapshot",
+        "aria-label": "recent terminal output preview",
+    });
     const summary = el("summary", { draggable: "true" },
         sname, msg, sbadges, idleWrap,
         el("span", { class: "summary-actions" },
             summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad, wcControls),
+        snapshotEl,
     );
     const bodyKillBtn = el("button", {
         class: "btn red",
@@ -452,7 +461,7 @@ function createPane(s) {
         wcPlusW, wcMinusW, wcPlusH, wcMinusH,
         workflowBtn, workflowToggle, workflowToggleInput, workflowToggleText,
         iframe, iframeWrap, sendBar, sendStatus, phoneKeys, fPort, fPid, fCreated, footer,
-        hotPairs,
+        hotPairs, snapshot: snapshotEl,
     };
 }
 
@@ -525,6 +534,18 @@ function updatePane(rec, s) {
     if (!iframeUrl && cur) {
         rec.iframe.removeAttribute("src");
     }
+
+    // Preview snapshot: render only when enabled and there's content
+    // (raw shells carry snapshot=""). The CSS :empty rule + a hidden
+    // attribute keep this from leaving an empty box.
+    if (cfg.show_pane_snapshot && s.snapshot && s.kind !== "raw") {
+        rec.snapshot.innerHTML = ansiToHtml(trimTrailingBlankLines(s.snapshot));
+        rec.snapshot.hidden = false;
+    } else {
+        rec.snapshot.innerHTML = "";
+        rec.snapshot.hidden = true;
+    }
+
     renderHotButtons(s.name);
     applyDashboardConfigToPane(rec);
 }

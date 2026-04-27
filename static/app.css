@@ -1095,3 +1095,6 @@ details.session.drop-bottom > .drop-overlay {
     margin: 0;
 }
 .pane-snapshot:empty { display: none; }
+/* When the pane is expanded, ttyd is showing live content — the
+   static snapshot would just duplicate it and steal vertical space. */
+details[open] > summary > .pane-snapshot { display: none; }
