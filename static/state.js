@@ -222,6 +222,7 @@ const state = {
     configPath: "",
     refreshTimer: null,
     sessionStream: null,  // EventSource handle when SSE refresh is active
+    _lastLayoutSig: null,  // memo for renderLayout's no-op-when-unchanged check
     hot: normalizeHotButtons(loadJSON(HOT_KEY, [])),
     hotEditor: { open: false, slot: 0, session: "" },
     idleAlerts: loadJSON(IDLE_KEY, {}),
