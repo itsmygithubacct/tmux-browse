@@ -22,6 +22,8 @@ in :func:`lib.server._session_summary`.
 
 from __future__ import annotations
 
+import json
+import logging
 import socket
 import threading
 import time
@@ -30,6 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import __version__, config
+
+_log = logging.getLogger(__name__)
 
 # Fixed port for both the broadcaster and the listener. UDP: a
 # different process on the host can bind the same port at the same
@@ -130,3 +134,147 @@ def clear_peers() -> None:
     """For tests."""
     with _peers_lock:
         _peers.clear()
+
+
+# ---------------------------------------------------------------------------
+# UDP beacon: broadcaster + listener
+# ---------------------------------------------------------------------------
+#
+# Two daemon threads run for the lifetime of the dashboard server:
+#
+#   broadcaster: every BEACON_INTERVAL_SEC, send a UDP packet to the
+#       LAN broadcast address (255.255.255.255). Payload is a JSON
+#       blob naming this host. Other peers' listeners see it.
+#
+#   listener: bind a UDP socket on BEACON_PORT and recvfrom in a
+#       loop. Each packet is parsed, our own packets ignored, and
+#       valid peers upserted into the registry with the source IP
+#       attached. Stale peers age out via gc_peers (called from the
+#       request handler, not on a timer — keeps the listener thread
+#       focused on a single concern).
+#
+# The listener tries to bind BEACON_PORT once. If another tmux-browse
+# instance on this host already bound it, listen-bind fails and we
+# log + continue without a listener. The broadcaster still works,
+# so this peer is *visible* to others, just not the reverse. That's
+# acceptable for the "two boxes on one LAN" case; the rare two-on-
+# one-host case is degraded but not broken.
+
+
+def _beacon_payload(my: PeerInfo, seq: int) -> bytes:
+    """Build the JSON beacon body. Kept tiny so the packet fits in
+    a single datagram comfortably (well under typical 1500 byte
+    MTU)."""
+    return json.dumps({
+        "device_id": my.device_id,
+        "hostname": my.hostname,
+        "dashboard_port": my.dashboard_port,
+        "scheme": my.scheme,
+        "version": my.version,
+        "beacon_seq": seq,
+    }).encode("utf-8")
+
+
+def _broadcaster(my: PeerInfo, stop: threading.Event) -> None:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        seq = 0
+        while not stop.is_set():
+            seq += 1
+            payload = _beacon_payload(my, seq)
+            try:
+                sock.sendto(payload, ("255.255.255.255", BEACON_PORT))
+            except OSError as e:
+                # Network down or no broadcast route. Log once and
+                # keep trying — networks come back, and we don't
+                # want to spam the log every 5 seconds.
+                if seq == 1 or seq % 60 == 0:
+                    _log.debug("federation: beacon send failed: %s", e)
+            stop.wait(BEACON_INTERVAL_SEC)
+    finally:
+        sock.close()
+
+
+def _listener(my_device_id: str, stop: threading.Event) -> None:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # SO_REUSEPORT lets two tmux-browse instances on the same
+        # host both receive beacons (Linux ≥3.9). Best-effort: not
+        # all platforms expose it.
+        if hasattr(socket, "SO_REUSEPORT"):
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+        try:
+            sock.bind(("", BEACON_PORT))
+        except OSError as e:
+            # Port already bound and SO_REUSEPORT unavailable. Log
+            # and exit the thread; we still beacon, just don't
+            # receive. See module-level docstring.
+            _log.warning("federation: listener could not bind UDP %d (%s); "
+                         "incoming beacons disabled on this peer", BEACON_PORT, e)
+            return
+        sock.settimeout(1.0)
+        while not stop.is_set():
+            try:
+                data, (addr, _port) = sock.recvfrom(4096)
+            except socket.timeout:
+                continue
+            except OSError:
+                continue
+            try:
+                msg = json.loads(data.decode("utf-8"))
+                did = str(msg["device_id"])
+            except (ValueError, UnicodeDecodeError, KeyError):
+                # Some other UDP service shouting on the same port,
+                # or a corrupt frame. Drop quietly.
+                continue
+            if did == my_device_id:
+                # Our own broadcast bouncing back via the loopback /
+                # broadcast reflection — don't add ourselves to the
+                # peer list.
+                continue
+            try:
+                upsert_peer(PeerInfo(
+                    device_id=did,
+                    hostname=str(msg.get("hostname", "unknown"))[:64],
+                    dashboard_port=int(msg.get("dashboard_port", 8096)),
+                    scheme=str(msg.get("scheme", "http")),
+                    version=str(msg.get("version", "?"))[:32],
+                    last_seen=int(time.time()),
+                    addr=addr,
+                ))
+            except (TypeError, ValueError):
+                continue
+    finally:
+        sock.close()
+
+
+def start_federation(dashboard_port: int, scheme: str = "http") -> threading.Event:
+    """Start the broadcaster + listener daemon threads.
+
+    Returns a ``threading.Event`` the caller can ``set()`` to stop
+    both threads — the dashboard server doesn't currently expose a
+    stop hook, but tests use this. The threads themselves are
+    daemons so they don't block process exit.
+    """
+    my = PeerInfo(
+        device_id=get_or_create_device_id(),
+        hostname=get_hostname(),
+        dashboard_port=dashboard_port,
+        scheme=scheme,
+        version=__version__,
+        last_seen=0,
+        addr="",
+    )
+    stop = threading.Event()
+    threading.Thread(target=_broadcaster, args=(my, stop),
+                     daemon=True, name="federation-beacon").start()
+    threading.Thread(target=_listener, args=(my.device_id, stop),
+                     daemon=True, name="federation-listen").start()
+    _log.info("federation: started (port %d)", BEACON_PORT)
+    return stop

@@ -600,7 +600,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(bind: str, port: int, verbose: bool = False,
           expected_token: str | None = None,
-          tls_paths: tuple[Path, Path] | None = None) -> None:
+          tls_paths: tuple[Path, Path] | None = None,
+          enable_federation: bool = True) -> None:
     config.ensure_dirs()
 
     # Startup GC: previous dashboard may have exited hard (SIGKILL / crash)
@@ -685,9 +686,22 @@ def serve(bind: str, port: int, verbose: bool = False,
     server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     server_thread.start()
 
+    federation_stop = None
+    if enable_federation:
+        from . import federation
+        try:
+            federation_stop = federation.start_federation(
+                dashboard_port=port, scheme=scheme,
+            )
+        except Exception as e:
+            # Federation is best-effort — never block startup on it.
+            print(f"  federation: skipped ({e})")
+
     try:
         shutdown_event.wait()
     finally:
+        if federation_stop is not None:
+            federation_stop.set()
         print("\nshutting down")
         for name, fn in httpd.extension_registry.shutdown:
             try:
