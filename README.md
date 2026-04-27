@@ -56,6 +56,10 @@ tmux or ttyd is missing — pass `--skip-checks` to override. If your
 distro packages ttyd (Debian/Ubuntu `apt install ttyd`, Homebrew
 `brew install ttyd`), that works too.
 
+Reaching the dashboard from your phone or off-LAN: see
+[`docs/recipes-remote.md`](docs/recipes-remote.md) for SSH-tunnel,
+Tailscale Funnel, Cloudflare Tunnel, and reverse-proxy patterns.
+
 ### Optional extensions
 
 Core stays small. Three optional extensions live in their own repos
