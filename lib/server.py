@@ -25,6 +25,7 @@ from .server_routes import (
     meta as routes_meta,
     ports as routes_ports,
     sessions as routes_sessions,
+    sessions_stream as routes_sessions_stream,
     tasks as routes_tasks,
     ttyd as routes_ttyd,
 )
@@ -530,6 +531,7 @@ class Handler(BaseHTTPRequestHandler):
         "/favicon.ico":            routes_meta.h_favicon,
         "/favicon.svg":            routes_meta.h_favicon,
         "/api/sessions":           routes_sessions.h_sessions,
+        "/api/sessions/stream":    routes_sessions_stream.h_sessions_stream,
         "/api/ports":              routes_ports.h_ports,
         "/api/dashboard-config":   routes_config.h_dashboard_config_get,
         "/api/session/log":        routes_sessions.h_session_log,
