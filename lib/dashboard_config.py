@@ -12,10 +12,20 @@ IDLE_SOUND_CHOICES: tuple[str, ...] = (
     "beep", "chime", "knock", "bell", "blip", "ding",
 )
 
+# How the dashboard receives session-list updates.
+#   "sse"  — long-lived /api/sessions/stream Server-Sent Events
+#            connection; updates land within ~1s of server-side
+#            changes. Default in modern browsers.
+#   "poll" — periodic /api/sessions GETs at refresh_seconds cadence.
+#            Fallback for environments where SSE is blocked (some
+#            corporate proxies) or when EventSource isn't available.
+REFRESH_STRATEGY_CHOICES: tuple[str, ...] = ("sse", "poll")
+
 
 DEFAULTS: dict[str, Any] = {
     "auto_refresh": False,
     "refresh_seconds": 5,
+    "refresh_strategy": "sse",
     "hot_loop_idle_seconds": 5,
     "agent_max_steps": 20,
     "global_daily_token_budget": 0,
@@ -164,6 +174,7 @@ def normalize(raw: Any) -> dict[str, Any]:
     for key, (lo, hi) in _FLOAT_RANGES.items():
         out[key] = _coerce_float(raw.get(key), DEFAULTS[key], lo, hi)
     out["idle_sound"] = _coerce_choice(raw.get("idle_sound"), DEFAULTS["idle_sound"], IDLE_SOUND_CHOICES)
+    out["refresh_strategy"] = _coerce_choice(raw.get("refresh_strategy"), DEFAULTS["refresh_strategy"], REFRESH_STRATEGY_CHOICES)
     out["launch_cwd"] = str(raw.get("launch_cwd") or "").strip()
     return out
 
