@@ -174,5 +174,189 @@ class FetchPeerSessionsTests(unittest.TestCase):
         self.assertEqual(rows, [])
 
 
+class PairedStoreTests(unittest.TestCase):
+    """Persistent paired-peers store (~/.tmux-browse/paired-peers.json)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        state_dir = Path(self.tmp.name) / ".tmux-browse"
+        self._patch = mock.patch.object(federation.config,
+                                         "STATE_DIR", state_dir)
+        self._patch.start()
+        from lib.federation import store as fed_store
+        fed_store.clear_all()
+        self.fed_store = fed_store
+
+    def tearDown(self):
+        self.fed_store.clear_all()
+        self._patch.stop()
+        self.tmp.cleanup()
+
+    def test_add_then_is_paired(self):
+        self.fed_store.add_paired("peer-x", "alpha")
+        self.assertTrue(self.fed_store.is_paired("peer-x"))
+        self.assertFalse(self.fed_store.is_paired("peer-y"))
+
+    def test_add_persists_to_disk(self):
+        self.fed_store.add_paired("peer-x", "alpha")
+        # Read directly to confirm file shape.
+        raw = self.fed_store._read_paired()
+        self.assertIn("peer-x", raw)
+        self.assertEqual(raw["peer-x"]["hostname"], "alpha")
+
+    def test_remove_drops_entry(self):
+        self.fed_store.add_paired("peer-x", "alpha")
+        self.assertTrue(self.fed_store.remove_paired("peer-x"))
+        self.assertFalse(self.fed_store.is_paired("peer-x"))
+        # Second removal returns False (idempotent-ish — already gone).
+        self.assertFalse(self.fed_store.remove_paired("peer-x"))
+
+    def test_add_idempotent_keeps_paired_at(self):
+        self.fed_store.add_paired("peer-x", "alpha", now=1000)
+        self.fed_store.add_paired("peer-x", "alpha-renamed", now=2000)
+        raw = self.fed_store._read_paired()
+        # paired_at preserved from first call; hostname updated.
+        self.assertEqual(raw["peer-x"]["paired_at"], 1000)
+        self.assertEqual(raw["peer-x"]["hostname"], "alpha-renamed")
+
+
+class PendingRequestTests(unittest.TestCase):
+    """In-memory pending pair requests."""
+
+    def setUp(self):
+        from lib.federation import store as fed_store
+        fed_store.clear_all()
+        self.fed_store = fed_store
+
+    def tearDown(self):
+        self.fed_store.clear_all()
+
+    def test_add_and_has_pending(self):
+        self.fed_store.add_pending("peer-x", "alpha", "10.0.0.1")
+        self.assertTrue(self.fed_store.has_pending("peer-x"))
+
+    def test_remove_pending(self):
+        self.fed_store.add_pending("peer-x", "alpha", "10.0.0.1")
+        self.assertTrue(self.fed_store.remove_pending("peer-x"))
+        self.assertFalse(self.fed_store.has_pending("peer-x"))
+
+    def test_list_pending_filters_stale(self):
+        # Add a pending request from "two hours ago" — should be GC'd.
+        self.fed_store.add_pending("stale", "old", "10.0.0.5",
+                                    now=int(time.time()) - 7200)
+        self.fed_store.add_pending("fresh", "new", "10.0.0.6")
+        live = self.fed_store.list_pending()
+        names = [r.device_id for r in live]
+        self.assertEqual(names, ["fresh"])
+
+    def test_outgoing_round_trip(self):
+        self.fed_store.mark_outgoing("peer-x")
+        self.assertTrue(self.fed_store.has_outgoing("peer-x"))
+        self.fed_store.clear_outgoing("peer-x")
+        self.assertFalse(self.fed_store.has_outgoing("peer-x"))
+
+
+class PairAcceptCallbackGuardTests(unittest.TestCase):
+    """The pair-accept-callback handler must refuse callbacks from
+    peers we never sent a request to."""
+
+    def setUp(self):
+        from lib.federation import store as fed_store
+        fed_store.clear_all()
+        self.fed_store = fed_store
+
+    def tearDown(self):
+        self.fed_store.clear_all()
+
+    def test_callback_without_outgoing_is_refused(self):
+        from lib.server_routes import peers as routes_peers
+
+        class FakeHandler:
+            def __init__(self):
+                self.payload = None
+                self.status = None
+            def _send_json(self, obj, status=200):
+                self.payload = obj
+                self.status = status
+
+        h = FakeHandler()
+        routes_peers.h_pair_accept_callback(h, mock.MagicMock(),
+                                             {"device_id": "stranger"})
+        # Stranger isn't in our outgoing set; refused.
+        self.assertEqual(h.status, 409)
+        self.assertFalse(h.payload["ok"])
+        self.assertFalse(self.fed_store.is_paired("stranger"))
+
+    def test_callback_with_outgoing_pairs(self):
+        from lib.server_routes import peers as routes_peers
+
+        class FakeHandler:
+            def __init__(self):
+                self.payload = None
+                self.status = None
+            def _send_json(self, obj, status=200):
+                self.payload = obj
+                self.status = status
+
+        self.fed_store.mark_outgoing("known")
+        h = FakeHandler()
+        routes_peers.h_pair_accept_callback(h, mock.MagicMock(),
+                                             {"device_id": "known",
+                                              "hostname": "alpha"})
+        self.assertTrue(h.payload["ok"])
+        self.assertTrue(self.fed_store.is_paired("known"))
+        # Outgoing record cleared.
+        self.assertFalse(self.fed_store.has_outgoing("known"))
+
+
+class AggregationGatedOnPairing(unittest.TestCase):
+    """_merge_peer_sessions must only fetch from paired peers."""
+
+    def setUp(self):
+        from lib.federation import store as fed_store
+        federation.clear_peers()
+        fed_store.clear_all()
+        self.fed_store = fed_store
+
+    def tearDown(self):
+        federation.clear_peers()
+        self.fed_store.clear_all()
+
+    def test_unpaired_peer_skipped(self):
+        from lib import server
+        federation.upsert_peer(federation.PeerInfo(
+            device_id="not-paired", hostname="x",
+            dashboard_port=9999, scheme="http",
+            version="t", last_seen=int(time.time()),
+            addr="10.0.0.99",
+        ))
+        out: list[dict] = []
+        # Patch the fetch so we'd notice if it WAS called.
+        with mock.patch("lib.server._fetch_peer_sessions") as fake_fetch:
+            server._merge_peer_sessions(out)
+            fake_fetch.assert_not_called()
+        self.assertEqual(out, [])
+
+    def test_paired_peer_attempted(self):
+        from lib import server
+        federation.upsert_peer(federation.PeerInfo(
+            device_id="paired-x", hostname="x",
+            dashboard_port=9999, scheme="http",
+            version="t", last_seen=int(time.time()),
+            addr="10.0.0.99",
+        ))
+        self.fed_store.add_paired("paired-x", "x")
+        out: list[dict] = []
+        with mock.patch("lib.server._fetch_peer_sessions",
+                         return_value=[{"name": "remote-foo"}]) as fake_fetch:
+            server._merge_peer_sessions(out)
+            fake_fetch.assert_called_once()
+        # The remote row was prefixed with the peer's hostname.
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["name"], "x:remote-foo")
+        self.assertEqual(out[0]["device_id"], "paired-x")
+
+
 if __name__ == "__main__":
     unittest.main()
