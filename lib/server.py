@@ -273,25 +273,22 @@ def _fetch_peer_sessions(base_url: str, timeout: float = _PEER_FETCH_TIMEOUT_SEC
 
 
 def _merge_peer_sessions(out: list[dict]) -> None:
-    """Walk known LAN peers, fetch their session lists in parallel,
+    """Walk *paired* LAN peers, fetch their session lists in parallel,
     prefix names with the peer's hostname, and append to ``out``.
 
-    Peers that don't respond inside the budget contribute nothing for
-    this tick — they fill in on the next request once their state
-    stabilises.
+    Pair status is consulted before any HTTP fetch — a discovered
+    peer that the operator hasn't accepted contributes nothing.
+    Peers that don't respond inside the budget contribute nothing
+    for this tick.
     """
     try:
         from . import federation
+        from .federation import store as fed_store
     except ImportError:
         return  # federation module not on this build for some reason
-    peers = federation.list_peers()
+    peers = [p for p in federation.list_peers() if fed_store.is_paired(p.device_id)]
     if not peers:
         return
-    # Skip federation when the dashboard's federation toggle is off
-    # at server level (set in serve()). The presence of peers in the
-    # registry doesn't imply we should aggregate — a user might want
-    # discovery (--no-federation off) without aggregation. For now,
-    # both flow off the same flag; refine if anyone asks.
     results: dict[str, list[dict]] = {}
     threads: list[threading.Thread] = []
     for peer in peers:
