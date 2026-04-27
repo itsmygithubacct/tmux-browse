@@ -19,7 +19,9 @@ from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from .server_routes import (
+    clients as routes_clients,
     meta as routes_meta,
+    ports as routes_ports,
     sessions as routes_sessions,
     ttyd as routes_ttyd,
 )
@@ -489,8 +491,8 @@ class Handler(BaseHTTPRequestHandler):
     def _h_sessions(self, parsed: ParseResult) -> None:
         routes_sessions.h_sessions(self, parsed)
 
-    def _h_ports(self, _parsed: ParseResult) -> None:
-        self._send_json({"ok": True, "assignments": ports.all_assignments()})
+    def _h_ports(self, parsed: ParseResult) -> None:
+        routes_ports.h_ports(self, parsed)
 
     def _h_dashboard_config_get(self, _parsed: ParseResult) -> None:
         self._send_json({
@@ -547,48 +549,17 @@ class Handler(BaseHTTPRequestHandler):
         })
 
 
-    def _h_clients(self, _parsed: ParseResult) -> None:
-        my_id = _touch_client(self)
-        self._send_json({
-            "ok": True,
-            "clients": _active_clients(),
-            "you": my_id,
-        })
+    def _h_clients(self, parsed: ParseResult) -> None:
+        routes_clients.h_clients(self, parsed)
 
-    def _h_clients_nickname(self, _parsed: ParseResult, body: dict) -> None:
-        cid = _touch_client(self)
-        nickname = (body.get("nickname") or "").strip()[:30]
-        if cid in _clients:
-            _clients[cid]["nickname"] = nickname
-        self._send_json({"ok": True, "client_id": cid, "nickname": nickname})
+    def _h_clients_nickname(self, parsed: ParseResult, body: dict) -> None:
+        routes_clients.h_clients_nickname(self, parsed, body)
 
-    def _h_clients_send_config(self, _parsed: ParseResult, body: dict) -> None:
-        my_id = _touch_client(self)
-        target_id = (body.get("target") or "").strip()
-        config_url = (body.get("config_url") or "").strip()
-        if not target_id or not config_url:
-            self._send_json({"ok": False, "error": "missing target or config_url"}, status=400)
-            return
-        if target_id not in _clients:
-            self._send_json({"ok": False, "error": "target client not connected"}, status=404)
-            return
-        inbox = _client_inbox.setdefault(target_id, [])
-        sender = _clients.get(my_id, {})
-        inbox.append({
-            "from": sender.get("nickname") or sender.get("ip", "unknown"),
-            "from_id": my_id,
-            "config_url": config_url,
-            "ts": int(time.time()),
-        })
-        # Keep inbox bounded
-        if len(inbox) > 10:
-            inbox[:] = inbox[-10:]
-        self._send_json({"ok": True, "sent": True})
+    def _h_clients_send_config(self, parsed: ParseResult, body: dict) -> None:
+        routes_clients.h_clients_send_config(self, parsed, body)
 
-    def _h_clients_inbox(self, _parsed: ParseResult) -> None:
-        cid = _touch_client(self)
-        messages = _client_inbox.pop(cid, [])
-        self._send_json({"ok": True, "messages": messages})
+    def _h_clients_inbox(self, parsed: ParseResult) -> None:
+        routes_clients.h_clients_inbox(self, parsed)
 
     def _h_config_lock_status(self, _parsed: ParseResult) -> None:
         has_lock = config.CONFIG_LOCK_FILE.exists() and config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
