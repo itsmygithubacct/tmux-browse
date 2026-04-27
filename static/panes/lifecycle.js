@@ -11,6 +11,37 @@
 const STEP_PX_W = 80;
 const STEP_PX_H = 60;
 
+// Federation routing: when a session lives on a remote peer the
+// row carries peer_url + peer_hostname. Local API calls (start /
+// stop ttyd, kill, etc.) need to hit the peer's HTTP surface, not
+// ours, and must use the un-prefixed session name. _peerInfo()
+// returns the row's federation tags or null for local sessions.
+function _peerInfo(displayName) {
+    const row = state.sessions.find((r) => r.name === displayName);
+    if (!row || !row.peer_url) return null;
+    return {
+        baseUrl: row.peer_url,
+        hostname: row.peer_hostname || displayName.split(":")[0],
+        // The tmux session name on the *peer* — strip our hostname prefix.
+        realName: displayName.includes(":") ? displayName.slice(displayName.indexOf(":") + 1) : displayName,
+    };
+}
+
+// API helper that respects federation routing. Passes the
+// fully-qualified URL when the session is remote so fetch() goes
+// directly to the peer; falls back to the relative path for local.
+async function _peerApi(displayName, method, path, body) {
+    const p = _peerInfo(displayName);
+    if (!p) return await api(method, path, body);
+    return await api(method, p.baseUrl + path, body);
+}
+
+// Resolve to the real session name on whichever host owns it.
+function _peerSessionName(displayName) {
+    const p = _peerInfo(displayName);
+    return p ? p.realName : displayName;
+}
+
 async function launchCodingSession(label, cmd) {
     const slug = label.toLowerCase().replace(/[\s-]+/g, "_");
     let name;
@@ -99,12 +130,19 @@ async function fitTmuxToIframe(session) {
 async function launch(session) {
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) msg.textContent = "starting…";
-    const r = await api("POST", "/api/ttyd/start", { session });
+    const peer = _peerInfo(session);
+    const r = await _peerApi(session, "POST", "/api/ttyd/start",
+                              { session: _peerSessionName(session) });
     if (!r.ok) {
         if (msg) { msg.textContent = "error: " + (r.error || "unknown"); msg.className = "inline-msg err"; }
         return;
     }
-    const url = ttydUrl(r.port);
+    // Local sessions: ttydUrl(port) builds a same-origin URL so the
+    // browser hits 7700-7799 on the dashboard host. Remote sessions:
+    // the peer's response carries a 'url' field already pointing at
+    // its own host:port, which is exactly what we want — the browser
+    // connects directly to the peer's ttyd.
+    const url = peer ? (r.url || `${peer.baseUrl.replace(/\/$/, "")}:${r.port}`) : ttydUrl(r.port);
     const iframe = document.getElementById("iframe-" + cssId(session));
     if (iframe) iframe.src = url;
     if (msg) { msg.textContent = r.already ? "attached" : "launched"; msg.className = "inline-msg ok"; }
@@ -154,7 +192,8 @@ async function zoomPane(session) {
 }
 
 async function stopTtyd(session) {
-    const r = await api("POST", "/api/ttyd/stop", { session });
+    const r = await _peerApi(session, "POST", "/api/ttyd/stop",
+                              { session: _peerSessionName(session) });
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) {
         msg.textContent = r.ok ? "stopped" : ("error: " + (r.error || ""));
@@ -168,7 +207,8 @@ async function stopTtyd(session) {
 
 async function killSession(session) {
     if (!confirm(`Kill tmux session '${session}'? This terminates all its programs.`)) return;
-    const r = await api("POST", "/api/session/kill", { session });
+    const r = await _peerApi(session, "POST", "/api/session/kill",
+                              { session: _peerSessionName(session) });
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) {
         msg.textContent = r.ok ? "killed" : ("error: " + (r.error || ""));

@@ -1098,3 +1098,14 @@ details.session.drop-bottom > .drop-overlay {
 /* When the pane is expanded, ttyd is showing live content — the
    static snapshot would just duplicate it and steal vertical space. */
 details[open] > summary > .pane-snapshot { display: none; }
+
+/* Federated session badge (Phase I). Marks rows that came from
+   a LAN peer's /api/sessions. Subtle accent rather than bright
+   so the local sessions still read as "primary" in the list. */
+.badge.host-badge {
+    background: rgba(116, 159, 207, 0.16);
+    color: #98c1ed;
+    border: 1px solid rgba(116, 159, 207, 0.30);
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+}
