@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.4.1 — Fix ttyd iframe flicker under SSE refresh (2026-04-27)
+
+Regression introduced by 0.7.2.2's SSE refresh: `renderLayout()`
+clears `#sessions` and re-appends every pane's `<details>` on
+every refresh tick. With the previous 5-second polling cadence
+this was tolerable churn; with SSE pushing updates roughly every
+second it caused embedded ttyd iframes to detach/reattach
+constantly — browsers reload an iframe on detach, so each pane
+flashed to black, started its ttyd reconnect, and got torn down
+again before the WebSocket finished negotiating. Result: panes
+that never stabilised.
+
+The fix is a layout signature memo. `renderLayout()` now
+computes a JSON signature over the bits that actually affect the
+DOM tree (current visible layout, hidden set, group definitions
++ memberships, live session names) and short-circuits when the
+signature matches the last call. On a quiet dashboard that's
+every refresh; on a layout change (new session, rename, hide,
+move, drag-drop, group edit) the signature differs and the full
+rebuild fires once.
+
+`refreshHiddenChrome()` still runs on every invocation so the
+hidden-count badge stays current even when the DOM rebuild is
+skipped.
+
+### Acceptance
+
+- 625/625 tests still passing.
+- A dashboard with multiple expanded ttyd panes stays
+  stable under SSE — no flicker, no reconnect storms.
+- Adding/removing/hiding a session still refreshes the layout
+  on the next tick.
+
 ## 0.7.4.0 — Federation pairing model + Config UI (2026-04-27)
 
 Replaces 0.7.3.0's auto-trust LAN federation with explicit
