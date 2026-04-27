@@ -1,51 +1,23 @@
-// panes.js — session pane construction, layout, drag/drop, modals, refresh
+// panes.js — refresh loop, init, cross-cutting helpers.
 //
-// Smaller features extracted to dedicated files under static/panes/:
-//   idle-alerts.js   per-session idle alerts (config + firing)
+// Per-feature code lives in static/panes/<feature>.js, concatenated in
+// declared order by lib/static.py. The split keeps each feature small
+// enough to read in one screenful while preserving the no-build-step
+// constraint:
+//
+//   idle-alerts.js   per-session idle alerts
 //   hot-buttons.js   shared hot buttons + per-session hot loops
 //   send-queue.js    send-bar single + repeat-with-cooldown queue
 //   lifecycle.js     launch/stop ttyd, kill/new session, raw shells,
 //                    iframe-fit helpers, restart dashboard
-
-// Layout, ordering, drag-and-drop, hidden / pane-group bookkeeping
-// moved to static/panes/layout.js. The functions remain accessible
-// as top-level globals after lib/static.py concatenates the files.
+//   layout.js        drag/drop, ordering, hidden / pane-group bookkeeping
+//   modals.js        workflow editor + split picker
+//   render.js        createPane + updatePane (per-session DOM)
 //
-// Removed from this file:
-//   visibleSessionNames, hiddenSessionNames, sessionsInGroup
-//   openMoveMenu, closeMoveMenu, _escCloseMoveMenu, moveSessionToGroup
-//   flattenRows, normalizeLayoutRows, syncLayoutState, persistLayoutState
-//   findLayoutPosition, removeFromLayout, placeSessionRow
-//   putSessionBeside, placeSessionAbove, placeSessionBelow
-//   _makeDropBar, renderLayout
-//   sortedSessionNames, placePane, reappendInOrder
-//   moveSession, dropOnSession, refreshHiddenChrome, toggleHidden
-
-// (former layout block — see layout.js)
-
-
-// idle alert editor + checkIdleAlerts + fireIdleAlert moved to
-// static/panes/idle-alerts.js
-
-
-// renderHotButtons / sendHotButton / toggleHotLoop / checkHotLoops /
-// openHotButtons / closeHotButtons moved to static/panes/hot-buttons.js
-
-
-// renderWorkflowEditor / openWorkflowEditor / closeWorkflowEditor /
-// saveWorkflowEditor / clearWorkflowEditor / toggleWorkflowEnabled /
-// loadWorkflowState and the split-picker quartet (openSplitPicker /
-// closeSplitPicker / chooseSplitTarget / renderSplitPicker)
-// moved to static/panes/modals.js
-// hot-button modal handlers moved to static/panes/hot-buttons.js
-
-
-// stopTtyd / killSession / stopRawShell / newSession / restartDashboard
-// moved to static/panes/lifecycle.js
-
-
-// createPane / updatePane moved to static/panes/render.js
-// layout / drag-and-drop / hidden bookkeeping moved to static/panes/layout.js
+// Functions in those files reach core via top-level ``function``
+// declarations that hoist into ``window`` after concatenation. This
+// file (panes.js) loads last among the panes/* files, so its
+// DOMContentLoaded handler can call into anything declared earlier.
 
 async function refresh() {
     const r = await api("GET", "/api/sessions");
