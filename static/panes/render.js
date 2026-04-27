@@ -22,15 +22,22 @@ function createPane(s) {
     const displayName = isRaw ? `shell · ${s.name}` : s.name;
     const sname = el("span", { class: "sname" }, displayName);
     const sbadges = el("span", { class: "sbadges" });
-    // Host badge for federated sessions: device_id is set whenever
-    // the row arrived from a peer's /api/sessions. Static for the
-    // life of the row (a peer's sessions disappear when the peer
-    // expires, so a row never transitions local→remote in place).
+    // Host badge: always carries the originating hostname when one
+    // is known. Remote rows (peer_url present) get the accent
+    // styling so they're visually distinct from local. Local rows
+    // only show the badge when at least one remote is also visible
+    // — solo dashboards stay clean.
     if (s.device_id && s.peer_hostname) {
-        sbadges.append(el("span", {
-            class: "badge host-badge",
-            title: `running on ${s.peer_hostname}`,
-        }, s.peer_hostname));
+        const isRemote = !!s.peer_url;
+        const someRemote = state.sessions && state.sessions.some(r => r.peer_url);
+        if (isRemote || someRemote) {
+            sbadges.append(el("span", {
+                class: isRemote ? "badge host-badge host-badge-remote"
+                                : "badge host-badge host-badge-local",
+                title: isRemote ? `running on ${s.peer_hostname} (peer)`
+                                : `running on ${s.peer_hostname} (this host)`,
+            }, s.peer_hostname));
+        }
     }
     const idle = el("span", { class: "dim" });
     const idleAlertBtn = el("button", {
