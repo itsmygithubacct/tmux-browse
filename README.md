@@ -72,6 +72,10 @@ and load through the dashboard's **Config → Extensions** card (or
 | Sandbox | [tmux-browse-sandbox](https://github.com/itsmygithubacct/tmux-browse-sandbox) | Docker execution sandbox (library only; consumed by the agent extension when an agent has `sandbox: docker`) |
 | QR | [tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr) | **Show QR** / **Read QR** buttons in Config and a `/api/qr` endpoint for round-tripping view config between devices |
 
+LAN federation is built into core: two tmux-browse hosts on the
+same network auto-discover each other and aggregate sessions in
+one dashboard. See [`docs/federation.md`](docs/federation.md).
+
 Each extension's README documents its own surface. None of them are
 required to run the dashboard or `tb` CLI.
 
