@@ -59,6 +59,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     server.serve(
         bind=args.bind, port=args.port, verbose=args.verbose,
         expected_token=token, tls_paths=tls_paths,
+        enable_federation=not args.no_federation,
     )
     return 0
 
@@ -239,6 +240,11 @@ def _build_parser() -> argparse.ArgumentParser:
                          help="TLS private key (PEM). Also honours $TMUX_BROWSE_KEY.")
     s_serve.add_argument("--skip-checks", action="store_true",
                          help="skip the tmux/ttyd prereq check on startup")
+    s_serve.add_argument("--no-federation", action="store_true",
+                         help="disable LAN peer discovery (no UDP beacon, "
+                              "no aggregation of remote sessions). Use on "
+                              "untrusted networks where you don't want this "
+                              "host advertising itself.")
     s_serve.set_defaults(func=cmd_serve)
 
     s_list = sub.add_parser("list", help="show tmux sessions and ttyd state")
