@@ -423,3 +423,58 @@ def wait_idle(target: Target, idle_sec: float,
         time.sleep(poll)
 
 
+
+
+# ---------------------------------------------------------------------------
+# Pane snapshots (for the dashboard preview tiles)
+# ---------------------------------------------------------------------------
+#
+# Cheap "what's on this pane right now" capture for the index page.
+# Trades freshness for cost: ``capture-pane`` per session per request
+# would dominate the response time on hosts with many sessions, so
+# results are cached for ``_SNAPSHOT_TTL_SEC`` and served stale
+# before the cap. The 200 ms per-request budget limits worst-case
+# damage when many sessions are stale at once.
+#
+# Why ``-e`` (ANSI preserved) but no ``-J`` (no joining wrapped lines):
+# the dashboard renders a small monospace tile and we want what the
+# user actually sees, not a reflowed canonical form. The tile is
+# narrow enough that a hard wrap-at-N looks better than the joined
+# alternative.
+
+_SNAPSHOT_TTL_SEC = 10
+_snapshot_cache: dict[str, tuple[int, str]] = {}
+
+
+def capture_pane_snapshot(name: str, lines: int = 20) -> str:
+    """Best-effort scrollback dump for the dashboard preview.
+
+    Returns the raw ANSI-bearing text (last ``lines`` rows). Empty
+    string on any failure — never raises into request flow."""
+    try:
+        r = subprocess.run(
+            ["tmux", "capture-pane", "-e", "-p",
+             "-t", name, "-S", f"-{lines}"],
+            capture_output=True, text=True, timeout=2,
+        )
+        return r.stdout if r.returncode == 0 else ""
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+
+
+def get_cached_snapshot(name: str, now: int | None = None,
+                        lines: int = 20) -> str:
+    """Cached accessor — re-captures only if entry is older than TTL."""
+    now = now if now is not None else int(time.time())
+    cached = _snapshot_cache.get(name)
+    if cached and (now - cached[0]) < _SNAPSHOT_TTL_SEC:
+        return cached[1]
+    text = capture_pane_snapshot(name, lines=lines)
+    _snapshot_cache[name] = (now, text)
+    return text
+
+
+def gc_snapshots(active_names: set[str]) -> None:
+    """Drop cache entries for sessions that no longer exist."""
+    for stale in [n for n in _snapshot_cache if n not in active_names]:
+        _snapshot_cache.pop(stale, None)
