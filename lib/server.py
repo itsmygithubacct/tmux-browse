@@ -479,132 +479,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         return True
 
-    # --- per-route handlers ------------------------------------------------
-    # Each method handles one route. GET handlers take (parsed_url);
-    # POST handlers take (parsed_url, body_dict). The dispatch tables at
-    # the bottom of the class map paths to these. Adding a new route
-    # means: write a _handle_* method, add one line to the table.
-
-    def _h_index(self, parsed: ParseResult) -> None:
-        routes_meta.h_index(self, parsed)
-
-    def _h_favicon(self, parsed: ParseResult) -> None:
-        routes_meta.h_favicon(self, parsed)
-
-    def _h_sessions(self, parsed: ParseResult) -> None:
-        routes_sessions.h_sessions(self, parsed)
-
-    def _h_ports(self, parsed: ParseResult) -> None:
-        routes_ports.h_ports(self, parsed)
-
-    def _h_dashboard_config_get(self, parsed: ParseResult) -> None:
-        routes_config.h_dashboard_config_get(self, parsed)
-
-
-    def _h_session_log(self, parsed: ParseResult) -> None:
-        routes_sessions.h_session_log(self, parsed)
-
-    def _h_health(self, parsed: ParseResult) -> None:
-        routes_meta.h_health(self, parsed)
-
-    # --- POST handlers ----
-
-    def _h_ttyd_start(self, parsed: ParseResult, body: dict) -> None:
-        routes_ttyd.h_ttyd_start(self, parsed, body)
-
-    def _h_ttyd_raw(self, parsed: ParseResult, body: dict) -> None:
-        routes_ttyd.h_ttyd_raw(self, parsed, body)
-
-    def _h_ttyd_stop(self, parsed: ParseResult, body: dict) -> None:
-        routes_ttyd.h_ttyd_stop(self, parsed, body)
-
-    def _h_session_new(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_new(self, parsed, body)
-
-    def _h_session_resize(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_resize(self, parsed, body)
-
-    def _h_session_scroll(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_scroll(self, parsed, body)
-
-    def _h_session_zoom(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_zoom(self, parsed, body)
-
-    def _h_session_type(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_type(self, parsed, body)
-
-    def _h_session_key(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_key(self, parsed, body)
-
-    def _h_dashboard_config_post(self, parsed: ParseResult, body: dict) -> None:
-        routes_config.h_dashboard_config_post(self, parsed, body)
-
-
-    def _h_clients(self, parsed: ParseResult) -> None:
-        routes_clients.h_clients(self, parsed)
-
-    def _h_clients_nickname(self, parsed: ParseResult, body: dict) -> None:
-        routes_clients.h_clients_nickname(self, parsed, body)
-
-    def _h_clients_send_config(self, parsed: ParseResult, body: dict) -> None:
-        routes_clients.h_clients_send_config(self, parsed, body)
-
-    def _h_clients_inbox(self, parsed: ParseResult) -> None:
-        routes_clients.h_clients_inbox(self, parsed)
-
-    def _h_config_lock_status(self, parsed: ParseResult) -> None:
-        routes_config.h_config_lock_status(self, parsed)
-
-    def _h_config_lock_set(self, parsed: ParseResult, body: dict) -> None:
-        routes_config.h_config_lock_set(self, parsed, body)
-
-    def _h_config_lock_verify(self, parsed: ParseResult, body: dict) -> None:
-        routes_config.h_config_lock_verify(self, parsed, body)
-
-    # --- Extensions --------------------------------------------------------
-    # Status + enable/disable landed in E0 as real; install landed in E3.
-    # Uninstall stays stubbed until E4's manage modal lands.
-
-    def _h_extensions_status(self, parsed: ParseResult) -> None:
-        routes_extensions.h_extensions_status(self, parsed)
-
-    def _h_extensions_available(self, parsed: ParseResult) -> None:
-        routes_extensions.h_extensions_available(self, parsed)
-
-    def _h_extensions_install(self, parsed: ParseResult, body: dict) -> None:
-        routes_extensions.h_extensions_install(self, parsed, body)
-
-    def _h_extensions_uninstall(self, parsed: ParseResult, body: dict) -> None:
-        routes_extensions.h_extensions_uninstall(self, parsed, body)
-
-    def _h_extensions_update(self, parsed: ParseResult, body: dict) -> None:
-        routes_extensions.h_extensions_update(self, parsed, body)
-
-    def _h_extensions_enable(self, parsed: ParseResult, body: dict) -> None:
-        routes_extensions.h_extensions_enable(self, parsed, body)
-
-    def _h_extensions_disable(self, parsed: ParseResult, body: dict) -> None:
-        routes_extensions.h_extensions_disable(self, parsed, body)
-
-    def _h_tasks_get(self, parsed: ParseResult) -> None:
-        routes_tasks.h_tasks_get(self, parsed)
-
-    def _h_tasks_create(self, parsed: ParseResult, body: dict) -> None:
-        routes_tasks.h_tasks_create(self, parsed, body)
-
-    def _h_tasks_update(self, parsed: ParseResult, body: dict) -> None:
-        routes_tasks.h_tasks_update(self, parsed, body)
-
-    def _h_tasks_launch(self, parsed: ParseResult, body: dict) -> None:
-        routes_tasks.h_tasks_launch(self, parsed, body)
-
-    def _h_server_restart(self, parsed: ParseResult, body: dict) -> None:
-        routes_meta.h_server_restart(self, parsed, body)
-
-    def _h_session_kill(self, parsed: ParseResult, body: dict) -> None:
-        routes_sessions.h_session_kill(self, parsed, body)
-
     # --- dispatch ----------------------------------------------------------
+    # Per-route handler bodies live in lib/server_routes/<group>.py as
+    # free functions named ``h_*``. The route tables at the bottom of
+    # this class map paths to those functions directly. Adding a new
+    # route means: write the function in the right module, add one
+    # line to the table here.
 
     def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
         if not self._auth_gate():
@@ -646,46 +526,46 @@ class Handler(BaseHTTPRequestHandler):
     # so a subclass or mistaken `Handler._GET_ROUTES["/x"] = ...` at runtime
     # fails loudly (TypeError) instead of silently mutating dispatch.
     _GET_ROUTES: MappingProxyType[str, Callable[["Handler", ParseResult], None]] = MappingProxyType({
-        "/":                       _h_index,
-        "/favicon.ico":            _h_favicon,
-        "/favicon.svg":            _h_favicon,
-        "/api/sessions":           _h_sessions,
-        "/api/ports":              _h_ports,
-        "/api/dashboard-config":   _h_dashboard_config_get,
-        "/api/session/log":        _h_session_log,
-        "/api/clients":            _h_clients,
-        "/api/clients/inbox":      _h_clients_inbox,
-        "/api/config-lock":        _h_config_lock_status,
-        "/api/extensions":         _h_extensions_status,
-        "/api/extensions/available": _h_extensions_available,
-        "/api/tasks":              _h_tasks_get,
-        "/health":                 _h_health,
+        "/":                       routes_meta.h_index,
+        "/favicon.ico":            routes_meta.h_favicon,
+        "/favicon.svg":            routes_meta.h_favicon,
+        "/api/sessions":           routes_sessions.h_sessions,
+        "/api/ports":              routes_ports.h_ports,
+        "/api/dashboard-config":   routes_config.h_dashboard_config_get,
+        "/api/session/log":        routes_sessions.h_session_log,
+        "/api/clients":            routes_clients.h_clients,
+        "/api/clients/inbox":      routes_clients.h_clients_inbox,
+        "/api/config-lock":        routes_config.h_config_lock_status,
+        "/api/extensions":         routes_extensions.h_extensions_status,
+        "/api/extensions/available": routes_extensions.h_extensions_available,
+        "/api/tasks":              routes_tasks.h_tasks_get,
+        "/health":                 routes_meta.h_health,
     })
     _POST_ROUTES: MappingProxyType[str, Callable[["Handler", ParseResult, dict], None]] = MappingProxyType({
-        "/api/ttyd/start":         _h_ttyd_start,
-        "/api/ttyd/raw":           _h_ttyd_raw,
-        "/api/ttyd/stop":          _h_ttyd_stop,
-        "/api/session/new":        _h_session_new,
-        "/api/session/resize":     _h_session_resize,
-        "/api/session/scroll":     _h_session_scroll,
-        "/api/session/zoom":       _h_session_zoom,
-        "/api/session/type":       _h_session_type,
-        "/api/session/key":        _h_session_key,
-        "/api/dashboard-config":   _h_dashboard_config_post,
-        "/api/clients/nickname":   _h_clients_nickname,
-        "/api/clients/send-config": _h_clients_send_config,
-        "/api/config-lock":        _h_config_lock_set,
-        "/api/extensions/install":   _h_extensions_install,
-        "/api/extensions/uninstall": _h_extensions_uninstall,
-        "/api/extensions/update":    _h_extensions_update,
-        "/api/extensions/enable":    _h_extensions_enable,
-        "/api/extensions/disable":   _h_extensions_disable,
-        "/api/config-lock/verify": _h_config_lock_verify,
-        "/api/tasks":              _h_tasks_create,
-        "/api/tasks/update":       _h_tasks_update,
-        "/api/tasks/launch":       _h_tasks_launch,
-        "/api/server/restart":     _h_server_restart,
-        "/api/session/kill":       _h_session_kill,
+        "/api/ttyd/start":         routes_ttyd.h_ttyd_start,
+        "/api/ttyd/raw":           routes_ttyd.h_ttyd_raw,
+        "/api/ttyd/stop":          routes_ttyd.h_ttyd_stop,
+        "/api/session/new":        routes_sessions.h_session_new,
+        "/api/session/resize":     routes_sessions.h_session_resize,
+        "/api/session/scroll":     routes_sessions.h_session_scroll,
+        "/api/session/zoom":       routes_sessions.h_session_zoom,
+        "/api/session/type":       routes_sessions.h_session_type,
+        "/api/session/key":        routes_sessions.h_session_key,
+        "/api/dashboard-config":   routes_config.h_dashboard_config_post,
+        "/api/clients/nickname":   routes_clients.h_clients_nickname,
+        "/api/clients/send-config": routes_clients.h_clients_send_config,
+        "/api/config-lock":        routes_config.h_config_lock_set,
+        "/api/extensions/install":   routes_extensions.h_extensions_install,
+        "/api/extensions/uninstall": routes_extensions.h_extensions_uninstall,
+        "/api/extensions/update":    routes_extensions.h_extensions_update,
+        "/api/extensions/enable":    routes_extensions.h_extensions_enable,
+        "/api/extensions/disable":   routes_extensions.h_extensions_disable,
+        "/api/config-lock/verify": routes_config.h_config_lock_verify,
+        "/api/tasks":              routes_tasks.h_tasks_create,
+        "/api/tasks/update":       routes_tasks.h_tasks_update,
+        "/api/tasks/launch":       routes_tasks.h_tasks_launch,
+        "/api/server/restart":     routes_meta.h_server_restart,
+        "/api/session/kill":       routes_sessions.h_session_kill,
     })
 
 

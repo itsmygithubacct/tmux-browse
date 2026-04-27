@@ -83,7 +83,7 @@ class IndexTemplateSlotsTests(unittest.TestCase):
         fake.server.extension_registry = MergedRegistry()
         fake.server.extension_registry.ui_blocks["topbar_extras"] = \
             '<span id="probe-ext-block"/>'
-        server.Handler._h_index(fake, urlparse("/"))
+        server.routes_meta.h_index(fake, urlparse("/"))
         self.assertEqual(fake.status, 200)
         self.assertIn(b"probe-ext-block", fake.body_bytes)
 
@@ -113,7 +113,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
             shutil.copytree(FIXTURE_ROOT / "ext_hello",
                             ext_root / "ext_hello")
             fake = _FakeHandler(_FakeServer())
-            server.Handler._h_extensions_status(fake, urlparse("/api/extensions"))
+            server.routes_extensions.h_extensions_status(fake, urlparse("/api/extensions"))
             self.assertEqual(fake.status, 200)
             names = [e["name"] for e in fake.payload["extensions"]]
             self.assertIn("ext_hello", names)
@@ -124,7 +124,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
 
     def test_available_endpoint_lists_catalog_entries(self):
         fake = _FakeHandler(_FakeServer())
-        server.Handler._h_extensions_available(
+        server.routes_extensions.h_extensions_available(
             fake, urlparse("/api/extensions/available"))
         self.assertEqual(fake.status, 200)
         names = [e["name"] for e in fake.payload["available"]]
@@ -132,20 +132,20 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
 
     def test_install_endpoint_rejects_unknown_name(self):
         fake = _FakeHandler(_FakeServer())
-        server.Handler._h_extensions_install(
+        server.routes_extensions.h_extensions_install(
             fake, urlparse("/api/extensions/install"), {"name": "bogus"})
         self.assertEqual(fake.status, 400)
         self.assertEqual(fake.payload["stage"], "unknown")
 
     def test_uninstall_endpoint_rejects_missing_name(self):
         fake = _FakeHandler(_FakeServer())
-        server.Handler._h_extensions_uninstall(
+        server.routes_extensions.h_extensions_uninstall(
             fake, urlparse("/api/extensions/uninstall"), {})
         self.assertEqual(fake.status, 400)
 
     def test_enable_endpoint_rejects_missing_name(self):
         fake = _FakeHandler(_FakeServer())
-        server.Handler._h_extensions_enable(
+        server.routes_extensions.h_extensions_enable(
             fake, urlparse("/api/extensions/enable"), {})
         self.assertEqual(fake.status, 400)
 
@@ -153,7 +153,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
         tmp, ext_root, patches = self._patch_state()
         try:
             fake = _FakeHandler(_FakeServer())
-            server.Handler._h_extensions_enable(
+            server.routes_extensions.h_extensions_enable(
                 fake, urlparse("/api/extensions/enable"), {"name": "demo"})
             self.assertEqual(fake.status, 200)
             self.assertTrue(fake.payload["ok"])
@@ -171,7 +171,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
         try:
             extensions.enable("demo")
             fake = _FakeHandler(_FakeServer())
-            server.Handler._h_extensions_disable(
+            server.routes_extensions.h_extensions_disable(
                 fake, urlparse("/api/extensions/disable"), {"name": "demo"})
             self.assertEqual(fake.status, 200)
             self.assertFalse(
@@ -183,7 +183,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
 
     def test_update_endpoint_rejects_missing_name(self):
         fake = _FakeHandler(_FakeServer())
-        server.Handler._h_extensions_update(
+        server.routes_extensions.h_extensions_update(
             fake, urlparse("/api/extensions/update"), {})
         self.assertEqual(fake.status, 400)
 
@@ -193,7 +193,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
             extensions, "update",
             side_effect=extensions.UpdateError("fetch", "no network"),
         ):
-            server.Handler._h_extensions_update(
+            server.routes_extensions.h_extensions_update(
                 fake, urlparse("/api/extensions/update"), {"name": "demo"})
         self.assertEqual(fake.status, 500)
         self.assertEqual(fake.payload["stage"], "fetch")
@@ -206,7 +206,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
             path=_Path("/tmp/demo"), via="clone", changed=True)
         fake = _FakeHandler(_FakeServer())
         with mock.patch.object(extensions, "update", return_value=result):
-            server.Handler._h_extensions_update(
+            server.routes_extensions.h_extensions_update(
                 fake, urlparse("/api/extensions/update"), {"name": "demo"})
         self.assertEqual(fake.status, 200)
         self.assertTrue(fake.payload["ok"])
@@ -222,7 +222,7 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
             path=_Path("/tmp/demo"), via="clone", changed=False)
         fake = _FakeHandler(_FakeServer())
         with mock.patch.object(extensions, "update", return_value=result):
-            server.Handler._h_extensions_update(
+            server.routes_extensions.h_extensions_update(
                 fake, urlparse("/api/extensions/update"), {"name": "demo"})
         self.assertEqual(fake.status, 200)
         self.assertFalse(fake.payload["changed"])
@@ -250,7 +250,7 @@ class TasksLaunchAgentExtensionGuardTests(unittest.TestCase):
             "id": "t1", "agent": "opus", "repo_path": "/tmp",
         }):
             fake = _FakeHandler(self._server_without_agent_verb())
-            server.Handler._h_tasks_launch(
+            server.routes_tasks.h_tasks_launch(
                 fake, urlparse("/api/tasks/launch"), {"id": "t1"})
         self.assertEqual(fake.status, 409)
         self.assertIn("agent extension", fake.payload["error"])
@@ -263,7 +263,7 @@ class TasksLaunchAgentExtensionGuardTests(unittest.TestCase):
              mock.patch.object(sessions, "exists", return_value=True), \
              mock.patch.object(ttyd, "start", return_value={"port": 9999}):
             fake = _FakeHandler(self._server_with_agent_verb())
-            server.Handler._h_tasks_launch(
+            server.routes_tasks.h_tasks_launch(
                 fake, urlparse("/api/tasks/launch"), {"id": "t1"})
         self.assertEqual(fake.status, 200)
         self.assertTrue(fake.payload["ok"])
