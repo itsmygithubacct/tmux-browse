@@ -423,7 +423,12 @@ For the richer, session-management-focused CLI, see [docs/tb.md](tb.md).
 
 ## Multiple hosts
 
-The dashboard talks only to the local tmux server. To browse multiple
-machines, run a copy of `tmux_browse.py serve` on each one — they're
-independent, each has its own `~/.tmux-browse/ports.json`, and the browser
-can bookmark each dashboard separately.
+When multiple tmux-browse instances run on the same LAN they
+auto-discover each other and merge their session lists in one
+dashboard. Each remote session's name is prefixed by its host's
+hostname (`hostA:work`). See [`federation.md`](federation.md)
+for the full design, trust model, and `--no-federation` opt-out.
+
+For machines on different networks, run a copy of
+`tmux_browse.py serve` on each and bookmark each dashboard
+separately.
