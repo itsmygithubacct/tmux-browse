@@ -334,4 +334,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     setInterval(pollIdleOnly, 60000);
     setInterval(loadClients, 15000);
     setInterval(checkClientInbox, 10000);
+    startFederationPoll();
 });
