@@ -54,6 +54,7 @@ _JS_FILES = [
     "panes/lifecycle.js",
     "panes/layout.js",
     "panes/modals.js",
+    "panes/render.js",
     "panes.js",
     "extensions.js",
 ]
