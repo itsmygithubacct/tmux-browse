@@ -20,6 +20,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 
 from .server_routes import (
     clients as routes_clients,
+    config as routes_config,
     meta as routes_meta,
     ports as routes_ports,
     sessions as routes_sessions,
@@ -494,12 +495,8 @@ class Handler(BaseHTTPRequestHandler):
     def _h_ports(self, parsed: ParseResult) -> None:
         routes_ports.h_ports(self, parsed)
 
-    def _h_dashboard_config_get(self, _parsed: ParseResult) -> None:
-        self._send_json({
-            "ok": True,
-            "config": dashboard_config.load(),
-            "path": str(config.DASHBOARD_CONFIG_FILE),
-        })
+    def _h_dashboard_config_get(self, parsed: ParseResult) -> None:
+        routes_config.h_dashboard_config_get(self, parsed)
 
 
     def _h_session_log(self, parsed: ParseResult) -> None:
@@ -537,16 +534,8 @@ class Handler(BaseHTTPRequestHandler):
     def _h_session_key(self, parsed: ParseResult, body: dict) -> None:
         routes_sessions.h_session_key(self, parsed, body)
 
-    def _h_dashboard_config_post(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        payload = body.get("config", body)
-        saved = dashboard_config.save(payload)
-        self._send_json({
-            "ok": True,
-            "config": saved,
-            "path": str(config.DASHBOARD_CONFIG_FILE),
-        })
+    def _h_dashboard_config_post(self, parsed: ParseResult, body: dict) -> None:
+        routes_config.h_dashboard_config_post(self, parsed, body)
 
 
     def _h_clients(self, parsed: ParseResult) -> None:
@@ -561,57 +550,14 @@ class Handler(BaseHTTPRequestHandler):
     def _h_clients_inbox(self, parsed: ParseResult) -> None:
         routes_clients.h_clients_inbox(self, parsed)
 
-    def _h_config_lock_status(self, _parsed: ParseResult) -> None:
-        has_lock = config.CONFIG_LOCK_FILE.exists() and config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
-        self._send_json({"ok": True, "locked": bool(has_lock)})
+    def _h_config_lock_status(self, parsed: ParseResult) -> None:
+        routes_config.h_config_lock_status(self, parsed)
 
-    def _h_config_lock_set(self, _parsed: ParseResult, body: dict) -> None:
-        # Setting or clearing the lock must itself be gated when a lock is
-        # already active — otherwise anyone on the LAN could wipe it.
-        if not self._check_unlock():
-            return
-        password = (body.get("password") or "").strip()
-        if not password:
-            # Clear the lock
-            try:
-                config.CONFIG_LOCK_FILE.unlink(missing_ok=True)
-            except OSError:
-                pass
-            # Drop every issued token on clear so they can't be reused.
-            _unlock_tokens.clear()
-            self._send_json({"ok": True, "locked": False})
-            return
-        import hashlib
-        hashed = hashlib.sha256(password.encode("utf-8")).hexdigest()
-        config.ensure_dirs()
-        config.CONFIG_LOCK_FILE.write_text(hashed + "\n", encoding="utf-8")
-        try:
-            config.CONFIG_LOCK_FILE.chmod(0o600)
-        except OSError:
-            pass
-        self._send_json({"ok": True, "locked": True})
+    def _h_config_lock_set(self, parsed: ParseResult, body: dict) -> None:
+        routes_config.h_config_lock_set(self, parsed, body)
 
-    def _h_config_lock_verify(self, _parsed: ParseResult, body: dict) -> None:
-        password = (body.get("password") or "").strip()
-        if not config.CONFIG_LOCK_FILE.exists():
-            self._send_json({"ok": True, "unlocked": True})
-            return
-        stored = config.CONFIG_LOCK_FILE.read_text(encoding="utf-8").strip()
-        if not stored:
-            self._send_json({"ok": True, "unlocked": True})
-            return
-        import hashlib
-        attempt = hashlib.sha256(password.encode("utf-8")).hexdigest()
-        import hmac
-        if hmac.compare_digest(stored, attempt):
-            token = _issue_unlock_token()
-            self._send_json({
-                "ok": True, "unlocked": True,
-                "unlock_token": token,
-                "ttl_seconds": _UNLOCK_TOKEN_TTL_SEC,
-            })
-        else:
-            self._send_json({"ok": False, "error": "wrong password"}, status=403)
+    def _h_config_lock_verify(self, parsed: ParseResult, body: dict) -> None:
+        routes_config.h_config_lock_verify(self, parsed, body)
 
     # --- Extensions --------------------------------------------------------
     # Status + enable/disable landed in E0 as real; install landed in E3.
