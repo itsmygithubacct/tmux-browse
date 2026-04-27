@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.7.3.0 — LAN federation (2026-04-27)
+
+Two or more tmux-browse instances on the same LAN now
+auto-discover each other and merge their session lists in one
+dashboard. Each remote session's name is prefixed with its
+peer's hostname (`hostA:work`); clicking through routes the
+ttyd iframe directly to the peer.
+
+Sub-version bump (0.7.2 → 0.7.3) because the change adds new
+HTTP routes, a new UDP listener thread, a new CLI flag, and a
+new trust model that operators need to know about before they
+upgrade.
+
+### What's new
+
+- **Auto-discovery via UDP broadcast.** Each instance beacons
+  its identity to UDP `255.255.255.255:8095` every five
+  seconds and listens on the same port. Stdlib-only sockets,
+  no mDNS / zeroconf dependency. Discovered peers expire 15
+  seconds after their last beacon.
+- **Aggregated session list.** `_session_summary()` fetches
+  each known peer's `/api/sessions` in parallel (1.5s per-peer
+  timeout, 2s total budget). Failed/slow peers contribute
+  nothing for that tick.
+- **Hostname prefix.** Remote rows arrive with
+  `name="<hostname>:<originalname>"` and a `peer_url` /
+  `device_id` tag, used to route iframe loads + lifecycle
+  calls back to the originating peer.
+- **Hostname badge in the dashboard.** Subtle small-caps badge
+  in the summary row marks federated rows so they're visible
+  at a glance without overwhelming local sessions.
+- **`--no-federation` flag.** Disables the broadcaster +
+  listener and skips the aggregation merge. Use on untrusted
+  networks.
+- **`/api/peers` route.** Lists discovered peers with their
+  device_id, hostname, port, scheme, version, last_seen, and
+  derived url.
+
+### New files
+
+- `lib/federation/__init__.py` — peer registry, device-id
+  persistence, broadcaster, listener, `start_federation()`.
+- `lib/server_routes/peers.py` — `/api/peers` route handler.
+- `tests/test_federation.py` — 12 unit tests for the device
+  id, peer registry, beacon payload shape, and fetcher error
+  paths. Suite: 601 → 613 tests.
+- `docs/federation.md` — design, trust model, limitations,
+  firewall verification recipe.
+
+### Trust model
+
+> **Important:** any host on the same broadcast domain can
+> claim to be a peer. Federation is appropriate for trusted
+> single-user / single-tenant LANs only. Disable on shared or
+> untrusted networks with `--no-federation`. See
+> `docs/federation.md` for the full discussion.
+
+### Limits worth knowing
+
+- **Same scheme across peers.** A dashboard running over
+  HTTPS cannot embed an iframe from a peer running plain HTTP
+  (browsers block mixed content). Run all peers on one
+  scheme.
+- **No auth handshake between peers.** Mismatched auth tokens
+  silently exclude the misconfigured peer from the merge.
+- **Two tmux-browse processes on one host.** Only one can
+  bind the UDP listener port. The second still beacons but
+  doesn't see incoming peers; logged at WARN at startup.
+- **No proxy mode.** Browsers connect directly to peer ttyd
+  ports, so the peer's ttyd port range must be reachable from
+  your browser.
+
+### Acceptance
+
+- 613/613 tests green.
+- `/api/peers` reports the live peer list.
+- Two-host smoke test (manual): both hosts see each other's
+  sessions within ~10s of starting; the hostname-prefixed
+  panes render the host badge; expanding a remote pane loads
+  ttyd from the peer's port; killing a remote session works.
+
 ## 0.7.2.3 — Live pane preview tiles (2026-04-27)
 
 Each session pane now shows the last ~20 lines of its active
