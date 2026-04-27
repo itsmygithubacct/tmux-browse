@@ -25,6 +25,7 @@ from .server_routes import (
     meta as routes_meta,
     ports as routes_ports,
     sessions as routes_sessions,
+    tasks as routes_tasks,
     ttyd as routes_ttyd,
 )
 from . import (
@@ -585,93 +586,17 @@ class Handler(BaseHTTPRequestHandler):
     def _h_extensions_disable(self, parsed: ParseResult, body: dict) -> None:
         routes_extensions.h_extensions_disable(self, parsed, body)
 
-    def _h_tasks_get(self, _parsed: ParseResult) -> None:
-        try:
-            self._send_json({
-                "ok": True,
-                "tasks": tasks_mod.list_tasks(include_archived=False),
-            })
-        except TBError as e:
-            self._send_tb_error(e)
+    def _h_tasks_get(self, parsed: ParseResult) -> None:
+        routes_tasks.h_tasks_get(self, parsed)
 
-    def _h_tasks_create(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        try:
-            task = tasks_mod.create(
-                title=(body.get("title") or "").strip(),
-                repo_path=(body.get("repo_path") or "").strip(),
-                agent=(body.get("agent") or "").strip() or None,
-                worktree_path=(body.get("worktree_path") or "").strip(),
-                branch=(body.get("branch") or "").strip(),
-            )
-            self._send_json({"ok": True, "task": task})
-        except TBError as e:
-            self._send_tb_error(e)
+    def _h_tasks_create(self, parsed: ParseResult, body: dict) -> None:
+        routes_tasks.h_tasks_create(self, parsed, body)
 
-    def _h_tasks_update(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        task_id = (body.get("id") or "").strip()
-        if not task_id:
-            self._send_json({"ok": False, "error": "missing 'id'"}, status=400)
-            return
-        fields = {k: v for k, v in body.items() if k != "id"}
-        try:
-            task = tasks_mod.update(task_id, **fields)
-            self._send_json({"ok": True, "task": task})
-        except TBError as e:
-            self._send_tb_error(e)
+    def _h_tasks_update(self, parsed: ParseResult, body: dict) -> None:
+        routes_tasks.h_tasks_update(self, parsed, body)
 
-    def _h_tasks_launch(self, _parsed: ParseResult, body: dict) -> None:
-        task_id = (body.get("id") or "").strip()
-        if not task_id:
-            self._send_json({"ok": False, "error": "missing 'id'"}, status=400)
-            return
-        task = tasks_mod.get_task(task_id)
-        if not task:
-            self._send_json({"ok": False, "error": "task not found"}, status=404)
-            return
-        agent_name = (task.get("agent") or "").strip()
-        if not agent_name:
-            self._send_json({"ok": False, "error": "no agent assigned to task"}, status=400)
-            return
-        # Task launch shells out to ``tb agent repl ...`` — that verb is
-        # contributed by the agent extension. Refuse here when it isn't
-        # registered, otherwise the spawned tmux session crashes silently
-        # with "tb: unknown verb agent" and the operator has nothing to
-        # debug.
-        ext_verbs = self.server.extension_registry.cli_verbs
-        if "agent" not in ext_verbs:
-            self._send_json({
-                "ok": False,
-                "error": ("the agent extension isn't enabled — install or "
-                          "enable it from Config > Extensions before "
-                          "launching agent tasks"),
-            }, status=409)
-            return
-        cwd = task.get("worktree_path") or task.get("repo_path") or str(config.PROJECT_DIR)
-        session_name = f"task-{task_id}"
-        if not sessions.exists(session_name):
-            cmd = " ".join([
-                shlex.quote(sys.executable), "-u",
-                shlex.quote(str(config.PROJECT_DIR / "tb.py")),
-                "agent", "repl", shlex.quote(agent_name),
-            ])
-            ok, err = sessions.new_session(session_name, cwd=cwd, cmd=cmd)
-            if not ok:
-                self._send_json({"ok": False, "error": err}, status=400)
-                return
-        tasks_mod.update(task_id, session=session_name)
-        tls_paths = getattr(self.server, "tls_paths", None)
-        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
-        ttyd_result = ttyd.start(session_name, tls_paths=tls_paths, bind_addr=bind_addr)
-        self._send_json({
-            "ok": True,
-            "task_id": task_id,
-            "session": session_name,
-            "port": ttyd_result.get("port"),
-        })
+    def _h_tasks_launch(self, parsed: ParseResult, body: dict) -> None:
+        routes_tasks.h_tasks_launch(self, parsed, body)
 
     def _h_server_restart(self, parsed: ParseResult, body: dict) -> None:
         routes_meta.h_server_restart(self, parsed, body)
