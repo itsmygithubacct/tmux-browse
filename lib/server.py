@@ -141,6 +141,12 @@ def _session_summary() -> SessionSummary:
     out: list[dict] = []
     tmux_names: set[str] = set()
     tmux_rows = [] if tmux_unreachable else sessions.list_sessions()
+    # Per-request budget for the snapshot capture. After this perf
+    # counter elapses, we serve already-cached snapshots if present
+    # and "" for sessions without one — they fill in on the next tick.
+    # 200ms keeps the worst case under a quarter-second on hosts where
+    # several sessions are simultaneously slow.
+    snapshot_deadline = time.perf_counter() + 0.200
     for s in tmux_rows:
         name = s["name"]
         tmux_names.add(name)
@@ -151,6 +157,11 @@ def _session_summary() -> SessionSummary:
         # tmux's session_activity if no log exists yet.
         hash_idle = session_logs.idle_seconds(name, now=now)
         idle = hash_idle if hash_idle is not None else max(0, now - s["activity"])
+        if time.perf_counter() < snapshot_deadline:
+            snapshot = sessions.get_cached_snapshot(name, now=now)
+        else:
+            cached = sessions._snapshot_cache.get(name)
+            snapshot = cached[1] if cached else ""
         out.append({
             "name": name,
             "kind": "tmux",
@@ -165,6 +176,14 @@ def _session_summary() -> SessionSummary:
             "ttyd_running": pid is not None,
             "conversation_mode": bool(agent_name and agent_name in configured_agents),
             "agent_name": agent_name if agent_name in configured_agents else None,
+            # Forward-compat for federation (Phase I): the originating
+            # device's id. Always None here; populated by the peer-
+            # aggregation pass for remote sessions.
+            "device_id": None,
+            # Last ~20 lines of the session's active pane, for the
+            # dashboard's preview tile. Empty string for sessions
+            # we couldn't capture (timeout, vanished, etc.).
+            "snapshot": snapshot,
         })
     # Raw ttyd shells aren't tmux sessions but the dashboard treats them
     # as peer panes (movable/snap-able alongside tmux ones). Surface any
@@ -190,7 +209,11 @@ def _session_summary() -> SessionSummary:
             "ttyd_running": True,
             "conversation_mode": False,
             "agent_name": None,
+            "device_id": None,
+            # Raw shells aren't tmux sessions; nothing to capture.
+            "snapshot": "",
         })
+    sessions.gc_snapshots(tmux_names)
     return SessionSummary(rows=out, tmux_unreachable=tmux_unreachable)
 
 
