@@ -55,7 +55,7 @@ class UnlockTokenTests(_LockedConfigMixin, unittest.TestCase):
 
     def test_verify_issues_token_on_correct_password(self):
         fake = _FakeHandler()
-        server.Handler._h_config_lock_verify(
+        server.routes_config.h_config_lock_verify(
             fake, urlparse("/api/config-lock/verify"),
             {"password": self.password})
         self.assertEqual(fake.status, 200)
@@ -66,7 +66,7 @@ class UnlockTokenTests(_LockedConfigMixin, unittest.TestCase):
 
     def test_verify_rejects_wrong_password_without_token(self):
         fake = _FakeHandler()
-        server.Handler._h_config_lock_verify(
+        server.routes_config.h_config_lock_verify(
             fake, urlparse("/api/config-lock/verify"),
             {"password": "wrong"})
         self.assertEqual(fake.status, 403)
@@ -75,7 +75,7 @@ class UnlockTokenTests(_LockedConfigMixin, unittest.TestCase):
     def test_status_does_not_leak_tokens(self):
         server._issue_unlock_token()
         fake = _FakeHandler()
-        server.Handler._h_config_lock_status(
+        server.routes_config.h_config_lock_status(
             fake, urlparse("/api/config-lock"))
         self.assertNotIn("unlock_token", fake.payload or {})
 
@@ -95,32 +95,32 @@ class MutationGateTests(_LockedConfigMixin, unittest.TestCase):
 
     def test_dashboard_config_post_gated(self):
         fake = _FakeHandler(headers={})
-        server.Handler._h_dashboard_config_post(
+        server.routes_config.h_dashboard_config_post(
             fake, urlparse("/api/dashboard-config"), {"config": {}})
         self.assertEqual(fake.status, 403)
 
     def test_tasks_create_gated(self):
         fake = _FakeHandler(headers={})
-        server.Handler._h_tasks_create(
+        server.routes_tasks.h_tasks_create(
             fake, urlparse("/api/tasks"), {"title": "t"})
         self.assertEqual(fake.status, 403)
 
     def test_config_lock_set_gated_when_already_locked(self):
         # Clearing an active lock without a valid token must fail.
         fake = _FakeHandler(headers={})
-        server.Handler._h_config_lock_set(
+        server.routes_config.h_config_lock_set(
             fake, urlparse("/api/config-lock"), {"password": ""})
         self.assertEqual(fake.status, 403)
 
     def test_extensions_install_gated(self):
         fake = _FakeHandler(headers={})
-        server.Handler._h_extensions_install(
+        server.routes_extensions.h_extensions_install(
             fake, urlparse("/api/extensions/install"), {"name": "agent"})
         self.assertEqual(fake.status, 403)
 
     def test_extensions_enable_gated(self):
         fake = _FakeHandler(headers={})
-        server.Handler._h_extensions_enable(
+        server.routes_extensions.h_extensions_enable(
             fake, urlparse("/api/extensions/enable"), {"name": "agent"})
         self.assertEqual(fake.status, 403)
 
