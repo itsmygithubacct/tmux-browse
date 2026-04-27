@@ -1825,8 +1825,8 @@ async function refresh() {
 
     document.getElementById("count").textContent =
         `${sessions.length} session${sessions.length === 1 ? "" : "s"}`;
-    if (typeof renderAgentsPane === "function") renderAgentsPane();
-    if (typeof renderPaneAdmin === "function") renderPaneAdmin();
+    callExt("renderAgentsPane");
+    callExt("renderPaneAdmin");
     renderLayout();
     if (state.splitPicker.open) renderSplitPicker();
 }
@@ -1867,6 +1867,30 @@ function bind(id, event, handler) {
     const el = document.getElementById(id);
     if (!el || typeof handler !== "function") return;
     el.addEventListener(event, handler);
+}
+
+// Extension-call shims. The agent extension exposes its handlers as
+// loose globals (window.loadAgents, window.renderAgentsPane, …);
+// without it the names are undefined and a direct call throws
+// ReferenceError, taking down whichever init/refresh path made the
+// call. These helpers funnel every "is the extension here?" check
+// through one place — adding a new extension call is just
+// ``callExt("foo")`` instead of remembering to write a typeof guard
+// at every site.
+function callExt(name, ...args) {
+    const fn = (typeof window !== "undefined") ? window[name] : undefined;
+    return (typeof fn === "function") ? fn(...args) : undefined;
+}
+async function awaitExt(name, ...args) {
+    const fn = (typeof window !== "undefined") ? window[name] : undefined;
+    return (typeof fn === "function") ? await fn(...args) : undefined;
+}
+// Variant of ``bind`` that resolves the handler by name — used when the
+// handler itself lives in an extension. Skips silently if either the
+// element or the named global is missing.
+function bindExt(id, event, handlerName) {
+    const fn = (typeof window !== "undefined") ? window[handlerName] : undefined;
+    bind(id, event, typeof fn === "function" ? fn : null);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -1915,10 +1939,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("phone-key-reset-btn").addEventListener("click", resetPhoneKeys);
     document.getElementById("cfg-lock-set-btn").addEventListener("click", setConfigLock);
     document.getElementById("cfg-lock-clear-btn").addEventListener("click", clearConfigLock);
-    bind("hooks-save-btn", "click", typeof saveHooks === "function" ? saveHooks : null);
-    bind("hooks-reset-btn", "click", typeof resetHooks === "function" ? resetHooks : null);
-    bind("conductor-save-btn", "click", typeof saveConductor === "function" ? saveConductor : null);
-    bind("conductor-reload-btn", "click", typeof loadConductor === "function" ? loadConductor : null);
+    bindExt("hooks-save-btn", "click", "saveHooks");
+    bindExt("hooks-reset-btn", "click", "resetHooks");
+    bindExt("conductor-save-btn", "click", "saveConductor");
+    bindExt("conductor-reload-btn", "click", "loadConductor");
     document.getElementById("cfg-toggle-all-topbar").addEventListener("click", (e) => toggleAllSection(TOPBAR_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-summary").addEventListener("click", (e) => toggleAllSection(SUMMARY_TOGGLE_KEYS, e.currentTarget));
     document.getElementById("cfg-toggle-all-body").addEventListener("click", (e) => toggleAllSection(BODY_TOGGLE_KEYS, e.currentTarget));
@@ -1926,32 +1950,31 @@ document.addEventListener("DOMContentLoaded", async () => {
         primeAudio();
         playIdleTone(document.getElementById("cfg-idle-sound").value);
     });
-    // Agent-extension-only bindings — null-safe via ``bind`` so a
-    // dashboard without the agent extension still finishes init.
-    bind("cfg-agent-save-btn", "click", typeof saveAgentConfig === "function" ? saveAgentConfig : null);
+    // Agent-extension-only bindings — bindExt skips silently when the
+    // extension isn't installed, so a no-extensions install still
+    // finishes init.
+    bindExt("cfg-agent-save-btn", "click", "saveAgentConfig");
     bind("cfg-agent-reload-btn", "click", async () => {
-        if (typeof loadAgents !== "function") return;
-        const ok = await loadAgents();
-        if (ok && typeof setAgentStatus === "function") {
-            setAgentStatus("reloaded agent list", "ok");
-        }
+        const ok = await awaitExt("loadAgents");
+        if (ok) callExt("setAgentStatus", "reloaded agent list", "ok");
     });
-    bind("cfg-agent-remove-btn", "click", typeof removeAgentConfig === "function" ? removeAgentConfig : null);
-    bind("agent-steps-close-btn", "click", typeof closeAgentSteps === "function" ? closeAgentSteps : null);
-    bind("runs-search-btn", "click", typeof searchRuns === "function" ? searchRuns : null);
+    bindExt("cfg-agent-remove-btn", "click", "removeAgentConfig");
+    bindExt("agent-steps-close-btn", "click", "closeAgentSteps");
+    bindExt("runs-search-btn", "click", "searchRuns");
     bind("runs-search-q", "keydown", (e) => {
-        if (e.key === "Enter" && typeof searchRuns === "function") searchRuns();
+        if (e.key === "Enter") callExt("searchRuns");
     });
-    bind("task-create-btn", "click", typeof createTask === "function" ? createTask : null);
-    if (typeof agentFieldMap === "function") {
-        const fm = agentFieldMap();
+    bindExt("task-create-btn", "click", "createTask");
+    const fm = callExt("agentFieldMap");
+    if (fm) {
         if (fm.existing) fm.existing.addEventListener("change", loadExistingAgentIntoForm);
         if (fm.preset) fm.preset.addEventListener("change", applyAgentPreset);
         if (fm.name) fm.name.addEventListener("input", () => {
-            const fields = agentFieldMap();
+            const fields = callExt("agentFieldMap");
+            if (!fields) return;
             if (fields.existing.value && fields.name.value.trim() !== fields.existing.value) fields.existing.value = "";
-            const constraint = enforceAgentConstraint();
-            if (constraint) setAgentStatus(constraint.message, "dim");
+            const constraint = callExt("enforceAgentConstraint");
+            if (constraint) callExt("setAgentStatus", constraint.message, "dim");
         });
     }
     for (const input of Object.values(configFieldMap())) {
@@ -1963,8 +1986,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("hot-save-btn").addEventListener("click", saveHotButton);
     document.getElementById("hot-clear-btn").addEventListener("click", clearHotButton);
     bind("workflow-close-btn", "click", closeWorkflowEditor);
-    bind("workflow-save-btn", "click", typeof saveWorkflowEditor === "function" ? saveWorkflowEditor : null);
-    bind("workflow-clear-btn", "click", typeof clearWorkflowEditor === "function" ? clearWorkflowEditor : null);
+    bindExt("workflow-save-btn", "click", "saveWorkflowEditor");
+    bindExt("workflow-clear-btn", "click", "clearWorkflowEditor");
     document.getElementById("idle-close-btn").addEventListener("click", closeIdleEditor);
     document.getElementById("idle-save-btn").addEventListener("click", saveIdleEditor);
     document.getElementById("idle-clear-btn").addEventListener("click", clearIdleEditor);
@@ -1974,9 +1997,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderSplitPicker();
     });
     bind("agent-steps-modal", "click", (e) => {
-        if (e.target.id === "agent-steps-modal" && typeof closeAgentSteps === "function") {
-            closeAgentSteps();
-        }
+        if (e.target.id === "agent-steps-modal") callExt("closeAgentSteps");
     });
     bind("workflow-modal", "click", (e) => {
         if (e.target.id === "workflow-modal") closeWorkflowEditor();
@@ -1997,7 +2018,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.addEventListener("keydown", primeAudio);
     document.addEventListener("keydown", (e) => {
         if (e.key !== "Escape") return;
-        if (state.stepViewer && state.stepViewer.open && typeof closeAgentSteps === "function") closeAgentSteps();
+        if (state.stepViewer && state.stepViewer.open) callExt("closeAgentSteps");
         if (state.hotEditor.open) closeHotButtons();
         if (state.workflowEditor && state.workflowEditor.open) closeWorkflowEditor();
         if (state.idleEditor.open) closeIdleEditor();
@@ -2006,21 +2027,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderConfigForm();
     checkImportCfgParam();
     applyTopbarConfig();
-    if (typeof renderAgentSelectors === "function") renderAgentSelectors();
+    callExt("renderAgentSelectors");
     renderPhoneKeysPreview();
     await checkConfigLock();
     await loadDashboardConfig();
-    if (typeof loadAgents === "function") await loadAgents();
-    if (typeof populateRunAgentFilter === "function") populateRunAgentFilter();
-    if (typeof populateTaskAgentSelect === "function") populateTaskAgentSelect();
-    if (typeof loadAgentWorkflows === "function") await loadAgentWorkflows();
+    await awaitExt("loadAgents");
+    callExt("populateRunAgentFilter");
+    callExt("populateTaskAgentSelect");
+    await awaitExt("loadAgentWorkflows");
     await refresh();
-    if (typeof searchRuns === "function") await searchRuns();
-    if (typeof loadTasks === "function") await loadTasks();
-    if (typeof loadCostSummary === "function") await loadCostSummary();
-    if (typeof loadHooks === "function") await loadHooks();
-    if (typeof loadConductor === "function") await loadConductor();
-    if (typeof loadNotifications === "function") await loadNotifications();
+    await awaitExt("searchRuns");
+    await awaitExt("loadTasks");
+    await awaitExt("loadCostSummary");
+    await awaitExt("loadHooks");
+    await awaitExt("loadConductor");
+    await awaitExt("loadNotifications");
     await loadClients();
     scheduleRefreshLoop();
     setInterval(pollIdleOnly, 60000);
