@@ -34,7 +34,8 @@ lib/sessions.py            everything tmux-related (enumerate, capture, send)
 lib/session_logs.py        per-session pipe-pane capture + SHA-256 tail hashing for idle
 lib/ttyd.py                spawn/stop/track per-session ttyd, PID files, port probes
 lib/ttyd_installer.py      fetch the ttyd static binary from GitHub releases
-lib/server.py              http.server handler + JSON API + extension dispatch
+lib/server.py              http.server handler + dispatch tables + auth gate
+lib/server_routes/         per-feature route handler modules (sessions/ttyd/config/clients/tasks/extensions/meta/ports)
 lib/templates.py           dashboard HTML + slot substitution for extension UI
 lib/static.py              asset loader; concatenates core JS + extension JS bundles
 lib/targeting.py           Target dataclass + parser for session[:window[.pane]]

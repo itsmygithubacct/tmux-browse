@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.7.1.8 — Extract server.py route handlers into lib/server_routes/ (2026-04-27)
+
+Pure refactor — no behaviour change, no public API change, JSON
+shapes byte-identical. Phase A of the deferred candidates from the
+0.7.1.7 review.
+
+`lib/server.py` was 1,246 lines holding 37 ``_h_*`` route-handler
+methods on a single ``Handler`` class. The class also held the HTTP
+plumbing (auth gate, body parsing, JSON envelope helpers, dispatch
+tables). Adding a new route or finding an existing one's body meant
+scrolling through 36 unrelated handlers in one file.
+
+Split the handler bodies into per-feature modules under
+``lib/server_routes/``, mirroring the shape ``lib/tb_cmds/`` already
+uses for ``tb`` verbs:
+
+- ``lib/server_routes/meta.py`` — index, favicon, health, server-restart
+- ``lib/server_routes/sessions.py`` — sessions list, log, lifecycle, type/key/scroll/zoom/resize/kill
+- ``lib/server_routes/ttyd.py`` — start, raw, stop
+- ``lib/server_routes/ports.py`` — port registry
+- ``lib/server_routes/clients.py`` — connected-browser tracking + config sharing
+- ``lib/server_routes/config.py`` — dashboard config + config-lock
+- ``lib/server_routes/extensions.py`` — status / available / install / uninstall / update / enable / disable
+- ``lib/server_routes/tasks.py`` — task store + worktree-based launch
+
+Each module exports free functions named ``h_*(handler, parsed[, body])``;
+the dispatch tables in ``Handler._GET_ROUTES`` / ``_POST_ROUTES``
+target them directly. ``Handler`` itself keeps the HTTP plumbing
+(``_send_json``, ``_send_html``, ``_check_unlock``, ``_auth_gate``,
+``do_GET``/``do_POST``) and the dispatch tables — nothing else.
+
+State that ``Handler`` and its helpers also touch — ``_clients``,
+``_client_inbox``, ``_unlock_tokens``, ``_extensions_pending_restart``,
+``_session_summary``, the various ``_log_html`` helpers — stays in
+``lib/server.py``. The route modules import them lazily where
+needed so the load-time dependency stays one-way.
+
+``lib/server.py`` shrinks from 1,246 → 671 lines. Two test files
+(``tests/test_config_lock.py``, ``tests/test_server_extensions.py``)
+that previously called ``server.Handler._h_X`` directly are
+mechanically updated to call ``server.routes_X.h_Y`` — that's the
+new public path for these handlers.
+
+The route-table-immutability test still passes — it asserts on the
+*set* of registered paths, not the identity of handler functions.
+Full suite: 601 tests green.
+
+Phase B (split static/panes.js by feature) is the next planned
+refactor — see the planning doc in ``~/research/tmux-browse/`` for
+the full plan.
+
 ## 0.7.1.7 — Extension-call shim + SessionSummary dataclass (2026-04-27)
 
 Two small, surgical refactors prompted by the regressions and churn
