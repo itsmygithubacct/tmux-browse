@@ -71,6 +71,17 @@ and load through the dashboard's **Config → Extensions** card (or
 Each extension's README documents its own surface. None of them are
 required to run the dashboard or `tb` CLI.
 
+## Why this is shaped the way it is
+
+Stdlib-only Python, two CLIs (`tmux_browse.py` for the dashboard,
+`tb.py` for general session work) sharing one library, and a deliberate
+choice to outsource terminal rendering to ttyd rather than implement it
+in-house. No virtualenv to set up, no supply-chain surprises, no build
+step for the frontend. Optional features (agents, Docker sandbox, QR
+config-share) live as separate submodules so a "just a dashboard" install
+stays small. Full rationale and the `lib/` module map is in
+[docs/architecture.md](docs/architecture.md).
+
 ## Quick Start
 
 If you want to try it immediately, create a throwaway tmux session first:
