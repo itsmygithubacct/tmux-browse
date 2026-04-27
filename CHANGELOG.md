@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.7.2.2 — SSE-driven session refresh (2026-04-27)
+
+The dashboard now stays live by default — session list, ttyd
+state, bell counters, and tmux-unreachable status all flow
+through a Server-Sent Events stream instead of waiting for the
+5-second polling tick.
+
+### What changed
+
+- New route `GET /api/sessions/stream` (in
+  `lib/server_routes/sessions_stream.py`) emits
+  `text/event-stream` with one `data:` event per state change.
+  Polls `_session_summary()` once per second; emits only on
+  diff so an idle dashboard generates near-zero traffic.
+  Sends a keepalive comment line every 25s to survive proxies
+  that drop idle TCP.
+- New config knob `refresh_strategy` (`"sse"` default | `"poll"`)
+  in `lib/dashboard_config.py`. Set to `"poll"` if SSE is
+  blocked by your network or proxy.
+- Client side: `static/panes.js` factors `refresh()` into a
+  thin polling wrapper and a shared `applySessions()` that
+  both the polling path and the SSE path feed. New
+  `startSessionStream()` opens an `EventSource` on load;
+  falls back to `scheduleRefreshLoop()`'s interval polling
+  only when SSE is unsupported or disabled.
+- `state.sessionStream` tracks the live `EventSource` so
+  duplicate starts are no-ops and tab close cleanly drops the
+  server-side handler thread.
+
+### Behaviour change worth noting
+
+Previously the dashboard required users to flip the
+`auto_refresh` toggle to get live updates. With SSE on by
+default, updates land within ~1s of any tmux change without
+that toggle. The `auto_refresh` + `refresh_seconds` knobs
+still gate the polling fallback path (used when SSE is
+disabled or unavailable).
+
+### Acceptance
+
+- `curl -N http://host/api/sessions/stream` streams
+  newline-separated `data:` events; only emits on state
+  change.
+- Killing a session via `tmux kill-session -t foo` updates
+  the dashboard within ~2s.
+- Closing the browser tab cleanly exits the server-side
+  handler thread (no leak across tab churn).
+- 601/601 tests still passing.
+
 ## 0.7.2.1 — PWA install on mobile (2026-04-27)
 
 Adds a Web App Manifest and a minimal service worker so the
