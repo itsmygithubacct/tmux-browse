@@ -661,6 +661,7 @@ class Handler(BaseHTTPRequestHandler):
         "/api/sessions/stream":    routes_sessions_stream.h_sessions_stream,
         "/api/ports":              routes_ports.h_ports,
         "/api/peers":              routes_peers.h_peers,
+        # Note: /api/peers/pair-request etc. are POST routes; see below.
         "/api/dashboard-config":   routes_config.h_dashboard_config_get,
         "/api/session/log":        routes_sessions.h_session_log,
         "/api/clients":            routes_clients.h_clients,
@@ -700,6 +701,18 @@ class Handler(BaseHTTPRequestHandler):
         "/api/tasks/launch":       routes_tasks.h_tasks_launch,
         "/api/server/restart":     routes_meta.h_server_restart,
         "/api/session/kill":       routes_sessions.h_session_kill,
+        # Federation pairing surface (J3). The two callback routes
+        # (pair-request / pair-accept-callback) are unauthenticated
+        # because the operator hasn't yet trusted the peer that's
+        # calling them; they only enqueue requests / write a pair
+        # if we have an outgoing record. The four operator-action
+        # routes are config-lock gated like every other mutation.
+        "/api/peers/pair-request":          routes_peers.h_pair_request,
+        "/api/peers/pair-accept-callback":  routes_peers.h_pair_accept_callback,
+        "/api/peers/pair-request-out":      routes_peers.h_pair_request_out,
+        "/api/peers/pair-accept":           routes_peers.h_pair_accept,
+        "/api/peers/pair-decline":          routes_peers.h_pair_decline,
+        "/api/peers/unpair":                routes_peers.h_unpair,
     })
 
 
