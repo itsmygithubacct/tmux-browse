@@ -21,6 +21,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 from .server_routes import (
     meta as routes_meta,
     sessions as routes_sessions,
+    ttyd as routes_ttyd,
 )
 from . import (
     auth,
@@ -507,30 +508,14 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- POST handlers ----
 
-    def _h_ttyd_start(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        if not sessions.exists(name):
-            self._send_json({"ok": False, "error": f"no such tmux session: {name}"},
-                            status=404)
-            return
-        tls_paths = getattr(self.server, "tls_paths", None)
-        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
-        self._send_json(ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr))
+    def _h_ttyd_start(self, parsed: ParseResult, body: dict) -> None:
+        routes_ttyd.h_ttyd_start(self, parsed, body)
 
-    def _h_ttyd_raw(self, _parsed: ParseResult, _body: dict) -> None:
-        tls_paths = getattr(self.server, "tls_paths", None)
-        bind_addr = getattr(self.server, "ttyd_bind_addr", None)
-        self._send_json(ttyd.start_raw(tls_paths=tls_paths, bind_addr=bind_addr))
+    def _h_ttyd_raw(self, parsed: ParseResult, body: dict) -> None:
+        routes_ttyd.h_ttyd_raw(self, parsed, body)
 
-    def _h_ttyd_stop(self, _parsed: ParseResult, body: dict) -> None:
-        name = (body.get("session") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'session'"}, status=400)
-            return
-        self._send_json(ttyd.stop(name))
+    def _h_ttyd_stop(self, parsed: ParseResult, body: dict) -> None:
+        routes_ttyd.h_ttyd_stop(self, parsed, body)
 
     def _h_session_new(self, parsed: ParseResult, body: dict) -> None:
         routes_sessions.h_session_new(self, parsed, body)
