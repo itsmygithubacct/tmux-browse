@@ -58,6 +58,9 @@ reach those ports still gets shell access. For a real perimeter either
 stack behind a reverse proxy that does TLS and auth. The token is a
 "don't-accidentally-discover-it" layer, not a hardened gate.
 
+For full recipes (SSH tunnel, Tailscale Funnel, Cloudflare Tunnel,
+reverse proxy), see [`recipes-remote.md`](recipes-remote.md).
+
 `serve --bind` now propagates to spawned ttyds as well:
 
 - `--bind 0.0.0.0` keeps ttyd reachable on all interfaces
