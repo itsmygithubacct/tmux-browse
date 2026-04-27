@@ -41,6 +41,14 @@ _JS_FILES = [
     "audio.js",
     "phone-keys.js",
     "sharing.js",
+    # The pane dashboard is split across panes.js (still the bulk of the
+    # logic) plus per-feature files in static/panes/. As features are
+    # extracted from panes.js into the subdirectory, panes/<feature>.js
+    # is added to this list above panes.js so the feature's globals are
+    # available before the rest of panes.js runs. panes.js itself stays
+    # last among the panes files so its DOMContentLoaded handler sees
+    # everything else.
+    # (Each future extracted file lands here, declared in load order.)
     "panes.js",
     "extensions.js",
 ]
