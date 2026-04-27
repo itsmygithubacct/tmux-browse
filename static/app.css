@@ -1076,3 +1076,22 @@ details.session.drop-bottom > .drop-overlay {
         grid-template-columns: 1fr;
     }
 }
+
+/* Per-session preview tile (Phase H). Renders the last ~20 lines of
+   the session's active pane as small monospace text. The :empty rule
+   keeps raw shells (which carry no snapshot) from showing an
+   awkward empty box. */
+.pane-snapshot {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 9px;
+    line-height: 1.2;
+    max-height: 240px;
+    overflow: hidden;
+    white-space: pre;
+    color: var(--dim, #a0a0a0);
+    background: var(--surface, #161b22);
+    border-top: 1px solid var(--border, #30363d);
+    padding: 0.4rem 0.6rem;
+    margin: 0;
+}
+.pane-snapshot:empty { display: none; }
