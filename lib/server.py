@@ -18,6 +18,7 @@ from types import MappingProxyType
 from typing import Callable
 from urllib.parse import ParseResult, parse_qs, urlparse
 
+from .server_routes import meta as routes_meta
 from . import (
     auth,
     tasks as tasks_mod,
@@ -475,21 +476,11 @@ class Handler(BaseHTTPRequestHandler):
     # the bottom of the class map paths to these. Adding a new route
     # means: write a _handle_* method, add one line to the table.
 
-    def _h_index(self, _parsed: ParseResult) -> None:
-        reg = self.server.extension_registry
-        self._send_html(templates.render_index(
-            ui_blocks=reg.ui_blocks,
-            extension_js=reg.static_js,
-        ))
+    def _h_index(self, parsed: ParseResult) -> None:
+        routes_meta.h_index(self, parsed)
 
-    def _h_favicon(self, _parsed: ParseResult) -> None:
-        body = static.FAVICON_SVG.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "image/svg+xml")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "public, max-age=86400")
-        self.end_headers()
-        self.wfile.write(body)
+    def _h_favicon(self, parsed: ParseResult) -> None:
+        routes_meta.h_favicon(self, parsed)
 
     def _h_sessions(self, _parsed: ParseResult) -> None:
         summary = _session_summary()
@@ -539,8 +530,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_text(content)
 
-    def _h_health(self, _parsed: ParseResult) -> None:
-        self._send_json({"ok": True})
+    def _h_health(self, parsed: ParseResult) -> None:
+        routes_meta.h_health(self, parsed)
 
     # --- POST handlers ----
 
@@ -1042,9 +1033,8 @@ class Handler(BaseHTTPRequestHandler):
             "port": ttyd_result.get("port"),
         })
 
-    def _h_server_restart(self, _parsed: ParseResult, _body: dict) -> None:
-        self._send_json({"ok": True, "restarting": True})
-        threading.Thread(target=_restart_self, daemon=True).start()
+    def _h_server_restart(self, parsed: ParseResult, body: dict) -> None:
+        routes_meta.h_server_restart(self, parsed, body)
 
     def _h_session_kill(self, _parsed: ParseResult, body: dict) -> None:
         name = (body.get("session") or "").strip()
