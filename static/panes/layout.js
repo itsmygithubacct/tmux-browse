@@ -273,8 +273,43 @@ function _makeDropBar(insertRowIdx) {
     return bar;
 }
 
+// Layout-relevant signature: anything that would change which
+// rec.details element belongs in which DOM container, in what
+// order. SSE refreshes feed applySessions() at ~1Hz; without this
+// short-circuit, every tick clears #sessions and re-appends each
+// pane's <details>, which detaches+reattaches the embedded ttyd
+// iframe and forces it to reload — causing the panes to flicker
+// to black on every refresh and never stabilise.
+//
+// Note: refreshHiddenChrome() updates the hidden-count badge based
+// on the current sessions list, so we still call it on every
+// invocation regardless of whether the DOM rebuild was skipped.
+function _layoutSignature() {
+    const liveNames = state.sessions.map((s) => s.name);
+    return JSON.stringify({
+        layout: state.layout,
+        hidden: liveNames.filter((n) => state.hidden.has(n)),
+        groupsOrder: state.groups.order,
+        groupsDefs: state.groups.defs,
+        membership: liveNames.reduce((acc, n) => {
+            const g = state.groups.membership[n];
+            if (g) acc[n] = g;
+            return acc;
+        }, {}),
+        live: liveNames,
+    });
+}
+
 function renderLayout() {
     syncLayoutState();
+    const sig = _layoutSignature();
+    if (sig === state._lastLayoutSig) {
+        // Layout hasn't moved; skip the destructive DOM rebuild but
+        // still refresh derived chrome.
+        refreshHiddenChrome();
+        return;
+    }
+    state._lastLayoutSig = sig;
     const root = document.getElementById("sessions");
     root.textContent = "";
     for (let ri = 0; ri < state.layout.length; ri++) {
