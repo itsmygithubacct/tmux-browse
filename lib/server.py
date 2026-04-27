@@ -11,6 +11,7 @@ import signal
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import MappingProxyType
@@ -74,14 +75,25 @@ def _redact_token(s: str) -> str:
     return _TOKEN_PARAM_RE.sub(r"\1token=<redacted>", s)
 
 
-def _session_summary() -> tuple[list[dict], bool]:
+@dataclass
+class SessionSummary:
+    """Result of :func:`_session_summary` — the rows the dashboard renders
+    plus any out-of-band degradation flags. New flags should be added as
+    fields here rather than expanding the return tuple, so callers and
+    tests don't have to track positional shape changes.
+    """
+    rows: list[dict] = field(default_factory=list)
+    tmux_unreachable: bool = False
+
+
+def _session_summary() -> SessionSummary:
     """Session list enriched with port assignment + ttyd running flag.
 
-    Returns ``(rows, tmux_unreachable)``. ``tmux_unreachable`` is True when
-    tmux's socket exists but the server isn't responding — the dashboard
-    surfaces a banner so operators don't see "0 sessions" and assume the
-    session list is authoritative. Raw-shell rows are still returned in
-    that case (their state lives in the port registry, not tmux).
+    ``SessionSummary.tmux_unreachable`` is True when tmux's socket exists
+    but the server isn't responding — the dashboard surfaces a banner so
+    operators don't see "0 sessions" and assume the session list is
+    authoritative. Raw-shell rows are still returned in that case (their
+    state lives in the port registry, not tmux).
 
     Age fields are also computed server-side (``idle_seconds``,
     ``created_seconds_ago``) so the browser doesn't need to trust its
@@ -168,7 +180,7 @@ def _session_summary() -> tuple[list[dict], bool]:
             "conversation_mode": False,
             "agent_name": None,
         })
-    return out, tmux_unreachable
+    return SessionSummary(rows=out, tmux_unreachable=tmux_unreachable)
 
 
 # --- Connected client tracking ---
@@ -480,11 +492,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _h_sessions(self, _parsed: ParseResult) -> None:
-        rows, tmux_unreachable = _session_summary()
+        summary = _session_summary()
         self._send_json({
             "ok": True,
-            "sessions": rows,
-            "tmux_unreachable": tmux_unreachable,
+            "sessions": summary.rows,
+            "tmux_unreachable": summary.tmux_unreachable,
         })
 
     def _h_ports(self, _parsed: ParseResult) -> None:
