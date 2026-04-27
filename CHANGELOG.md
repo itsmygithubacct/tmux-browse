@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.7.2.3 — Live pane preview tiles (2026-04-27)
+
+Each session pane now shows the last ~20 lines of its active
+pane as a small ANSI-colored monospace tile while the pane is
+collapsed. When you expand a pane, the live ttyd takes over —
+the static snapshot only shows where it adds value (the "what's
+happening across all my sessions" glance).
+
+### Server side
+
+- `lib/sessions.py` adds `capture_pane_snapshot(name, lines=20)`
+  + a 10s cache (`get_cached_snapshot`) + cache GC for vanished
+  sessions. Two requests within the TTL share one subprocess
+  call — important at the SSE 1Hz cadence.
+- `_session_summary()` populates a new `snapshot` field per row.
+  Per-request budget of 200ms caps the worst-case latency when
+  many sessions are simultaneously stale; sessions over budget
+  serve cached or empty snapshots and refresh on the next tick.
+
+### Client side
+
+- New `static/panes/snapshot.js` with `ansiToHtml()` (SGR escape
+  parser, 16-color + 256-color fg/bg) and
+  `trimTrailingBlankLines()` (the muxplex lesson — trim before
+  slicing so sessions with cursor near top still show content).
+- `static/panes/render.js::createPane` adds a `<pre
+  class=\"pane-snapshot\">` inside the `<summary>` so the tile
+  is visible while collapsed. `updatePane` fills it on each
+  state update.
+- CSS: 9px monospace, max 240px height, hidden via `:empty` for
+  raw shells and via `details[open]` so the live ttyd doesn't
+  compete with a static snapshot.
+
+### Config
+
+- New dashboard config key `show_pane_snapshot` (default `true`)
+  with a checkbox in the Summary Row section. Toggle is
+  immediate — no reload needed.
+
+### Forward-compat
+
+- Each row now also carries a `device_id` field (always `null`
+  here) — placeholder for Phase I's federation work, which
+  needs it to mark remote-host sessions.
+
+### Acceptance
+
+- Session pane shows last ~20 lines as colored monospace text
+  while collapsed; live ttyd when expanded.
+- Toggle hides/shows snapshots; layout reflows cleanly.
+- 601/601 tests still passing. Cold call ~900ms (7 sessions
+  capturing fresh), warm call ~146ms (cache hits).
+
 ## 0.7.2.2 — SSE-driven session refresh (2026-04-27)
 
 The dashboard now stays live by default — session list, ttyd
