@@ -21,6 +21,7 @@ from urllib.parse import ParseResult, parse_qs, urlparse
 from .server_routes import (
     clients as routes_clients,
     config as routes_config,
+    extensions as routes_extensions,
     meta as routes_meta,
     ports as routes_ports,
     sessions as routes_sessions,
@@ -563,165 +564,26 @@ class Handler(BaseHTTPRequestHandler):
     # Status + enable/disable landed in E0 as real; install landed in E3.
     # Uninstall stays stubbed until E4's manage modal lands.
 
-    def _h_extensions_status(self, _parsed: ParseResult) -> None:
-        rows = extensions.status()
-        catalog = extensions.CATALOG
-        # Decorate each row with catalog metadata and submodule flag so
-        # the Config pane's Extensions card has everything it needs in
-        # one response (label, description, repo URL, submodule hint).
-        by_name = {r["name"]: r for r in rows}
-        for name, entry in catalog.items():
-            row = by_name.get(name)
-            if row is None:
-                row = {
-                    "name": name,
-                    "installed": False,
-                    "enabled": False,
-                    "path": None,
-                    "version": None,
-                    "last_error": None,
-                }
-                rows.append(row)
-                by_name[name] = row
-            row["label"] = entry["label"]
-            row["description"] = entry["description"]
-            row["repo"] = entry["repo"]
-            row["submodule"] = extensions.submodule.is_submodule_path(name)
-            row["restart_pending"] = bool(
-                _extensions_pending_restart.get(name))
-        self._send_json({"ok": True, "extensions": rows})
+    def _h_extensions_status(self, parsed: ParseResult) -> None:
+        routes_extensions.h_extensions_status(self, parsed)
 
-    def _h_extensions_available(self, _parsed: ParseResult) -> None:
-        # Catalog entries rendered as a simple install-target list for
-        # clients that want just "what could I install" without mingling
-        # with on-disk status.
-        available = [dict(v) for v in extensions.CATALOG.values()]
-        self._send_json({"ok": True, "available": available})
+    def _h_extensions_available(self, parsed: ParseResult) -> None:
+        routes_extensions.h_extensions_available(self, parsed)
 
-    def _h_extensions_install(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"},
-                            status=400)
-            return
-        if name not in extensions.CATALOG:
-            self._send_json(
-                {"ok": False,
-                 "error": f"unknown extension {name!r}",
-                 "stage": "unknown"},
-                status=400)
-            return
-        try:
-            result = extensions.install(name)
-        except extensions.InstallError as e:
-            self._send_json(
-                {"ok": False, "error": e.msg, "stage": e.stage},
-                status=500)
-            return
-        # Flip the enabled bit so the next restart activates the surface.
-        extensions.enable(name)
-        _extensions_pending_restart[name] = True
-        self._send_json({
-            "ok": True,
-            "name": name,
-            "version": result.version,
-            "via": result.via,
-            "restart_required": True,
-            "message": ("Installed and enabled. Restart the dashboard to "
-                        "activate the extension's routes and UI."),
-        })
+    def _h_extensions_install(self, parsed: ParseResult, body: dict) -> None:
+        routes_extensions.h_extensions_install(self, parsed, body)
 
-    def _h_extensions_uninstall(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"},
-                            status=400)
-            return
-        remove_state = bool(body.get("remove_state"))
-        try:
-            summary = extensions.uninstall(name, remove_state=remove_state)
-        except Exception as e:  # noqa: broad — surface every failure
-            self._send_json(
-                {"ok": False, "error": str(e), "stage": "uninstall"},
-                status=500)
-            return
-        _extensions_pending_restart[name] = True
-        self._send_json({
-            "ok": True,
-            "name": name,
-            "restart_required": True,
-            "summary": summary,
-            "message": ("Uninstalled. Restart the dashboard to remove the "
-                        "extension's routes and UI."),
-        })
+    def _h_extensions_uninstall(self, parsed: ParseResult, body: dict) -> None:
+        routes_extensions.h_extensions_uninstall(self, parsed, body)
 
-    def _h_extensions_update(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"},
-                            status=400)
-            return
-        try:
-            result = extensions.update(name)
-        except extensions.UpdateError as e:
-            self._send_json(
-                {"ok": False, "error": e.msg, "stage": e.stage},
-                status=500)
-            return
-        if result.changed:
-            _extensions_pending_restart[name] = True
-        self._send_json({
-            "ok": True,
-            "name": name,
-            "from_version": result.from_version,
-            "to_version": result.to_version,
-            "changed": result.changed,
-            "via": result.via,
-            "restart_required": result.changed,
-            "message": (
-                f"Updated {name} {result.from_version} → {result.to_version}. "
-                "Restart the dashboard to activate."
-                if result.changed else
-                f"{name} is already at {result.to_version}."),
-        })
+    def _h_extensions_update(self, parsed: ParseResult, body: dict) -> None:
+        routes_extensions.h_extensions_update(self, parsed, body)
 
-    def _h_extensions_enable(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"},
-                            status=400)
-            return
-        entry = extensions.enable(name)
-        _extensions_pending_restart[name] = True
-        self._send_json({
-            "ok": True, "name": name, "entry": entry,
-            "restart_required": True,
-            "note": ("restart the dashboard to activate the extension's "
-                     "routes and UI"),
-        })
+    def _h_extensions_enable(self, parsed: ParseResult, body: dict) -> None:
+        routes_extensions.h_extensions_enable(self, parsed, body)
 
-    def _h_extensions_disable(self, _parsed: ParseResult, body: dict) -> None:
-        if not self._check_unlock():
-            return
-        name = (body.get("name") or "").strip()
-        if not name:
-            self._send_json({"ok": False, "error": "missing 'name'"},
-                            status=400)
-            return
-        entry = extensions.disable(name)
-        _extensions_pending_restart[name] = True
-        self._send_json({
-            "ok": True, "name": name, "entry": entry,
-            "restart_required": True,
-        })
+    def _h_extensions_disable(self, parsed: ParseResult, body: dict) -> None:
+        routes_extensions.h_extensions_disable(self, parsed, body)
 
     def _h_tasks_get(self, _parsed: ParseResult) -> None:
         try:
