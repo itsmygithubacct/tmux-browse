@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
-# Install tmux-browse's external prerequisites: tmux + ttyd.
+# Install tmux-browse's external prerequisites.
+#
+# Runtime (always installed): tmux + ttyd.
+# Dev tools (with --dev): ImageMagick + librsvg renderer, used by
+#   bin/generate-pwa-icons.sh to rebuild the PWA icons from
+#   static/favicon.svg. Only needed if you're contributing changes
+#   that affect the icons; the PNGs themselves are checked into
+#   the repo.
 #
 # Detects the host package manager (apt / dnf / yum / pacman / zypper /
-# apk / brew / port / pkg) and installs tmux from it. ttyd is fetched
-# from upstream via tmux_browse.py install-ttyd because it isn't
-# packaged on every distro and the bundled installer always works.
+# apk / brew / port / pkg). ttyd is fetched from upstream via
+# tmux_browse.py install-ttyd because it isn't packaged on every
+# distro and the bundled installer always works.
 #
 # Idempotent: re-running after partial success skips what's already
 # installed. The script never sudos silently — it prints every command
 # it's about to run, then runs it.
+#
+# Usage:
+#   bin/install-prereqs.sh            # runtime only
+#   bin/install-prereqs.sh --dev      # also install icon-regen tools
 
 set -euo pipefail
 
@@ -95,10 +106,39 @@ install_ttyd() {
     run python3 "$REPO_DIR/tmux_browse.py" install-ttyd
 }
 
+install_dev_tools() {
+    # ImageMagick + an SVG renderer, only needed for re-rasterising
+    # bin/generate-pwa-icons.sh. Package names vary slightly by manager.
+    local manager
+    if ! manager="$(detect_manager)"; then
+        err "no recognised package manager on \$PATH (skipping --dev)"
+        return 0
+    fi
+    if command -v convert >/dev/null 2>&1 && command -v rsvg-convert >/dev/null 2>&1; then
+        say "dev tools already installed (ImageMagick + rsvg-convert)"
+        return
+    fi
+    say "installing dev tools (ImageMagick + librsvg) via $manager"
+    case "$manager" in
+        apt)    install_with apt imagemagick librsvg2-bin ;;
+        dnf)    install_with dnf ImageMagick librsvg2-tools ;;
+        yum)    install_with yum ImageMagick librsvg2-tools ;;
+        pacman) install_with pacman imagemagick librsvg ;;
+        zypper) install_with zypper ImageMagick rsvg-view ;;
+        apk)    install_with apk imagemagick librsvg ;;
+        brew)   install_with brew imagemagick librsvg ;;
+        port)   install_with port ImageMagick librsvg ;;
+        pkg)    install_with pkg ImageMagick7 librsvg2 ;;
+    esac
+}
+
 main() {
     say "tmux-browse prerequisite installer"
     install_tmux
     install_ttyd
+    if [ "${1:-}" = "--dev" ]; then
+        install_dev_tools
+    fi
     echo
     say "verifying"
     python3 "$REPO_DIR/tmux_browse.py" doctor
