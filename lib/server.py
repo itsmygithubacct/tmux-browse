@@ -150,6 +150,17 @@ def _session_summary() -> SessionSummary:
     # 200ms keeps the worst case under a quarter-second on hosts where
     # several sessions are simultaneously slow.
     snapshot_deadline = time.perf_counter() + 0.200
+    # Local-host identity for the device_id / peer_hostname fields on
+    # every row. Cheap (cached after first call); always populated so
+    # the dashboard can render the hostname badge symmetrically across
+    # local and federated sessions.
+    try:
+        from . import federation
+        local_device_id = federation.get_or_create_device_id()
+        local_hostname = federation.get_hostname()
+    except Exception:
+        local_device_id = None
+        local_hostname = None
     for s in tmux_rows:
         name = s["name"]
         tmux_names.add(name)
@@ -179,10 +190,12 @@ def _session_summary() -> SessionSummary:
             "ttyd_running": pid is not None,
             "conversation_mode": bool(agent_name and agent_name in configured_agents),
             "agent_name": agent_name if agent_name in configured_agents else None,
-            # Forward-compat for federation (Phase I): the originating
-            # device's id. Always None here; populated by the peer-
-            # aggregation pass for remote sessions.
-            "device_id": None,
+            # The originating host's identity. For local rows this
+            # carries the local device_id + hostname so the dashboard
+            # can render the hostname badge symmetrically. The
+            # federation merge overwrites these for remote rows.
+            "device_id": local_device_id,
+            "peer_hostname": local_hostname,
             # Last ~20 lines of the session's active pane, for the
             # dashboard's preview tile. Empty string for sessions
             # we couldn't capture (timeout, vanished, etc.).
@@ -212,7 +225,8 @@ def _session_summary() -> SessionSummary:
             "ttyd_running": True,
             "conversation_mode": False,
             "agent_name": None,
-            "device_id": None,
+            "device_id": local_device_id,
+            "peer_hostname": local_hostname,
             # Raw shells aren't tmux sessions; nothing to capture.
             "snapshot": "",
         })

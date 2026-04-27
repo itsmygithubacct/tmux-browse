@@ -1103,9 +1103,16 @@ details[open] > summary > .pane-snapshot { display: none; }
    a LAN peer's /api/sessions. Subtle accent rather than bright
    so the local sessions still read as "primary" in the list. */
 .badge.host-badge {
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+}
+.badge.host-badge-remote {
     background: rgba(116, 159, 207, 0.16);
     color: #98c1ed;
     border: 1px solid rgba(116, 159, 207, 0.30);
-    font-variant: small-caps;
-    letter-spacing: 0.04em;
+}
+.badge.host-badge-local {
+    background: rgba(139, 148, 158, 0.10);
+    color: var(--dim);
+    border: 1px solid var(--border);
 }
