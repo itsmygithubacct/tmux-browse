@@ -42,6 +42,7 @@ function configFieldMap() {
         show_window_badge: document.getElementById("cfg-show-window-badge"),
         show_port_badge: document.getElementById("cfg-show-port-badge"),
         show_idle_text: document.getElementById("cfg-show-idle-text"),
+        show_pane_snapshot: document.getElementById("cfg-show-pane-snapshot"),
         show_idle_alert_button: document.getElementById("cfg-show-idle-alert-button"),
         show_summary_open: document.getElementById("cfg-show-summary-open"),
         show_summary_log: document.getElementById("cfg-show-summary-log"),
@@ -160,7 +161,7 @@ const TOPBAR_TOGGLE_KEYS = [
 ];
 const SUMMARY_TOGGLE_KEYS = [
     "show_attached_badge", "show_window_badge", "show_port_badge",
-    "show_idle_text", "show_idle_alert_button", "show_summary_open",
+    "show_idle_text", "show_pane_snapshot", "show_idle_alert_button", "show_summary_open",
     "show_summary_log", "show_summary_scroll", "show_summary_split",
     "show_summary_hide", "show_summary_reorder", "show_summary_move",
     "show_wc_close", "show_wc_maximize", "show_wc_minimize", "show_wc_hide_icon", "show_wc_log_icon", "show_wc_idle_icon", "show_wc_scroll_icon", "show_wc_move_icon", "show_wc_step_plus_w", "show_wc_step_plus_h", "show_wc_step_minus_w", "show_wc_step_minus_h",

@@ -218,6 +218,7 @@ def _render(js: str) -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-window-badge" /><span>Window count badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-port-badge" /><span>Running ttyd port badge</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-idle-text" /><span>Idle text</span></label>
+                <label class="check-row"><input type="checkbox" id="cfg-show-pane-snapshot" /><span>Live pane preview (last ~20 lines)</span></label>
                 <div class="dim" style="font-size:0.72rem;margin:0.3rem 0 0.1rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent)">Icon style pane controls</div>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-close" /><span>Close (x)</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-wc-maximize" /><span>Maximize</span></label>
