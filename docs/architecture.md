@@ -75,7 +75,14 @@ static/config.js           config form, apply, load/save, lock
 static/audio.js            idle alert sound synthesis
 static/phone-keys.js       mobile key customization with drag-to-reorder
 static/sharing.js          ?import-cfg URL handling, view-config serializer
-static/panes.js            pane builder, layout, drag-drop, modals, refresh, init
+static/panes/idle-alerts.js  per-session idle alert config + firing
+static/panes/hot-buttons.js  shared hot buttons + per-session hot loops
+static/panes/send-queue.js   send-bar single + repeat-with-cooldown queue
+static/panes/lifecycle.js    launch/stop ttyd, kill/new session, raw shells, fit
+static/panes/layout.js       drag/drop, ordering, hidden / pane-group buckets
+static/panes/modals.js       workflow editor + split picker
+static/panes/render.js       createPane + updatePane (per-session DOM)
+static/panes.js            refresh loop, init, callExt/bindExt cross-cutting helpers
 static/extensions.js       Config > Extensions card, install/manage modal, restart banner
 ```
 

@@ -308,7 +308,11 @@ tmux-browse/
 ├── static/                                        # dashboard frontend assets
 │   ├── app.css / favicon.svg
 │   ├── util.js / state.js / config.js / audio.js  # core JS modules
-│   ├── phone-keys.js / sharing.js / panes.js      # UI JS modules
+│   ├── phone-keys.js / sharing.js                 # UI JS modules
+│   ├── panes.js                                   # refresh loop + init
+│   ├── panes/                                     # per-feature pane modules
+│   │   ├── idle-alerts.js / hot-buttons.js / send-queue.js
+│   │   ├── lifecycle.js / layout.js / modals.js / render.js
 │   └── extensions.js                              # Config > Extensions card + restart banner
 ├── extensions/                                    # opt-in submodules (none required)
 │   ├── agent/                # tmux-browse-agent
