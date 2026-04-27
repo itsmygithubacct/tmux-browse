@@ -49,6 +49,7 @@ _JS_FILES = [
     # last among the panes files so its DOMContentLoaded handler sees
     # everything else.
     "panes/idle-alerts.js",
+    "panes/hot-buttons.js",
     "panes.js",
     "extensions.js",
 ]
