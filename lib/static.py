@@ -48,6 +48,7 @@ _JS_FILES = [
     # available before the rest of panes.js runs. panes.js itself stays
     # last among the panes files so its DOMContentLoaded handler sees
     # everything else.
+    "panes/snapshot.js",
     "panes/idle-alerts.js",
     "panes/hot-buttons.js",
     "panes/send-queue.js",
