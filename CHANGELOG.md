@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.7.2.1 — PWA install on mobile (2026-04-27)
+
+Adds a Web App Manifest and a minimal service worker so the
+dashboard installs to a phone's home screen as an app, stripping
+the URL bar. The dashboard runs identically without the PWA
+layer — this is purely a phone-UX affordance.
+
+### What's new
+
+- `static/manifest.webmanifest` — declares the install
+  metadata, two icon sizes (192px, 512px) with adaptive-icon
+  purpose.
+- `static/service-worker.js` — ~30 lines of cache-first fetch
+  handler. Caches the shell (manifest + icons + favicon) and
+  nothing else; the dashboard HTML and `/api/*` routes always
+  hit the network so a server restart is reflected immediately
+  and session data never goes stale.
+- `static/pwa-192.png`, `static/pwa-512.png` — icon assets,
+  rasterised from `static/favicon.svg`.
+- `bin/generate-pwa-icons.sh` — regenerable: edit the SVG,
+  rerun the script, commit the new PNGs.
+- `bin/install-prereqs.sh` gains `--dev` to install the
+  ImageMagick + librsvg toolchain that the icon-regen script
+  needs. Runtime install path is unchanged.
+
+### Server side
+
+- Four new GET routes — `/manifest.webmanifest`,
+  `/service-worker.js`, `/pwa-192.png`, `/pwa-512.png` — handled
+  by free functions in `lib/server_routes/meta.py`.
+- The service worker is served with `Cache-Control: no-cache,
+  max-age=0` and `Service-Worker-Allowed: /` so updates land on
+  next page load.
+
+### HTML head
+
+- `lib/templates.py` adds the manifest link, theme-color meta,
+  Apple PWA meta tags, and the apple-touch-icon link.
+- A small inline script registers the service worker on
+  `https://` or localhost only. Plaintext HTTP silently no-ops
+  (browsers don't allow SW registration over plain HTTP, which
+  is the right gate for tmux-browse's "trusted LAN" default).
+
+### Acceptance
+
+- Chrome on Android over HTTPS shows "Install app" in the menu.
+- iOS Safari "Add to Home Screen" launches without the URL bar.
+- DevTools → Application → Manifest shows the manifest with no
+  warnings; both icons load.
+- Plaintext HTTP: the SW does not register (verified in the
+  Application panel), but the dashboard otherwise works.
+- 601/601 tests still passing — no functional change.
+
 ## 0.7.2.0 — Remote-access recipes + README polish (2026-04-27)
 
 Docs-only release. First in the 0.7.2.x line; sub-version bump

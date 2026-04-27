@@ -52,6 +52,11 @@ def _render(js: str) -> str:
 <title>tmux-browse</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/pwa-192.png">
 <style>{static.CSS}</style>
 </head>
 <body>
@@ -519,6 +524,18 @@ def _render(js: str) -> str:
     </div>
 </div>
 <script>{js}</script>
+<script>
+// Register the PWA service worker, but only on HTTPS (or localhost,
+// where browsers permit registration without a cert). Plaintext HTTP
+// over a LAN silently no-ops, which is what we want — the dashboard
+// still works without the SW; install-to-home-screen just isn't
+// offered.
+if ("serviceWorker" in navigator
+    && (location.protocol === "https:" || location.hostname === "localhost"
+        || location.hostname === "127.0.0.1")) {{
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {{}});
+}}
+</script>
 </body>
 </html>
 """
