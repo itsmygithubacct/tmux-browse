@@ -1,5 +1,112 @@
 # Changelog
 
+## 0.7.4.0 — Federation pairing model + Config UI (2026-04-27)
+
+Replaces 0.7.3.0's auto-trust LAN federation with explicit
+**request → accept** pairing on both sides. Discovery still
+happens automatically (UDP beacons unchanged), but no peer's
+sessions appear in your dashboard until both operators have
+clicked through the handshake.
+
+Sub-version bump (0.7.3 → 0.7.4) because the change is a
+default-deny behaviour shift: users upgrading from 0.7.3.0
+will see their previously-aggregated peers go quiet until they
+re-pair via the new Config UI. This is the right safety
+default — 0.7.3.0's "trust everyone on the LAN" was too
+permissive for shared networks.
+
+### How pairing works
+
+Discovery (UDP beacon on port 8095) is unchanged. The new step:
+
+1. Operator on hostA clicks **Request Pair** on hostB's row in
+   the Federation Config card.
+2. hostA POSTs to `hostB/api/peers/pair-request`. hostB records
+   it as a pending request and surfaces it in its own
+   Federation card with **Accept** / **Decline** buttons.
+3. Operator on hostB clicks **Accept**. hostB writes the pair
+   to `~/.tmux-browse/paired-peers.json` AND POSTs back to
+   `hostA/api/peers/pair-accept-callback`. hostA writes its
+   own record IFF it has an outgoing record for hostB
+   (preventing unsolicited "we accepted" messages).
+4. Both sides paired. Session aggregation now fetches from
+   each other; sessions appear with the `<hostname>:` prefix.
+
+Either side can **Unpair** at any time. We don't notify the
+peer; their pairing state is their own concern (the next
+beacon arrives, the row goes back to `discovered` on the
+unpaired side).
+
+### New: Federation Config card
+
+In Config → Federation, every visible peer gets one row with
+the right action button:
+
+| Status | Button |
+|---|---|
+| `discovered` (online) | **Request Pair** |
+| `request-sent` | (waiting label) |
+| `request-pending` | **Accept** / **Decline** |
+| `paired` | **Unpair** |
+
+The badge in the section header counts actionable rows
+(paired + pair-pending + request-sent), so an incoming
+request is visible without expanding the section. Polls
+`/api/peers` every 5 seconds.
+
+### Server-side surface
+
+- `lib/federation/store.py` (new): persistent paired-peers
+  set + in-memory pending-request store + outgoing-request
+  tracker. Atomic file writes (`.tmp` + replace) at mode 0600.
+- `lib/server_routes/peers.py` extended: now exposes
+  `pair-request`, `pair-accept-callback`, `pair-request-out`,
+  `pair-accept`, `pair-decline`, `unpair`. The two callback
+  routes are unauthenticated (the operator hasn't trusted the
+  peer yet); the four operator-action routes are config-lock
+  gated.
+- `_merge_peer_sessions` now filters peers through
+  `is_paired()` before any HTTP fetch — discovered-but-
+  unpaired peers contribute zero rows.
+
+### Security properties
+
+- A hostile peer **can** broadcast a fake hostname and queue a
+  pair request to you (which you'll see and decline).
+- A hostile peer **cannot** write itself into your paired set,
+  read your sessions, or replay an old accept (each
+  pair-accept-callback requires a fresh outgoing record on the
+  receiver — only Request Pair creates one).
+
+### Local symmetry (folded H6)
+
+Local session rows now also carry `device_id` and
+`peer_hostname` (was `null`). The frontend host badge logic
+distinguishes local (subtle grey) from remote (accent blue),
+and only shows the local badge when at least one remote is
+also present — solo dashboards stay clean.
+
+### Tests
+
+- `tests/test_federation.py` adds 12 tests covering paired
+  store persistence, pending TTL, outgoing-record tracking,
+  the pair-accept-callback security guard (refuses callbacks
+  from peers we never asked), and the aggregation-only-when-
+  paired property. Suite: 613 → 625 tests, all green.
+
+### Upgrade notes
+
+After upgrading from 0.7.3.0, your dashboard will not show
+any remote sessions until you re-pair via the new Federation
+Config card. The paired-peers file is created on first pair;
+no migration needed.
+
+If you want the old auto-trust behaviour back for a single
+process, there's no flag for it (intentionally). Operators
+on truly trusted single-tenant LANs can pair once after
+upgrade and the pair persists across restarts; the request
+overhead is one click per peer, total.
+
 ## 0.7.3.0 — LAN federation (2026-04-27)
 
 Two or more tmux-browse instances on the same LAN now
