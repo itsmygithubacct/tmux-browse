@@ -62,6 +62,7 @@ DEFAULTS: dict[str, Any] = {
     "launch_open_tab": False,
     "show_topbar_status": False,
     "show_summary_row": True,
+    "show_pane_snapshot": True,
     "show_summary_name": True,
     "show_summary_arrow": True,
     "furl_side_by_side": True,
