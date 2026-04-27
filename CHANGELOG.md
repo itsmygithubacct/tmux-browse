@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.7.1.9 — Split static/panes.js by feature (2026-04-27)
+
+Pure refactor — no behaviour change. Phase B of the deferred
+candidates from 0.7.1.7. Companion to 0.7.1.8's server.py split.
+
+``static/panes.js`` was 2,050 lines holding 81 functions covering
+init, refresh, pane DOM construction, drag/drop, layout, the
+hidden drawer + pane groups, idle alerts, hot buttons, the send-
+queue repeater, every modal dialog, and every session-lifecycle
+button handler. Cross-cutting changes touched the same file as
+everything else; the recent fresh-clone init bugs were the most
+visible symptom.
+
+Split by feature into ``static/panes/``, with each file
+concatenated by ``lib/static.py`` in declared load order:
+
+- ``panes/idle-alerts.js`` — idle threshold modal + per-session
+  arming + firing (sound / prompt)
+- ``panes/hot-buttons.js`` — shared hot button slots + per-session
+  hot loops with idle-gating
+- ``panes/send-queue.js`` — send-bar single send and the repeat
+  queue with idle + 60s cooldown
+- ``panes/lifecycle.js`` — launchCodingSession, launch / stopTtyd /
+  killSession / stopRawShell / newSession / restartDashboard, plus
+  the iframe-fit helpers (resizePane / stepIframeSize /
+  fitTmuxToIframe)
+- ``panes/layout.js`` — drag/drop, ordering, the move-menu
+  popover, hidden drawer chrome, user-defined pane groups
+- ``panes/modals.js`` — workflow editor (agent-extension surface
+  with structural guards) + split picker
+- ``panes/render.js`` — createPane / updatePane: the per-session
+  DOM construction (~440 lines of one function plus its tick
+  updater)
+
+``panes.js`` itself shrinks from 2,050 → 293 lines and now holds
+just the cross-cutting bits: ``refresh``,
+``showTmuxUnreachableBanner``, the ``bind`` /
+``callExt`` / ``awaitExt`` / ``bindExt`` shim helpers, and the
+``DOMContentLoaded`` init handler that wires every button.
+
+Every function in the new files declares with ``function``, not
+``const fn =``, so the names hoist into ``window`` after
+concatenation. ``lib/static.py``'s ``_JS_FILES`` ordering matters
+— ``panes.js`` loads last among the panes/* files so its init
+handler can call into anything declared earlier.
+
+No JS or HTML test exists for the dashboard surface; verification
+was the existing 601-test Python suite (still green) plus a
+manual UI walk through the 14-item smoke checklist documented in
+the planning notes (no console errors, agent-extension and
+no-extension dashboards both load, drag/drop / split / hide /
+hot-button-loop / send-queue / idle-alert / tmux-unreachable
+banner all behave as before).
+
 ## 0.7.1.8 — Extract server.py route handlers into lib/server_routes/ (2026-04-27)
 
 Pure refactor — no behaviour change, no public API change, JSON
