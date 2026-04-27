@@ -540,6 +540,10 @@ class Handler(BaseHTTPRequestHandler):
         "/api/extensions/available": routes_extensions.h_extensions_available,
         "/api/tasks":              routes_tasks.h_tasks_get,
         "/health":                 routes_meta.h_health,
+        "/manifest.webmanifest":   routes_meta.h_manifest,
+        "/service-worker.js":      routes_meta.h_service_worker,
+        "/pwa-192.png":            routes_meta.h_pwa_icon,
+        "/pwa-512.png":            routes_meta.h_pwa_icon,
     })
     _POST_ROUTES: MappingProxyType[str, Callable[["Handler", ParseResult, dict], None]] = MappingProxyType({
         "/api/ttyd/start":         routes_ttyd.h_ttyd_start,
