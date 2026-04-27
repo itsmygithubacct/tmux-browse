@@ -22,6 +22,16 @@ function createPane(s) {
     const displayName = isRaw ? `shell · ${s.name}` : s.name;
     const sname = el("span", { class: "sname" }, displayName);
     const sbadges = el("span", { class: "sbadges" });
+    // Host badge for federated sessions: device_id is set whenever
+    // the row arrived from a peer's /api/sessions. Static for the
+    // life of the row (a peer's sessions disappear when the peer
+    // expires, so a row never transitions local→remote in place).
+    if (s.device_id && s.peer_hostname) {
+        sbadges.append(el("span", {
+            class: "badge host-badge",
+            title: `running on ${s.peer_hostname}`,
+        }, s.peer_hostname));
+    }
     const idle = el("span", { class: "dim" });
     const idleAlertBtn = el("button", {
         class: "btn blue summary-idle-alert",
