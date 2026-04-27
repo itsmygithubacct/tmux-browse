@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.7.1.7 — Extension-call shim + SessionSummary dataclass (2026-04-27)
+
+Two small, surgical refactors prompted by the regressions and churn
+of the last few releases. No behaviour change; both are about
+preventing a class of bugs and a class of signature churn.
+
+### `callExt` / `awaitExt` / `bindExt` in `static/panes.js`
+
+- Three releases in a row added `typeof X === "function"` guards
+  to a different init or refresh path that called an
+  agent-extension global. The pattern was easy to forget — anyone
+  writing a new extension call had to remember to wrap it. Result:
+  fresh-clone init crashed twice on different missing names before
+  the third release wrapped them all.
+- Added `callExt(name, ...args)`, `awaitExt(name, ...args)`, and
+  `bindExt(id, event, handlerName)` next to the existing `bind()`
+  helper. Each looks the function up by name on `window` and
+  silently returns `undefined` (or skips the binding) when the
+  extension isn't installed.
+- Migrated 21 call sites to the helpers — every previously
+  `typeof`-guarded call to `loadAgents`, `renderAgentsPane`,
+  `renderPaneAdmin`, `renderAgentSelectors`, `populateRunAgentFilter`,
+  `populateTaskAgentSelect`, `loadAgentWorkflows`, `searchRuns`,
+  `loadTasks`, `loadCostSummary`, `loadHooks`, `loadConductor`,
+  `loadNotifications`, `saveAgentConfig`, `removeAgentConfig`,
+  `closeAgentSteps`, `createTask`, `saveWorkflowEditor`,
+  `clearWorkflowEditor`, `saveHooks`, `resetHooks`, `saveConductor`,
+  `setAgentStatus`, `agentFieldMap`, and `enforceAgentConstraint`.
+- Adding a new extension call is now `callExt("foo")` or
+  `bindExt("btn-id", "click", "foo")`; review picks up the
+  pattern at a glance.
+
+### `SessionSummary` dataclass in `lib/server.py`
+
+- `_session_summary()` previously returned `tuple[list[dict], bool]`.
+  The 0.7.1.5 banner work added the second tuple element; the next
+  flag (e.g. "tmux server upgrading") would mutate the signature
+  again and force every caller and test to update positionally.
+- Wrap the return in a small `SessionSummary` dataclass with named
+  fields (`rows`, `tmux_unreachable`). Sole caller updated to
+  destructure by name. JSON shape unchanged.
+
+### Misc
+
+- 601/601 tests still passing — pure refactor, no new tests
+  required.
+
 ## 0.7.1.6 — Prerequisite check, fail-fast preflight, install script (2026-04-26)
 
 A fresh-clone install on a host without `ttyd` (or `tmux`) used to
