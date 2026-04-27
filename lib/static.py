@@ -48,7 +48,7 @@ _JS_FILES = [
     # available before the rest of panes.js runs. panes.js itself stays
     # last among the panes files so its DOMContentLoaded handler sees
     # everything else.
-    # (Each future extracted file lands here, declared in load order.)
+    "panes/idle-alerts.js",
     "panes.js",
     "extensions.js",
 ]
