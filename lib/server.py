@@ -60,6 +60,10 @@ class DashboardServer(ThreadingHTTPServer):
     """
 
     daemon_threads = True
+    # Default of 5 chokes under federation-poll bursts. Raise to the
+    # common web-server default so SYN floods of N peers polling at
+    # 1Hz don't sit in the kernel queue.
+    request_queue_size = 128
 
     def __init__(self, server_address, RequestHandlerClass, *,
                  verbose: bool = False,
@@ -100,8 +104,15 @@ class SessionSummary:
     tmux_unreachable: bool = False
 
 
-def _session_summary() -> SessionSummary:
+def _session_summary(merge_peers: bool = True) -> SessionSummary:
     """Session list enriched with port assignment + ttyd running flag.
+
+    ``merge_peers=False`` skips the federation aggregation step. Used
+    when responding to a peer-originated request (``?local=1``) so the
+    federation graph does not recursively walk itself: peer A asking
+    peer B for sessions must not cause B to fan out to peers C, D…
+    With N peers polling at 1 Hz that turns inbound load from N into
+    N*(1+N).
 
     ``SessionSummary.tmux_unreachable`` is True when tmux's socket exists
     but the server isn't responding — the dashboard surfaces a banner so
@@ -237,8 +248,10 @@ def _session_summary() -> SessionSummary:
     # prefixed with "<hostname>:" and tagged with the originating
     # device_id so the dashboard can route iframe loads back to
     # the peer. Failures are silent — a sluggish peer must not
-    # block the local response.
-    _merge_peer_sessions(out)
+    # block the local response. Skipped on peer-originated requests
+    # (?local=1) to break the recursive aggregation cascade.
+    if merge_peers:
+        _merge_peer_sessions(out)
 
     return SessionSummary(rows=out, tmux_unreachable=tmux_unreachable)
 
@@ -247,21 +260,25 @@ def _session_summary() -> SessionSummary:
 # Federation peer aggregation
 # ---------------------------------------------------------------------------
 
-# Per-peer fetch timeout. Kept tight on purpose: the local /api/sessions
-# response is on the SSE 1Hz cadence, so anything that takes more than
-# half a second feels broken to the operator. Slow / dead peers serve
-# empty under their hostname rather than stalling the dashboard.
-_PEER_FETCH_TIMEOUT_SEC = 1.5
+# Per-peer fetch timeout. Loose enough for resource-constrained peers
+# (e.g. a 6-core ARM SBC capturing ~10 pane snapshots) to finish writing
+# their /api/sessions response. Slow / dead peers serve empty under
+# their hostname rather than stalling the dashboard.
+_PEER_FETCH_TIMEOUT_SEC = 5.0
 
 # Total wall budget for the parallel-fetch step. Bounded by N peers ×
 # timeout in the worst case, but we ``join(timeout=...)`` each thread
 # with this cap to keep the total request fast even when peers misbehave.
-_PEER_AGGREGATE_BUDGET_SEC = 2.0
+_PEER_AGGREGATE_BUDGET_SEC = 6.0
 
 
 def _fetch_peer_sessions(base_url: str, timeout: float = _PEER_FETCH_TIMEOUT_SEC) -> list[dict]:
-    """Best-effort GET <peer>/api/sessions; returns the rows or []."""
-    url = f"{base_url}/api/sessions"
+    """Best-effort GET <peer>/api/sessions; returns the rows or [].
+
+    Sends ``?local=1`` so the peer skips its own federation merge.
+    Without this the polling graph cascades: peer A → peer B → A → ...
+    """
+    url = f"{base_url}/api/sessions?local=1"
     req = urllib.request.Request(url)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -500,6 +517,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- helpers -----------------------------------------------------------
 
+    def _safe_write(self, body: bytes) -> None:
+        # Federation peers and SSE clients routinely close the socket
+        # mid-write when their per-peer timeout fires. That is normal,
+        # not an error — swallow the BrokenPipe / ConnectionReset rather
+        # than dumping a stack trace per drop.
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def _send_json(self, obj, status: int = 200) -> None:
         body = json.dumps(obj).encode("utf-8")
         self.send_response(status)
@@ -507,7 +534,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        self._safe_write(body)
 
     def _send_html(self, html: str, status: int = 200) -> None:
         body = html.encode("utf-8")
@@ -516,7 +543,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        self._safe_write(body)
 
     def _send_text(self, text: str, status: int = 200) -> None:
         body = text.encode("utf-8", errors="replace")
@@ -525,7 +552,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        self._safe_write(body)
 
     def _read_json(self) -> dict:
         length = int(self.headers.get("Content-Length") or "0")

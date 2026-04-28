@@ -82,22 +82,39 @@ def _unsafe(name: str) -> str:
 
 def _pid_is_ttyd(pid: int) -> bool:
     """On Linux, confirm the process name is actually ``ttyd`` — guards
-    against a recycled PID being mistaken for our old ttyd process."""
+    against a recycled PID being mistaken for our old ttyd process.
+
+    Returns True for "definitely ttyd" or "indeterminate" (transient
+    /proc read failure that isn't ENOENT). Only returns False when we
+    can affirmatively show the process is gone or is not a ttyd. Being
+    permissive here keeps a transient /proc hiccup from triggering
+    pidfile deletion of a live process.
+    """
     try:
         with open(f"/proc/{pid}/comm") as f:
             return f.read().strip() == "ttyd"
-    except OSError:
-        # Non-Linux (no /proc) or pid gone — fall back to "signal 0 alive"
-        # check; callers already treat _pid_alive as best-effort.
+    except FileNotFoundError:
         return False
+    except OSError:
+        return True
 
 
 def _pid_alive(pid: int) -> bool:
+    """Return True iff the PID is alive AND looks like one of our ttyds.
+
+    Distinguishes "definitely dead" (ESRCH / ENOENT) from "can't tell"
+    (EPERM, transient OSError). The latter is treated as alive — a
+    misclassification here means a stale pidfile lingers one cycle
+    longer; the inverse misclassification permanently orphans a live
+    ttyd from the dashboard's view.
+    """
     try:
         os.kill(pid, 0)
-    except OSError:
+    except ProcessLookupError:
         return False
-    # If /proc exists and the comm disagrees, the PID was recycled.
+    except OSError:
+        # EPERM (different uid) or other transient — assume alive.
+        return True
     if Path("/proc").is_dir() and not _pid_is_ttyd(pid):
         return False
     return True
@@ -249,10 +266,82 @@ def _ttyd_interface(bind_addr: str | None) -> str | None:
     return resolved
 
 
+def _scan_ttyd_for_session(session: str, proc_root: Path | None = None) -> int | None:
+    """Find a live ttyd process whose argv references this session's wrapper.
+
+    Used to re-link an orphan ttyd (pidfile lost but process still alive)
+    back to its session, so a transient pidfile loss doesn't leave the
+    dashboard reporting the session as down forever. ``proc_root`` is
+    a test seam — production always uses ``/proc``.
+    """
+    proc = proc_root if proc_root is not None else Path("/proc")
+    if not proc.is_dir():
+        return None
+    wrap = str(config.TTYD_WRAP)
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            with open(entry / "comm") as f:
+                if f.read().strip() != "ttyd":
+                    continue
+            with open(entry / "cmdline", "rb") as f:
+                argv = [a.decode("utf-8", "replace") for a in f.read().split(b"\x00") if a]
+        except OSError:
+            continue
+        # Expect: ttyd ... -W bash <wrap> <session>. Confirm session is
+        # the arg directly after wrap so we don't false-match on a
+        # session whose name happens to appear elsewhere in argv.
+        try:
+            i = argv.index(wrap)
+        except ValueError:
+            continue
+        if i + 1 < len(argv) and argv[i + 1] == session:
+            try:
+                return int(entry.name)
+            except ValueError:
+                continue
+    return None
+
+
+def _scheme_from_argv(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            argv = f.read().split(b"\x00")
+    except OSError:
+        return "http"
+    return "https" if b"--ssl" in argv else "http"
+
+
+def _reconcile_pidfile(session: str) -> int | None:
+    """Restore a missing pidfile when a live ttyd matches this session.
+
+    Triggered when ``read_pid`` finds no pidfile but the dashboard still
+    has a port assignment for the session. If that port is listening
+    AND a ttyd process owns the session's wrapper argv, we rewrite the
+    pidfile (and scheme sidecar) so subsequent ``read_pid`` calls hit
+    the fast path. Self-heals the "pidfile vanished, ttyd still alive"
+    failure mode that otherwise leaves the dashboard's iframe blank
+    until the user clicks Launch.
+    """
+    port = ports.get(session)
+    if port is None or not _port_listening(port):
+        return None
+    pid = _scan_ttyd_for_session(session)
+    if pid is None:
+        return None
+    try:
+        _atomic_write(_pidfile(session), f"{pid}\n")
+        _atomic_write(_schemefile(session), f"{_scheme_from_argv(pid)}\n")
+    except OSError:
+        return pid
+    return pid
+
+
 def read_pid(session: str) -> int | None:
     pf = _pidfile(session)
     if not pf.is_file():
-        return None
+        return _reconcile_pidfile(session)
     try:
         pid = int(pf.read_text().strip())
     except (ValueError, OSError):

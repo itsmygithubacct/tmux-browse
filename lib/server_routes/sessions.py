@@ -34,12 +34,16 @@ def _resolve_launch_cmd(cmd: str | None) -> str | None:
     return cmd
 
 
-def h_sessions(handler: "Handler", _parsed: ParseResult) -> None:
+def h_sessions(handler: "Handler", parsed: ParseResult) -> None:
     # Lazy import — _session_summary lives in lib.server alongside its
     # dataclass so the SessionSummary type stays colocated with its
     # producer. Importing at module load would create a cycle.
     from ..server import _session_summary
-    summary = _session_summary()
+    # Peer-originated requests pass ?local=1 to suppress this node's
+    # own federation merge, breaking the recursive aggregation cascade.
+    query = parse_qs(parsed.query)
+    local_only = (query.get("local", ["0"])[0] or "0").strip().lower() in ("1", "true", "yes")
+    summary = _session_summary(merge_peers=not local_only)
     handler._send_json({
         "ok": True,
         "sessions": summary.rows,

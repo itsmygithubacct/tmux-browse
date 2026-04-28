@@ -317,6 +317,17 @@ function createPane(s) {
     const iframe = el("iframe", {
         id: "iframe-" + id, class: "pane-iframe",
         allow: "clipboard-read; clipboard-write",
+        // Sandbox without allow-modals suppresses ttyd's built-in
+        // beforeunload prompt so re-launching or expanding a pane
+        // doesn't pop a "Leave site?" dialog. allow-same-origin gives
+        // the iframe its real ttyd origin so the client's GET /token
+        // is same-origin and not blocked by CORS (ttyd serves no
+        // Access-Control-Allow-Origin header). ttyd runs on a separate
+        // port from the dashboard, so this stays cross-origin to the
+        // parent and Chrome doesn't warn about a no-op sandbox; if
+        // ttyd is ever reverse-proxied at the dashboard's origin the
+        // sandbox loses isolation, so deploy it on its own host/port.
+        sandbox: "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms",
     });
     const dragShield = el("div", { class: "drag-shield" });
     const iframeWrap = el("div", { class: "ttyd-resize-wrap" }, iframe, dragShield);
@@ -542,14 +553,24 @@ function updatePane(rec, s) {
     setVisible(rec.workflowToggle, !!s.conversation_mode, "inline-flex");
 
     // Iframe src: set it once when ttyd comes up AND pane is open;
-    // never blow it away on refresh unless ttyd went down.
+    // never blow it away on refresh unless ttyd has been down for several
+    // consecutive polls. A single ttyd_running:false (e.g. server-side
+    // pidfile flap) used to blank a working terminal permanently — the
+    // streak counter absorbs transient false readings.
     const iframeUrl = s.ttyd_running ? ttydUrl(s.port) : null;
     const cur = rec.iframe.getAttribute("src") || "";
     if (iframeUrl && state.openPanes.has(s.name) && cur !== iframeUrl) {
         rec.iframe.setAttribute("src", iframeUrl);
     }
-    if (!iframeUrl && cur) {
+    if (s.ttyd_running) {
+        rec.notRunningStreak = 0;
+    } else {
+        rec.notRunningStreak = (rec.notRunningStreak || 0) + 1;
+    }
+    const NOT_RUNNING_THRESHOLD = 5;
+    if (!iframeUrl && cur && rec.notRunningStreak >= NOT_RUNNING_THRESHOLD) {
         rec.iframe.removeAttribute("src");
+        rec.notRunningStreak = 0;
     }
 
     // Preview snapshot: render only when enabled and there's content
