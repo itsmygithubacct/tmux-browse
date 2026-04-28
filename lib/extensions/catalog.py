@@ -38,7 +38,7 @@ KNOWN: dict[str, CatalogEntry] = {
         "repo": "https://github.com/itsmygithubacct/tmux-browse-agent.git",
         # Tags are preferred over branch names so the install path
         # doesn't move under us between today and next week.
-        "pinned_ref": "v0.7.2-agent",
+        "pinned_ref": "v0.7.3-agent",
         "submodule_path": "extensions/agent",
     },
     "sandbox": {
