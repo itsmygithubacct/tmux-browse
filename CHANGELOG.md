@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.7.5.0 — Quickstart scripts, ttyd reconcile, agent catalog bump (2026-04-29)
+
+Three loosely-related improvements ship together:
+
+**Quickstart entry points.** `bin/quickstart_local.sh` and
+`bin/quickstart_lan.sh` are curl-pipeable bootstraps. Each detects
+the latest core release tag, shallow-clones it, runs
+`tmux_browse.py doctor` to see what's missing, installs only the
+prereqs that aren't already present, and launches the server. The
+two variants differ only in default bind address (127.0.0.1 vs
+0.0.0.0). Both are linked from the README's Install section.
+
+**ttyd pidfile reconcile.** Three stacking failure modes used to
+produce the "panes go black, never recover" symptom — pidfile
+flap (transient /proc reads misclassified as dead), an iframe that
+blanked on the first `ttyd_running:false` poll, and federation
+poll recursion under a busy peer mesh. Fixed in `lib/ttyd.py`,
+`lib/server.py`, `lib/server_routes/sessions.py`, and
+`static/panes/render.js`:
+
+- `_pid_alive` now distinguishes ESRCH/ENOENT (definitely dead)
+  from EPERM and other transient errors (assume alive).
+- `_reconcile_pidfile` scans `/proc` for a ttyd whose argv
+  references the session's wrapper and rewrites the pidfile +
+  scheme sidecar so subsequent `read_pid` calls hit the fast
+  path. Self-heals "pidfile vanished, ttyd still alive."
+- Frontend needs five consecutive `ttyd_running:false` readings
+  before clearing the iframe `src`. Single-tick noise no longer
+  destroys a working terminal.
+- Peer-originated `/api/sessions` requests pass `?local=1` to skip
+  the federation merge, breaking the recursive aggregation cascade
+  that turned N peers polling at 1 Hz into N\*(1+N) handler hits.
+- `request_queue_size` raised from the stdlib default of 5 to 128
+  so SYN floods of peer polls don't drop.
+
+Plus an iframe `sandbox` attribute that suppresses ttyd's built-in
+beforeunload prompt so re-launching or expanding a pane no longer
+pops a "Leave site?" dialog.
+
+**Agent extension catalog.** Pin moved from `v0.7.2-agent` to
+`v0.7.3-agent`. The new extension release adds the CLI-agent
+breadth surface (10 supported CLI agents — Claude Code, Codex,
+OpenCode, Vibe, Gemini, Cursor, Copilot, Pi, Droid, settl) with
+spawn / status / hooks / launch UI. See the agent extension's own
+CHANGELOG for the K-phase detail.
+
+### Acceptance
+
+- 741 tests, no new failures (pre-existing test-isolation flake
+  in `test_extension_agent_lifecycle` is unchanged).
+- A dashboard with multiple expanded ttyd panes survives a
+  pidfile flap without blanking.
+- Peer mesh holds steady under simultaneous polls.
+
 ## 0.7.4.1 — Fix ttyd iframe flicker under SSE refresh (2026-04-27)
 
 Regression introduced by 0.7.2.2's SSE refresh: `renderLayout()`

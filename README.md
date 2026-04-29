@@ -19,22 +19,36 @@ itself, which the CLI can install for you.
 
 ## Install
 
-Prerequisites:
+One-shot install + launch (clones the latest release, installs only
+the prereqs the doctor reports as missing, then starts the server):
+
+```bash
+# Localhost only — bound to 127.0.0.1
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_local.sh | bash
+
+# Reachable from the LAN — bound to 0.0.0.0
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_lan.sh | bash
+```
+
+Both honor `--dir`, `--port`, `--ref`, `--no-prereqs`, and `--no-launch`
+(pass them after `bash -s --`, e.g.
+`curl -fsSL .../quickstart_local.sh | bash -s -- --port 8097 --no-launch`).
+
+Prerequisites the scripts (and the project) need:
 
 - `python3`
 - `tmux`
 - `ttyd` on `$PATH`, or let `install-ttyd` fetch it into `~/.local/bin`
 
-The fastest path on a fresh box is the bundled prereq installer — it
-detects the host package manager (apt / dnf / pacman / zypper / apk /
-brew / port / pkg) and installs tmux from it, then fetches the ttyd
-static binary:
+If you'd rather drive the steps yourself, the prereq installer detects
+the host package manager (apt / dnf / pacman / zypper / apk / brew /
+port / pkg) and handles tmux + ttyd:
 
 ```bash
 bash bin/install-prereqs.sh
 ```
 
-If you'd rather drive the steps yourself:
+Or piece by piece:
 
 ```bash
 # Check what's missing
