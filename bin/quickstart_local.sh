@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# tmux-browse quickstart: clone the latest release, install prerequisites,
-# and launch the dashboard server.
+# tmux-browse quickstart (localhost-only): clone the latest release,
+# install prerequisites, and launch the dashboard server bound to
+# 127.0.0.1. For LAN exposure use bin/quickstart_lan.sh instead.
 #
 # Usage from the internet:
 #
-#   curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_local.sh | bash
 #
 # Or with options (note the `bash -s --`):
 #
-#   curl -fsSL .../quickstart.sh | bash -s -- --dir ~/tb --port 8097 --bind 0.0.0.0
+#   curl -fsSL .../quickstart_local.sh | bash -s -- --dir ~/tb --port 8097
 #
 # Or locally:
 #
-#   bash bin/quickstart.sh --no-launch
+#   bash bin/quickstart_local.sh --no-launch
 #
 # Options:
 #   --dir <path>     install directory (default: ~/tmux-browse)
 #   --port <n>       HTTP port (default: 8096)
-#   --bind <addr>    bind address (default: 127.0.0.1; pass 0.0.0.0 for LAN)
+#   --bind <addr>    bind address (default: 127.0.0.1)
 #   --ref <tag>      git ref to check out (default: the latest release tag)
 #   --no-prereqs     skip running bin/install-prereqs.sh
 #   --no-launch      install only; don't start the server
