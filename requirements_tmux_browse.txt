@@ -1,0 +1,2 @@
+# tmux-browse uses stdlib only. The ttyd binary is fetched by
+# `tmux-browse install-ttyd` (urllib → GitHub release), not a pip package.
