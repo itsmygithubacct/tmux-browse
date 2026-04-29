@@ -1,0 +1,366 @@
+# tmux-browse
+
+Two ways to look at your tmux sessions:
+
+1. **A web dashboard** — every local tmux session shown as a collapsible pane
+   with an embedded [ttyd][ttyd] terminal. Launch, open in a tab, scroll back,
+   hide, reorder, kill.
+2. **`tb`, a CLI** — read, write, create, and exit tmux sessions from the
+   shell or from an LLM tool-use loop. Tables for humans, stable JSON for
+   machines.
+
+Both share the same Python library. Stdlib-only (`http.server`, `urllib`,
+`subprocess`, `ssl`) — no pip dependencies; the only external is `ttyd`
+itself, which the CLI can install for you.
+
+![tmux-browse dashboard](docs/images/tmux_browse_0.7.0.png)
+
+[ttyd]: https://github.com/tsl0922/ttyd
+
+## Install
+
+One-shot install + launch (clones the latest release, installs only
+the prereqs the doctor reports as missing, then starts the server):
+
+```bash
+# Localhost only — bound to 127.0.0.1
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_local.sh | bash
+
+# Reachable from the LAN — bound to 0.0.0.0
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_lan.sh | bash
+```
+
+Both honor `--dir`, `--port`, `--ref`, `--no-prereqs`, and `--no-launch`
+(pass them after `bash -s --`, e.g.
+`curl -fsSL .../quickstart_local.sh | bash -s -- --port 8097 --no-launch`).
+
+Prerequisites the scripts (and the project) need:
+
+- `python3`
+- `tmux`
+- `ttyd` on `$PATH`, or let `install-ttyd` fetch it into `~/.local/bin`
+
+If you'd rather drive the steps yourself, the prereq installer detects
+the host package manager (apt / dnf / pacman / zypper / apk / brew /
+port / pkg) and handles tmux + ttyd:
+
+```bash
+bash bin/install-prereqs.sh
+```
+
+Or piece by piece:
+
+```bash
+# Check what's missing
+python3 tmux_browse.py doctor
+
+# One-time: fetch the ttyd static binary into ~/.local/bin
+python3 tmux_browse.py install-ttyd
+
+# Run the dashboard
+python3 tmux_browse.py serve         # → http://<host>:8096/
+
+# Or use the CLI
+python3 tb.py ls
+python3 tb.py exec work --json -- pytest -q
+```
+
+`serve` runs `doctor` as a startup preflight and refuses to start if
+tmux or ttyd is missing — pass `--skip-checks` to override. If your
+distro packages ttyd (Debian/Ubuntu `apt install ttyd`, Homebrew
+`brew install ttyd`), that works too.
+
+Reaching the dashboard from your phone or off-LAN: see
+[`docs/recipes-remote.md`](docs/recipes-remote.md) for SSH-tunnel,
+Tailscale Funnel, Cloudflare Tunnel, and reverse-proxy patterns.
+
+### Optional extensions
+
+Core stays small. Three optional extensions live in their own repos
+and load through the dashboard's **Config → Extensions** card (or
+`make install-<name>` on a headless host):
+
+| Extension | Repo | Adds |
+|---|---|---|
+| Agent | [tmux-browse-agent](https://github.com/itsmygithubacct/tmux-browse-agent) | `tb agent ...` CLI, agent runtime, REPL, runs index, conductor, scheduler, Agents/Runs/Tasks dashboard sections, `/api/agent-*` endpoints |
+| Sandbox | [tmux-browse-sandbox](https://github.com/itsmygithubacct/tmux-browse-sandbox) | Docker execution sandbox (library only; consumed by the agent extension when an agent has `sandbox: docker`) |
+| QR | [tmux-browse-qr](https://github.com/itsmygithubacct/tmux-browse-qr) | **Show QR** / **Read QR** buttons in Config and a `/api/qr` endpoint for round-tripping view config between devices |
+
+LAN federation is built into core: two tmux-browse hosts on the
+same network auto-discover each other and aggregate sessions in
+one dashboard. See [`docs/federation.md`](docs/federation.md).
+
+Each extension's README documents its own surface. None of them are
+required to run the dashboard or `tb` CLI.
+
+## Why this is shaped the way it is
+
+Stdlib-only Python, two CLIs (`tmux_browse.py` for the dashboard,
+`tb.py` for general session work) sharing one library, and a deliberate
+choice to outsource terminal rendering to ttyd rather than implement it
+in-house. No virtualenv to set up, no supply-chain surprises, no build
+step for the frontend. Optional features (agents, Docker sandbox, QR
+config-share) live as separate submodules so a "just a dashboard" install
+stays small. Full rationale and the `lib/` module map is in
+[docs/architecture.md](docs/architecture.md).
+
+## Quick Start
+
+If you want to try it immediately, create a throwaway tmux session first:
+
+```bash
+# Create a scratch session
+python3 tb.py new demo
+
+# Run a command inside it
+python3 tb.py exec demo --json -- pwd
+
+# Start the dashboard
+python3 tmux_browse.py serve
+```
+
+Then open `http://localhost:8096/` on the same machine. The dashboard is most
+useful once at least one tmux session exists.
+
+## Drive an agent from the terminal, watch it in the browser
+
+![Driving a coding agent from one pane, output in another](docs/images/tmux_browse_2.png)
+
+Because `tb` exposes tmux as a CLI, an agent can use it as a tool: you run
+the agent in one session and tell it to drive a coding session (assistant,
+codex, aider, …) in another, pinning the build/test output to a third.
+Each session is its own pane in the dashboard, so you watch the whole
+pipeline from a second monitor or your phone.
+
+```bash
+# Three sessions: the agent, the coding session it drives, the output pane
+tb new agent
+tb new coder
+tb new website_terminal
+
+# Start a coding agent in "coder" and a long-running build in "website_terminal"
+tb type coder "assistant"
+tb type website_terminal "npm run dev"
+
+# Kick off the orchestrating agent and give it the targets as instructions
+tb type agent "gpt"
+tb type agent "drive 'coder' to add a /health endpoint; surface build output in 'website_terminal'"
+```
+
+The agent uses `tb type coder "..."` to prompt the coding session and
+`tb capture website_terminal` to read back what the build produced —
+everything stays visible in the dashboard the whole time.
+
+See [docs/recipes.md](docs/recipes.md) for the full LLM tool-use pattern
+(`snapshot` → `exec` + `wait` → `capture`).
+
+## Orchestrate across remote machines
+
+![Managing a remote coding session from one laptop, orchestrating builds on two remote machines](docs/images/remote_orchestration.png)
+
+Each dashboard pane is whatever its tmux session is running — so if some
+of those sessions are `ssh` shells into remote hosts, one local dashboard
+becomes a cockpit for real work happening on many machines. Drive a
+coding agent in one pane while it kicks off builds in two other panes
+that are themselves `ssh` sessions to remote boxes; watch all three in
+the same browser tab.
+
+```bash
+# Local sessions whose first command is an ssh hop
+tb new coder
+tb new builder_a
+tb new builder_b
+tb type coder       "ssh dev-laptop -- assistant"
+tb type builder_a   "ssh builder-1.internal"
+tb type builder_b   "ssh builder-2.internal"
+```
+
+Everything the agent does via `tb` in those panes happens on the remote
+host at the far end of the ssh — tmux just transports the terminal,
+tmux-browse transports tmux.
+
+## Same sessions, any device on your LAN
+
+The dashboard binds `0.0.0.0` by default, so every terminal you see in the
+browser is **the real tmux session on the host** — not a copy. Open the same
+URL from another device on the LAN and you're attached to the exact same
+panes. Close your laptop, pick it up on your phone, keep typing.
+
+```bash
+# On the host running tmux (e.g. your workstation or a Raspberry Pi)
+python3 tmux_browse.py serve               # → :8096 on every interface
+
+# Find the host's LAN IP
+ip -4 addr show | awk '/inet / && !/127\./ {print $2}' | cut -d/ -f1
+```
+
+Then on any other device on the same LAN:
+
+- **Phone / tablet:** open `http://<host-ip>:8096/` in the browser. Each
+  session pane embeds a full ttyd terminal — tap into one and type; the
+  keystrokes land on the host's tmux server, not a snapshot. Pinch-zoom,
+  swipe between panes, copy/paste all work.
+- **Another laptop or PC:** same URL. Multiple people (or the same person
+  across devices) can watch and drive the same session simultaneously — tmux
+  already handles the multi-client attach; ttyd just forwards a browser
+  socket to the attach.
+
+Because everything stays on the host, your devices don't need any local
+state: no ssh keys, no tmux config, no shell history. The phone in your
+pocket is just a window onto the workstation.
+
+### Before exposing on a LAN
+
+The default build is **unauthenticated plaintext HTTP**. Anyone on the
+network segment can open any of your tmux panes. Turn on both gates
+before using this outside of a trusted single-user LAN:
+
+```bash
+# Generate a self-signed cert (one-off) + pick a token
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+    -keyout key.pem -out cert.pem -subj "/CN=$(hostname)"
+TOKEN=$(openssl rand -hex 24)
+
+# Serve with TLS + auth
+python3 tmux_browse.py serve --cert cert.pem --key key.pem --auth "$TOKEN"
+# → https://<host-ip>:8096/?token=<TOKEN> from any device
+```
+
+Phones will warn about the self-signed cert — accept once and it's pinned.
+For a stricter setup (public network, multiple users, untrusted devices),
+front the dashboard with an authenticating reverse proxy or reach it over
+a VPN / SSH port-forward instead.
+
+## Completely configurable look
+
+![Config pane with visibility toggles](docs/images/config.png)
+
+Every button, badge, and metadata element in the dashboard can be toggled
+on or off from the **Config** pane — no code changes, no restart. Two
+groups of checkboxes control what appears:
+
+- **Summary Row** — attached-clients badge, window count, port badge,
+  idle text, idle alert button, Open/Log/Scroll/Split/Hide buttons,
+  reorder pad
+- **Expanded Pane** — Launch, Stop ttyd, Kill buttons, send bar, phone
+  keyboard addons, hot buttons, loop toggles, footer metadata, inline
+  status messages, top-bar status text
+
+Each group has an **All On / All Off** toggle in the top right corner.
+Changes preview live and persist to
+`~/.tmux-browse/dashboard-config.json` when you hit **Save Config**.
+The same file is editable from the CLI with `tmux-browse config`.
+
+The defaults ship with a clean, minimal view — most action buttons
+hidden, auto-refresh off — so a fresh install isn't cluttered. Turn on
+exactly what you need.
+
+## Ports
+
+| Thing | Port(s) |
+|---|---|
+| Dashboard | `8096` (override with `--port`) |
+| Per-session ttyd | `7700–7799` (100 slots) |
+
+Change in `lib/config.py` if they clash with something on your machine.
+By default both the dashboard and spawned ttyds are reachable on every
+interface. `tmux_browse.py serve --bind 127.0.0.1` keeps both local-only;
+other concrete bind addresses are mapped to the owning NIC when ttyd is
+started.
+
+## Documentation
+
+- **[docs/dashboard.md](docs/dashboard.md)** — web dashboard: UI reference,
+  HTTP API, reordering / hiding.
+- **[docs/tb.md](docs/tb.md)** — the `tb` CLI: verbs, flags, exit codes,
+  LLM-friendly patterns.
+- **[docs/recipes.md](docs/recipes.md)** — cookbook of concrete human and
+  agent recipes.
+- **[docs/architecture.md](docs/architecture.md)** — why the project is
+  shaped the way it is (stdlib-only, sentinel-based exec, ttyd wrapper
+  lifecycle, port registry).
+- **[CHANGELOG.md](CHANGELOG.md)** — version history.
+
+## Security
+
+The dashboard ships **unauthenticated and plaintext HTTP by default** —
+anyone who can reach the port can open a terminal attached to any of your
+tmux sessions, and traffic on the wire is readable.
+
+Two opt-in gates ship in-box:
+
+```bash
+# Bearer-token auth
+python3 tmux_browse.py serve --auth s3cr3t                  # or --auth-file, or $TMUX_BROWSE_TOKEN
+python3 tmux_browse.py serve --auth-file ~/.tmux-browse-token   # first non-empty line = token
+
+# TLS (BYO cert; the same cert/key are passed to every spawned ttyd)
+python3 tmux_browse.py serve --cert cert.pem --key key.pem  # or $TMUX_BROWSE_CERT / $TMUX_BROWSE_KEY
+
+# Both together
+python3 tmux_browse.py serve --auth s3cr3t --cert cert.pem --key key.pem
+```
+
+A quick self-signed cert for LAN use:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+    -keyout key.pem -out cert.pem -subj "/CN=localhost"
+```
+
+Auth guards the dashboard HTTP surface only; TLS covers both the dashboard
+*and* every spawned ttyd on 7700–7799 (otherwise browsers would block the
+iframe's `ws://` as mixed content). For a hardened perimeter, still prefer
+an authenticating reverse proxy or SSH tunnel. See
+[docs/dashboard.md](docs/dashboard.md#optional-authentication).
+
+The dashboard UI also includes shared hot buttons, per-session idle alerts,
+and a self-restart control; see [docs/dashboard.md](docs/dashboard.md) for the
+current control layout and behavior.
+
+## Layout
+
+```
+tmux-browse/
+├── tmux_browse.py            # dashboard CLI
+├── tb.py                     # tmux CLI for humans + LLMs
+├── lib/
+│   ├── config.py / ports.py / sessions.py / ttyd.py
+│   ├── session_logs.py                            # per-session pipe-pane + content-hash idle
+│   ├── server.py / templates.py / static.py        # dashboard internals
+│   ├── auth.py / tls.py                            # optional auth + HTTPS
+│   ├── dashboard_config.py                         # saved dashboard settings
+│   ├── tasks.py                                    # task store (consumed by the agent extension)
+│   ├── extensions/                                 # extension loader, catalog, submodule helpers
+│   ├── ttyd_installer.py / doctor.py             # ttyd fetcher + prereq checks
+│   ├── targeting.py / errors.py / output.py       # tb primitives
+│   ├── exec_runner.py                             # tb exec strategies
+│   └── tb_cmds/                                   # one module per verb group
+│       ├── web.py / bulk.py / lifecycle.py / config_cmd.py
+│       └── read.py / write.py / observe.py
+├── static/                                        # dashboard frontend assets
+│   ├── app.css / favicon.svg
+│   ├── util.js / state.js / config.js / audio.js  # core JS modules
+│   ├── phone-keys.js / sharing.js                 # UI JS modules
+│   ├── panes.js                                   # refresh loop + init
+│   ├── panes/                                     # per-feature pane modules
+│   │   ├── idle-alerts.js / hot-buttons.js / send-queue.js
+│   │   ├── lifecycle.js / layout.js / modals.js / render.js
+│   └── extensions.js                              # Config > Extensions card + restart banner
+├── extensions/                                    # opt-in submodules (none required)
+│   ├── agent/                # tmux-browse-agent
+│   ├── qr/                   # tmux-browse-qr
+│   └── sandbox/              # tmux-browse-sandbox
+├── bin/
+│   ├── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
+│   └── install-prereqs.sh    # one-shot tmux + ttyd installer
+├── tests/                    # stdlib unittest tests
+├── docs/
+│   ├── dashboard.md
+│   ├── tb.md
+│   ├── recipes.md
+│   └── architecture.md
+├── CHANGELOG.md
+├── LICENSE
+└── requirements_tmux_browse.txt   # intentionally unused; runtime is stdlib-only
+```

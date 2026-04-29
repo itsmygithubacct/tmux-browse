@@ -1,0 +1,1118 @@
+
+:root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --dim: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --orange: #f0883e;
+    --card: #161b22;
+    --card-2: #11161d;
+    --surface: #161b22;
+}
+:root.day-mode {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --dim: #656d76;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --blue: #0969da;
+    --green: #1a7f37;
+    --yellow: #9a6700;
+    --red: #cf222e;
+    --orange: #bc4c00;
+    --card: #f6f8fa;
+    --card-2: #eef1f5;
+    --surface: #f6f8fa;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 1rem 1.25rem 4rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.4;
+}
+h1 {
+    font-size: 1.2rem;
+    margin: 0;
+    color: var(--accent);
+    white-space: nowrap;
+}
+.topbar {
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+/* ``:not([hidden])`` — the HTML5 ``hidden`` attribute applies
+   ``display: none``, but a base ``display: flex`` here would
+   override it and keep the banner visible at all times. Constrain
+   the flex layout to the not-hidden state so JS toggling
+   ``node.hidden`` actually shows/hides the bar. */
+.ext-restart-banner:not([hidden]) {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    margin-bottom: 0.75rem; padding: 0.55rem 0.75rem;
+    border: 1px solid var(--green); border-radius: 4px;
+    background: rgba(63, 185, 80, 0.08); color: var(--fg);
+    font-size: 0.9rem;
+}
+.ext-restart-banner > span { margin-right: auto; }
+.ext-card {
+    display: grid; gap: 0.35rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.55rem 0.75rem; background: var(--card);
+}
+.ext-card-head {
+    display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+}
+.ext-card-label { font-weight: 600; }
+.ext-card-state {
+    font-size: 0.78rem; color: var(--muted, #8b949e);
+    padding: 0.1rem 0.4rem; border-radius: 3px;
+    border: 1px solid var(--border);
+}
+.ext-card-state.installed { color: var(--green); border-color: var(--green); }
+.ext-card-state.enabled   { color: var(--accent); border-color: var(--accent); }
+.ext-card-state.error     { color: var(--red, #f85149); border-color: var(--red, #f85149); }
+.ext-card-desc { font-size: 0.82rem; color: var(--muted, #8b949e); }
+.ext-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.ext-card-error {
+    font-family: ui-monospace, monospace; font-size: 0.78rem;
+    color: var(--red, #f85149);
+    white-space: pre-wrap; max-height: 10em; overflow: auto;
+    padding: 0.35rem; background: rgba(248, 81, 73, 0.06);
+    border-radius: 3px;
+}
+.extension-manage-body {
+    display: grid; gap: 0.6rem; padding-top: 0.3rem;
+}
+.extension-manage-facts {
+    display: grid; grid-template-columns: auto 1fr;
+    gap: 0.25rem 0.75rem; margin: 0; padding: 0.4rem 0.5rem;
+    background: rgba(88, 166, 255, 0.06); border-radius: 3px;
+    font-size: 0.85rem;
+}
+.extension-manage-facts dt { color: var(--muted, #8b949e); font-weight: 400; }
+.extension-manage-facts dd { margin: 0; }
+.extension-manage-actions {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    padding-top: 0.4rem; border-top: 1px dashed var(--border);
+}
+.topbar input[type=text] {
+    background: var(--card); border: 1px solid var(--border); color: var(--fg);
+    padding: 0.35rem 0.5rem; border-radius: 4px; font-family: inherit;
+}
+.btn {
+    background: transparent; border: 1px solid var(--border); color: var(--fg);
+    padding: 0.3rem 0.7rem; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 0.85rem; transition: 0.15s ease;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(88, 166, 255, 0.12); }
+.btn.green { color: var(--green); border-color: var(--green); }
+.btn.blue  { color: var(--blue);  border-color: var(--blue); }
+.btn.yellow{ color: var(--yellow);border-color: var(--yellow); }
+.btn.red   { color: var(--red);   border-color: var(--red); }
+.btn.orange{ color: var(--orange);border-color: var(--orange); }
+.btn.green:hover { color: var(--green); border-color: var(--green); background: rgba(63, 185, 80, 0.12); }
+.btn.blue:hover  { color: var(--blue);  border-color: var(--blue);  background: rgba(88, 166, 255, 0.12); }
+.btn.yellow:hover{ color: var(--yellow);border-color: var(--yellow);background: rgba(210, 153, 34, 0.14); }
+.btn.red:hover   { color: var(--red);   border-color: var(--red);   background: rgba(248, 81, 73, 0.12); }
+.btn.orange:hover{ color: var(--orange);border-color: var(--orange);background: rgba(240, 136, 62, 0.12); }
+.btn[disabled] {
+    opacity: 0.55;
+    cursor: default;
+    pointer-events: none;
+}
+.dim { color: var(--dim); }
+.ok  { color: var(--green); }
+.err { color: var(--red); }
+
+#sessions {
+    display: grid;
+    gap: 0.7rem;
+}
+.session-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 0.7rem;
+    align-items: start;
+}
+
+details.session {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    min-width: 0;
+}
+details.session > summary {
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    list-style: none;
+    display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+}
+details.session > summary::-webkit-details-marker { display: none; }
+details.session > summary::before {
+    content: "▸"; color: var(--dim); width: 1ch; display: inline-block;
+    transition: transform 0.15s;
+}
+details.session[open] > summary::before { content: "▾"; }
+details.session.hide-arrow > summary::before { display: none; }
+details.session.hide-arrow > summary { pointer-events: none; }
+details.session.hide-arrow > summary .summary-actions { pointer-events: auto; }
+.sname   { font-weight: 600; color: var(--accent); }
+.sbadges { display: flex; gap: 0.4rem; margin-left: 0.4rem; }
+.badge   {
+    font-size: 0.72rem; padding: 0.05rem 0.4rem; border-radius: 10px;
+    border: 1px solid var(--border); color: var(--dim);
+}
+
+.summary-actions {
+    margin-left: auto; display: flex; align-items: center; gap: 0.4rem;
+}
+#os-restart-btn {
+    font-size: 1.1rem;
+    padding: 0.15rem 0.5rem;
+    line-height: 1;
+}
+.tmux-help-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.3rem; height: 1.3rem; border-radius: 50%;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--dim); font-size: 0.7rem; font-weight: 700;
+    cursor: pointer; vertical-align: middle; margin-left: 0.3rem;
+    transition: border-color 0.15s, color 0.15s;
+}
+.tmux-help-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tmux-help-body {
+    padding: 1rem 1.2rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+.tmux-help-body p { margin: 0 0 0.6rem; }
+.tmux-help-body h3 {
+    font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--accent);
+    margin: 0 0 0.3rem;
+}
+.tmux-help-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.8rem;
+}
+.tmux-help-section {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.7rem;
+    background: var(--card);
+}
+.hk { font-size: 0.82rem; margin-bottom: 0.15rem; }
+.hk kbd {
+    display: inline-block; padding: 0.1rem 0.35rem;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: var(--surface); font-family: inherit;
+    font-size: 0.78rem; min-width: 1.2rem; text-align: center;
+}
+.wc-controls {
+    display: flex; gap: 0.3rem; margin-left: 0.4rem;
+}
+.wc-btn {
+    width: 1.4rem; height: 1.4rem; border-radius: 4px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--dim); cursor: pointer; font-size: 0.7rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; line-height: 1; padding: 0;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.wc-btn:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--fg);
+}
+.wc-btn:active { background: rgba(139, 148, 158, 0.25); }
+.wc-close:hover {
+    background: rgba(248, 81, 73, 0.2);
+    border-color: rgba(248, 81, 73, 0.4);
+    color: var(--red);
+}
+.wc-maximize:hover, .wc-minimize:hover {
+    color: var(--accent);
+}
+/* Width/height step buttons — text-only labels (-w/+w/-h/+h) so the
+   intent reads at a glance. Slightly wider than icon buttons to fit
+   two characters comfortably without clipping. */
+.wc-btn.wc-step {
+    width: auto; min-width: 1.7rem; padding: 0 0.25rem;
+    font-size: 0.66rem; font-weight: 600;
+    color: var(--muted, var(--dim));
+}
+.wc-btn.wc-step:hover { color: var(--accent); }
+a.wc-log-icon { text-decoration: none; }
+.wc-log-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
+.wc-idle-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
+.wc-hide-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
+.wc-scroll-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
+.wc-move-icon:hover {
+    background: rgba(139, 148, 158, 0.15);
+    border-color: rgba(139, 148, 158, 0.3);
+    color: var(--accent);
+}
+.move-menu {
+    position: absolute;
+    z-index: 2000;
+    min-width: 200px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.3rem;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    font-size: 0.82rem;
+}
+.move-menu-head {
+    color: var(--dim);
+    font-size: 0.78rem;
+    padding: 0.15rem 0.5rem 0.3rem;
+}
+.move-menu-row {
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    border-radius: 3px;
+    color: var(--fg);
+}
+.move-menu-row:hover { background: rgba(88, 166, 255, 0.12); color: var(--accent); }
+.move-menu-row.current { color: var(--dim); font-style: italic; }
+.move-menu-row.new-group { color: var(--green); }
+.move-menu-sep { border-top: 1px dotted var(--border); margin: 0.25rem 0; }
+.summary-idle-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.summary-idle-alert {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.pane-body {
+    padding: 0.6rem 0.75rem 0.75rem;
+    border-top: 1px solid var(--border);
+    background: #0d1117;
+}
+.pane-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 0.6rem;
+}
+.hot-chip {
+    flex: 0 0 auto;
+    width: auto;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hot-pair {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0.25rem;
+}
+.hot-loop-btn {
+    width: 2rem;
+    min-width: 2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.hot-loop-btn.is-active {
+    background: rgba(240, 136, 62, 0.22);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
+    transform: translateY(1px);
+}
+/* Wrap the iframe in a resizable div — iframes themselves swallow pointer
+   events while dragging, so the user-drag handle has to live on a parent. */
+.ttyd-resize-wrap {
+    width: 100%;
+    height: var(--ttyd-default-height, 70vh);
+    min-height: var(--ttyd-default-min-height, 200px);
+    /* no max-height — user can drag to any size */
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #000;
+    resize: vertical;
+    overflow: hidden;
+    position: relative;
+}
+.pane-iframe {
+    width: 100%; height: 100%;
+    border: 0;
+    background: #000;
+}
+/* Raw shells render via the same createPane() pipeline as tmux
+   sessions, but several summary-row controls don't apply (no tmux
+   server-activity to track, no session log to dump, no copy-mode to
+   enter, no in-pane key-send bar). Hide them here rather than
+   threading "isRaw" through every button definition. */
+.session.session-raw .summary-idle-wrap,
+.session.session-raw .summary-log,
+.session.session-raw .wc-log-icon,
+.session.session-raw .summary-scroll,
+.session.session-raw .wc-scroll-icon,
+.session.session-raw .summary-link,
+.session.session-raw .send-bar,
+.session.session-raw .phone-keys,
+.session.session-raw .pane-footer,
+.session.session-raw .summary-hide,
+.session.session-raw .wc-hide-icon { display: none !important; }
+/* Transparent shield over iframes during drag — iframes swallow drag
+   events, so this overlay catches them and lets them bubble to <details> */
+.drag-shield {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 5;
+}
+body.dragging .drag-shield { display: block; }
+.summary-link {
+    color: var(--accent); text-decoration: none; font-size: 0.85rem;
+    padding: 0 0.35rem; border-radius: 3px;
+}
+.summary-link:hover { background: rgba(88, 166, 255, 0.12); }
+.summary-link.disabled { color: var(--dim); pointer-events: none; }
+.phone-keys {
+    display: flex;
+    gap: 0.3rem;
+    padding: 0.35rem 0;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.phone-key {
+    min-width: 2.2rem;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.78rem;
+    font-family: inherit;
+    font-weight: 600;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--fg);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+.phone-key:active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+}
+.send-bar {
+    display: flex; gap: 0.4rem; padding: 0.4rem 0; align-items: center;
+}
+.send-bar-input {
+    flex: 1; background: var(--surface); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.85rem; font-family: inherit;
+}
+.send-bar-input::placeholder { color: var(--dim); }
+.send-bar-count {
+    width: 3.2rem; background: var(--surface); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.35rem 0.4rem; font-size: 0.85rem; font-family: inherit;
+    text-align: right;
+}
+.send-bar-status { font-size: 0.78rem; min-width: 9rem; }
+.pane-footer {
+    margin-top: 0.4rem; font-size: 0.75rem; color: var(--dim);
+    display: flex; gap: 0.8rem; flex-wrap: wrap;
+}
+.empty-state { color: var(--dim); text-align: center; padding: 2rem; }
+.status-line { font-size: 0.78rem; color: var(--dim); margin-top: 0.3rem; }
+.inline-msg { font-size: 0.8rem; margin-left: 0.5rem; }
+
+.reorder-pad {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    line-height: 1;
+    cursor: grab;
+    user-select: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 2px;
+}
+.reorder-pad:active { cursor: grabbing; }
+.reorder-pad button {
+    background: transparent;
+    border: 0;
+    color: var(--dim);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.7rem;
+    padding: 0;
+    line-height: 0.9;
+}
+.reorder-pad button:hover { color: var(--accent); }
+/* Drop zone overlays — tilix-style 4-zone stroke rectangles */
+details.session {
+    position: relative;
+}
+details.session > .drop-overlay {
+    display: none;
+    position: absolute;
+    border: 3px solid var(--accent);
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 10;
+}
+details.session.drop-left > .drop-overlay {
+    display: block;
+    top: 3px; left: 3px; bottom: 3px; width: 50%;
+}
+details.session.drop-right > .drop-overlay {
+    display: block;
+    top: 3px; right: 3px; bottom: 3px; width: 50%;
+}
+details.session.drop-top > .drop-overlay {
+    display: block;
+    top: 3px; left: 3px; right: 3px; height: 50%;
+}
+details.session.drop-bottom > .drop-overlay {
+    display: block;
+    bottom: 3px; left: 3px; right: 3px; height: 50%;
+}
+/* Between-rows insertion indicator */
+.session-row { position: relative; }
+.row-drop-bar {
+    display: none;
+    height: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin: -2px 0;
+    pointer-events: none;
+}
+.row-drop-bar.visible { display: block; }
+.split-btn {
+    min-width: 2.2rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+    cursor: grab;
+    user-select: none;
+}
+.split-btn:active {
+    cursor: grabbing;
+}
+
+.hidden-list {
+    margin-top: 1.5rem;
+    border-top: 1px dashed var(--border);
+    padding-top: 0.75rem;
+}
+.hidden-list > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 0.3rem 0.2rem;
+    list-style: none;
+}
+.hidden-list > summary::-webkit-details-marker { display: none; }
+.hidden-list > summary::before {
+    content: "▸"; margin-right: 0.4rem;
+}
+.hidden-list[open] > summary::before { content: "▾"; }
+
+#sessions-groups { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.8rem; }
+.group-wrap {
+    border-top: 1px dashed var(--border);
+    padding-top: 0.6rem;
+}
+.group-wrap > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 0.25rem 0.2rem;
+    list-style: none;
+}
+.group-wrap > summary::-webkit-details-marker { display: none; }
+.group-wrap > summary::before { content: "▸"; margin-right: 0.4rem; }
+.group-wrap[open] > summary::before { content: "▾"; }
+.group-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 0.7rem;
+    margin-top: 0.5rem;
+}
+
+.config-pane {
+    margin-top: 1rem;
+    border-top: 1px dashed var(--border);
+    padding-top: 0.75rem;
+}
+.config-pane > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 0.3rem 0.2rem;
+    list-style: none;
+}
+.config-pane > summary::-webkit-details-marker { display: none; }
+.config-pane > summary::before {
+    content: "▸"; margin-right: 0.4rem;
+}
+.config-pane[open] > summary::before { content: "▾"; }
+
+/* Nested subsections under the Config pane (Pane Admin, Connected
+   Endpoints). Lighter visual weight than top-level panes since they
+   already live inside a parent details; dotted top border separates
+   them from the settings grid above. */
+.config-subsection {
+    margin-top: 0.8rem;
+    padding-top: 0.5rem;
+    border-top: 1px dotted var(--border);
+}
+.config-subsection > summary {
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 0.25rem 0.2rem;
+    list-style: none;
+}
+.config-subsection > summary::-webkit-details-marker { display: none; }
+.config-subsection > summary::before {
+    content: "▸"; margin-right: 0.4rem;
+}
+.config-subsection[open] > summary::before { content: "▾"; }
+
+.config-body {
+    padding-top: 0.7rem;
+}
+.agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.8rem;
+}
+.task-create-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+}
+.task-create-bar input[type="text"],
+.task-create-bar select {
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+.task-create-bar input[type="text"] { flex: 1; min-width: 140px; }
+.task-status-open     { color: var(--green); }
+.task-status-done     { color: var(--dim); }
+.task-status-archived { color: var(--dim); opacity: 0.6; }
+.runs-search-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+}
+.runs-search-bar input[type="text"] {
+    flex: 1;
+    min-width: 180px;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+.runs-search-bar select {
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.35rem 0.4rem;
+    font-size: 0.82rem;
+}
+.run-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem 0.8rem;
+    align-items: baseline;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+}
+.run-row-meta { font-size: 0.78rem; color: var(--dim); }
+.agent-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.95rem 1rem;
+    background: var(--card);
+    display: grid;
+    gap: 0.7rem;
+}
+.agent-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.9rem;
+}
+.agent-card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+.agent-card-meta {
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+.agent-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.agent-status-badge {
+    font-size: 0.72rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+.agent-status-badge.s-running      { border-color: var(--green);  color: var(--green); }
+.agent-status-badge.s-idle         { border-color: var(--dim);    color: var(--dim); }
+.agent-status-badge.s-error        { border-color: #f85149;       color: #f85149; }
+.agent-status-badge.s-rate_limited { border-color: var(--orange); color: var(--orange); }
+.agent-status-badge.s-workflow_paused { border-color: #8957e5;    color: #8957e5; }
+.agent-card-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--dim);
+}
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.8rem;
+}
+.config-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.95rem 1rem;
+    background: var(--card);
+    display: grid;
+    gap: 0.65rem;
+}
+.config-card-title {
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.toggle-all-btn {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    text-transform: none;
+    letter-spacing: normal;
+}
+.config-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-top: 0.9rem;
+}
+.config-card-note {
+    line-height: 1.45;
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1.25rem;
+    background: rgba(4, 8, 13, 0.82);
+    backdrop-filter: blur(4px);
+}
+.modal-backdrop[hidden] {
+    display: none !important;
+}
+.modal-card {
+    width: min(1100px, calc(100vw - 2.5rem));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(22, 27, 34, 0.98), rgba(13, 17, 23, 0.98));
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+}
+.agent-steps-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem 1.1rem 1.1rem;
+}
+.agent-steps-detail {
+    display: grid;
+    gap: 0.8rem;
+    max-height: min(75vh, 900px);
+    overflow: auto;
+    padding-right: 0.2rem;
+}
+.agent-step-meta {
+    display: grid;
+    gap: 0.25rem;
+    color: var(--dim);
+    font-size: 0.82rem;
+}
+.agent-step-block {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+}
+.agent-step-label {
+    color: var(--accent);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.agent-step-pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font: inherit;
+    color: var(--fg);
+}
+.modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+}
+.modal-head h2 {
+    margin: 0.15rem 0 0;
+    font-size: 1.1rem;
+    color: var(--fg);
+}
+.modal-eyebrow {
+    font-size: 0.74rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.hot-editor-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem 1.1rem 1.1rem;
+}
+.hot-slot-list {
+    display: grid;
+    gap: 0.55rem;
+}
+.hot-slot-add {
+    justify-content: center;
+    text-align: center;
+    border-style: dashed;
+    color: var(--accent);
+}
+.hot-slot-item {
+    width: 100%;
+    text-align: left;
+    padding: 0.8rem 0.9rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+    color: var(--fg);
+    cursor: pointer;
+}
+.hot-slot-item.active {
+    border-color: var(--accent);
+    background: rgba(88, 166, 255, 0.12);
+}
+.hot-slot-kicker {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.74rem;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.hot-slot-name {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+.hot-slot-command {
+    display: block;
+    color: var(--dim);
+    font-size: 0.82rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+.hot-editor-form {
+    display: grid;
+    gap: 0.9rem;
+}
+.field {
+    display: grid;
+    gap: 0.4rem;
+}
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--fg);
+}
+.check-row input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+}
+.field span {
+    color: var(--dim);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.field input,
+.field textarea,
+.field select {
+    width: 100%;
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: 8px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+}
+.sound-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.sound-row select {
+    flex: 1;
+}
+.field textarea {
+    min-height: 10rem;
+    resize: vertical;
+}
+.field input:focus,
+.field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.14);
+}
+.hot-editor-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+.hot-editor-hint {
+    padding-top: 0.1rem;
+    line-height: 1.5;
+}
+.workflow-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.18rem 0.45rem 0.18rem 0.18rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.02);
+}
+.workflow-switch input {
+    display: none;
+}
+.workflow-switch-track {
+    width: 2.45rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    background: var(--border);
+    position: relative;
+    transition: background 0.16s ease;
+}
+.workflow-switch-thumb {
+    position: absolute;
+    top: 0.15rem;
+    left: 0.17rem;
+    width: 1.02rem;
+    height: 1.02rem;
+    border-radius: 50%;
+    background: var(--fg);
+    transition: transform 0.16s ease;
+}
+.workflow-switch.is-on {
+    border-color: var(--green);
+}
+.workflow-switch.is-on .workflow-switch-track {
+    background: rgba(63, 185, 80, 0.8);
+}
+.workflow-switch.is-on .workflow-switch-thumb {
+    transform: translateX(1.05rem);
+}
+.workflow-switch-text {
+    font-size: 0.78rem;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.workflow-switch.is-on .workflow-switch-text {
+    color: var(--green);
+}
+.idle-editor-form {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem 1.1rem;
+}
+.idle-threshold-row {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.3rem;
+    flex-wrap: wrap;
+}
+.idle-threshold-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.idle-threshold-cell input[type="number"] {
+    width: 4.5rem;
+}
+.split-picker-body {
+    padding: 1rem 1.1rem 1.1rem;
+    display: grid;
+    gap: 0.9rem;
+}
+.split-search {
+    width: 100%;
+}
+.split-target-list {
+    display: grid;
+    gap: 0.6rem;
+    max-height: min(65vh, 700px);
+    overflow: auto;
+}
+.split-target-item {
+    width: 100%;
+    text-align: left;
+    padding: 0.85rem 0.95rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--card-2);
+    color: var(--fg);
+    cursor: pointer;
+}
+.split-target-item:hover {
+    border-color: var(--accent);
+    background: rgba(88, 166, 255, 0.08);
+}
+.split-target-title {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-weight: 600;
+}
+.split-target-meta {
+    margin-top: 0.35rem;
+    color: var(--dim);
+    font-size: 0.82rem;
+}
+.split-empty {
+    padding: 1rem 0.2rem 0.2rem;
+}
+@media (max-width: 820px) {
+    .agent-steps-grid {
+        grid-template-columns: 1fr;
+    }
+    .hot-editor-grid {
+        grid-template-columns: 1fr;
+    }
+    .session-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Per-session preview tile (Phase H). Renders the last ~20 lines of
+   the session's active pane as small monospace text. The :empty rule
+   keeps raw shells (which carry no snapshot) from showing an
+   awkward empty box. */
+.pane-snapshot {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 9px;
+    line-height: 1.2;
+    max-height: 240px;
+    overflow: hidden;
+    white-space: pre;
+    color: var(--dim, #a0a0a0);
+    background: var(--surface, #161b22);
+    border-top: 1px solid var(--border, #30363d);
+    padding: 0.4rem 0.6rem;
+    margin: 0;
+}
+.pane-snapshot:empty { display: none; }
+/* When the pane is expanded, ttyd is showing live content — the
+   static snapshot would just duplicate it and steal vertical space. */
+details[open] > summary > .pane-snapshot { display: none; }
+
+/* Federated session badge (Phase I). Marks rows that came from
+   a LAN peer's /api/sessions. Subtle accent rather than bright
+   so the local sessions still read as "primary" in the list. */
+.badge.host-badge {
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+}
+.badge.host-badge-remote {
+    background: rgba(116, 159, 207, 0.16);
+    color: #98c1ed;
+    border: 1px solid rgba(116, 159, 207, 0.30);
+}
+.badge.host-badge-local {
+    background: rgba(139, 148, 158, 0.10);
+    color: var(--dim);
+    border: 1px solid var(--border);
+}
