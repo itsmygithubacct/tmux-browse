@@ -241,10 +241,13 @@ def _build_parser() -> argparse.ArgumentParser:
     s_serve.add_argument("--skip-checks", action="store_true",
                          help="skip the tmux/ttyd prereq check on startup")
     s_serve.add_argument("--no-federation", action="store_true",
-                         help="disable LAN peer discovery (no UDP beacon, "
-                              "no aggregation of remote sessions). Use on "
-                              "untrusted networks where you don't want this "
-                              "host advertising itself.")
+                         help="skip loading the federation extension for "
+                              "this run, even if it's enabled in "
+                              "extensions.json. No UDP beacon, no peer "
+                              "aggregation, no /api/peers routes. Use on "
+                              "untrusted networks where you don't want "
+                              "this host advertising itself. No-op when "
+                              "the federation extension isn't installed.")
     s_serve.set_defaults(func=cmd_serve)
 
     s_list = sub.add_parser("list", help="show tmux sessions and ttyd state")

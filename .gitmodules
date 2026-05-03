@@ -10,3 +10,7 @@
 	path = extensions/qr
 	url = https://github.com/itsmygithubacct/tmux-browse-qr.git
 	branch = main
+[submodule "extensions/federation"]
+	path = extensions/federation
+	url = https://github.com/itsmygithubacct/tmux-browse-federation.git
+	branch = main

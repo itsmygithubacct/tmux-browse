@@ -1,5 +1,14 @@
 # LAN federation
 
+> **Status:** federation lives in the
+> [`tmux-browse-federation`](https://github.com/itsmygithubacct/tmux-browse-federation)
+> extension as of core 0.7.6.0. Install with `make install-federation`
+> + `make enable-federation` from the core checkout, then restart
+> the dashboard. The behavior described below is unchanged from the
+> in-core version that shipped in 0.7.3 → 0.7.5; only the install
+> path and the disable mechanism have changed (see
+> [Disabling federation](#disabling-federation)).
+
 When two or more tmux-browse instances run on the same broadcast
 domain (a LAN segment), they auto-discover each other. After both
 sides explicitly accept the pairing, their session lists merge in
@@ -136,11 +145,23 @@ the scheme is forwarded through `--cert`/`--key` automatically
 
 ## Disabling federation
 
-`tmux-browse serve --no-federation` stops both the broadcaster
-and the listener for that process. The host won't beacon (so it's
-invisible to peers) and won't accept incoming beacons (so it
-won't see them). Existing paired-peer records persist on disk;
-re-enabling federation later restores the same pairings.
+There are two scopes for "off":
+
+- **Permanent (uninstall the extension).**
+  `make disable-federation` flips `enabled=false` in
+  `~/.tmux-browse/extensions.json`; restart the dashboard and
+  federation no longer loads. `make uninstall-federation` removes
+  the submodule code too. Either preserves
+  `~/.tmux-browse/paired-peers.json` so a later re-enable restores
+  the same pairings; `make uninstall-federation-with-state` also
+  deletes the paired set.
+
+- **Per-run override.** `tmux_browse.py serve --no-federation`
+  skips loading the federation extension for one run, even if it's
+  enabled in `extensions.json`. The host won't beacon (invisible
+  to peers) and won't accept incoming beacons (won't see them).
+  Existing paired records persist; the next normal start restores
+  them. No-op if the extension isn't installed at all.
 
 To unpair without disabling federation entirely, click **Unpair**
 in the Federation Config card. We don't notify the peer when you
