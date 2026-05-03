@@ -23,6 +23,7 @@ _SLOTS: tuple[str, ...] = (
     "config_actions_extras",
     "config_extras",
     "config_agent",
+    "config_post",
     "agents_section",
     "notifications_section",
     "agent_modals",
@@ -284,18 +285,7 @@ def _render(js: str) -> str:
                 <div id="pane-admin-list"></div>
             </div>
         </details>
-        <details id="federation-wrap" class="config-subsection">
-            <summary>Federation (<span id="federation-count">0</span>)</summary>
-            <div class="config-body">
-                <div class="dim" style="font-size:0.82rem;margin-bottom:0.4rem">
-                    Other tmux-browse hosts visible on this LAN. A peer's
-                    sessions only appear in your dashboard after both
-                    sides accept the pairing.
-                </div>
-                <div id="federation-list" style="display:grid;gap:0.4rem"></div>
-                <div id="federation-status" class="dim" style="font-size:0.82rem;margin-top:0.4rem"></div>
-            </div>
-        </details>
+        <!--slot:config_post-->
         <details id="clients-wrap" class="config-subsection">
             <summary>Connected Endpoints (<span id="clients-count">0</span>)</summary>
             <div class="config-body">

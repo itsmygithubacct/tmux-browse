@@ -32,6 +32,7 @@ lib/dashboard_config.py    validated dashboard UI config file helpers
 lib/ports.py               JSON+flock registry: session name → stable port
 lib/sessions.py            everything tmux-related (enumerate, capture, send)
 lib/session_logs.py        per-session pipe-pane capture + SHA-256 tail hashing for idle
+lib/host_identity.py       persistent device_id (UUID file) + short hostname
 lib/ttyd.py                spawn/stop/track per-session ttyd, PID files, port probes
 lib/ttyd_installer.py      fetch the ttyd static binary from GitHub releases
 lib/server.py              http.server handler + dispatch tables + auth gate
@@ -63,6 +64,12 @@ extensions/sandbox/        tmux-browse-sandbox — Docker execution sandbox
                            is configured with sandbox: docker)
 extensions/qr/             tmux-browse-qr — QR config sharing (Show QR /
                            Read QR buttons, /api/qr endpoint)
+extensions/federation/     tmux-browse-federation — LAN peer discovery
+                           (UDP beacon), pair-gated session aggregation,
+                           /api/peers + Federation Config card. Extracted
+                           from core in 0.7.6.0; --no-federation now
+                           skips loading the extension instead of
+                           toggling an in-core feature
 ```
 
 Frontend JS in core is concatenated at import time by `lib/static.py`
@@ -314,3 +321,49 @@ To change dashboard behaviour:
 - HTML skeleton → `lib/templates.py`
 
 No build step; restart the server to see changes.
+
+To build a new extension:
+
+1. Mirror the layout of an existing one (`extensions/agent/` is the
+   most full-featured; `extensions/federation/` is a smaller
+   reference). Required files: `manifest.json`, the importable
+   package directory, `LICENSE`, `pyproject.toml`, `.gitignore`.
+2. **Scope every module under your manifest's ``module`` name.**
+   The agent extension uses `server/routes.py` and that pattern
+   reads naturally, but `server` is a top-level namespace package —
+   if a second extension also uses `server/routes.py`, Python's
+   namespace-package merge picks one of them based on `sys.path`
+   order and silently drops the other's submodule. The federation
+   extension demonstrates the safe pattern: routes live at
+   `federation/routes.py` and the manifest's `routes_entry` is
+   `federation.routes:register`. Treat the `module` name as your
+   private namespace.
+3. Add a `CatalogEntry` to `lib/extensions/catalog.py` so the
+   Config UI's install button knows the repo URL and pinned tag.
+4. Add a `.gitmodules` entry pointing at the public repo and a
+   submodule `git rev` pinned to a versioned tag.
+5. Wire `make {install,update,enable,disable,uninstall}-<name>`
+   targets in the core `Makefile` for headless setups.
+
+Available extension hooks (returned via the manifest's
+`routes_entry` callback's `Registration`):
+
+- `get_routes` / `post_routes` — `dict[str, Callable]` that the
+  core merges into its dispatch tables. Collisions with core or
+  another extension raise at startup.
+- `cli_verbs` — registers `tb <verb>` handlers (agent uses this
+  for `tb agent ...`).
+- `ui_blocks` — fills named `<!--slot:name-->` markers in
+  `lib/templates.py` with extension HTML. Slot names are
+  declared in core's `_SLOTS` tuple; typos fail at startup.
+- `static_js` — extension's `static/*.js` files appended to the
+  bundle after `window.__tbExtensions = ...` so extension code
+  sees core globals.
+- `startup` / `shutdown` — `Callable[[httpd], None]` /
+  `Callable[[], None]` for lifecycle (federation's broadcaster
+  threads use this).
+- `session_post_processors` — `Callable[[list[dict]], None]` that
+  mutates `_session_summary`'s row list in place; called only when
+  the request is the local refresh, not a peer-originated
+  `?local=1` fetch. Federation uses this to fan out to paired
+  peers and append their rows.
