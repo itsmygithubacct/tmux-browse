@@ -1,5 +1,99 @@
 # Changelog
 
+## 0.7.6.0 — Federation extracted to its own extension (2026-05-03)
+
+LAN federation moves from core into the
+[`tmux-browse-federation`](https://github.com/itsmygithubacct/tmux-browse-federation)
+submodule, alongside agent / sandbox / qr. Behavior is unchanged
+when the extension is installed and enabled; what changes is the
+install path, the disable mechanism, and the architectural seam.
+
+**Migrating from 0.7.5.x.** After upgrading core, federation is no
+longer enabled by default — it must be installed and enabled like
+any other extension:
+
+```bash
+make install-federation     # adds the submodule, fetches the pinned tag
+make enable-federation      # writes federation=true to extensions.json
+# restart the dashboard
+```
+
+`~/.tmux-browse/paired-peers.json` is preserved across the
+migration; the extension reads from the same path. The
+`--no-federation` CLI flag still works but its meaning narrows:
+instead of toggling an in-core feature, it adds `"federation"` to
+the `skip_names` set passed to `extensions.load_enabled()`, so the
+extension simply doesn't load for that run. No-op when the
+extension isn't installed at all.
+
+**Why split.** Federation is conceptually optional (most
+single-host installs don't need it), reaches out to the network
+(UDP beacon + outbound peer fan-out), and adds an unauthenticated
+HTTP surface (`/api/peers/pair-request`). Carrying it in the lean
+stdlib-only core forced every install to ship code most installs
+never run.
+
+**What stays in core.** Host identity — the persistent device_id
+at `~/.tmux-browse/device-id` and the short hostname — moves to
+the new `lib/host_identity.py`. These are properties of the host,
+not of federation: every session row carries them so the
+dashboard tags local rows symmetrically with peer-originated
+rows. The federation extension re-exports both functions for
+back-compat with any caller that does `from lib import federation`
+→ `federation.get_or_create_device_id()`.
+
+**New extension hook: `session_post_processors`.** The federation
+session-merge pass (fan out to paired peers, prefix names with
+`<hostname>:`, append rows) had no equivalent in the existing
+extension framework — extensions could register routes, JS, UI
+slots, CLI verbs, and lifecycle hooks, but couldn't mutate the
+session list `_session_summary` returned. `Registration` and
+`MergedRegistry` gained a `session_post_processors` field
+(`list[Callable[[list[dict]], None]]`); `_session_summary` calls
+each registered processor in order at the end of its build, but
+only when `merge_peers=True` (i.e. not on `?local=1` peer fetches,
+preserving the recursive-cascade guard).
+
+**New `<!--slot:config_post-->` template slot.** The Federation
+Config card moved out of `lib/templates.py` into the extension's
+`ui_blocks.html`; core gained a slot between Pane Admin and
+Connected Endpoints where federation (or any future post-Config
+extension) can drop its UI block.
+
+**New `extensions.load_enabled(skip_names=...)` parameter.** The
+per-session opt-out path `--no-federation` needs to override
+`extensions.json` without persisting the change. `skip_names` is
+treated as if those extensions had `enabled=false` for this run.
+
+**Removed from core:**
+
+- `lib/federation/` (peer registry, beacon, paired-peers store)
+- `lib/server_routes/peers.py` (`/api/peers` and pairing routes)
+- `lib/server.py::_fetch_peer_sessions` and `_merge_peer_sessions`
+- `static/panes/federation.js`
+- `tests/test_federation.py` (24 tests; mirrored in the extension's
+  own `tests/test_federation.py`)
+- The `<details id="federation-wrap">` block from `lib/templates.py`
+- The direct `federation.start_federation()` call in `serve()` —
+  the broadcaster + listener now run from the extension's
+  `startup_entry` hook
+
+**Submodule pin.** `lib/extensions/catalog.py` now lists
+`federation` with `pinned_ref: "v0.7.6-federation"`. The
+`tmux-browse-federation` repo follows the same minimum-version
+contract as the other extensions: its `manifest.json` declares
+`min_tmux_browse: "0.7.6"`.
+
+**Extension namespacing lesson.** Discovered during integration
+testing: when two extensions both contribute a `server/routes.py`
+module (the agent extension's existing convention), Python's
+namespace-package resolution picks one of them based on `sys.path`
+ordering and silently drops the other's submodule. Federation's
+modules now live at `federation/routes.py` and `federation/session_merge.py`
+under the extension's own package; manifest `routes_entry` is
+`federation.routes:register`. `docs/architecture.md` documents
+this as a binding rule for new extensions.
+
 ## 0.7.5.0 — Quickstart scripts, ttyd reconcile, agent catalog bump (2026-04-29)
 
 Three loosely-related improvements ship together:

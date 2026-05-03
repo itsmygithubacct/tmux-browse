@@ -11,8 +11,6 @@ import signal
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,7 +23,6 @@ from .server_routes import (
     config as routes_config,
     extensions as routes_extensions,
     meta as routes_meta,
-    peers as routes_peers,
     ports as routes_ports,
     sessions as routes_sessions,
     sessions_stream as routes_sessions_stream,
@@ -166,9 +163,9 @@ def _session_summary(merge_peers: bool = True) -> SessionSummary:
     # the dashboard can render the hostname badge symmetrically across
     # local and federated sessions.
     try:
-        from . import federation
-        local_device_id = federation.get_or_create_device_id()
-        local_hostname = federation.get_hostname()
+        from . import host_identity
+        local_device_id = host_identity.get_or_create_device_id()
+        local_hostname = host_identity.get_hostname()
     except Exception:
         local_device_id = None
         local_hostname = None
@@ -243,96 +240,54 @@ def _session_summary(merge_peers: bool = True) -> SessionSummary:
         })
     sessions.gc_snapshots(tmux_names)
 
-    # Federation: aggregate session lists from any LAN peers
-    # discovered via the UDP beacon. Each remote row's name is
-    # prefixed with "<hostname>:" and tagged with the originating
-    # device_id so the dashboard can route iframe loads back to
-    # the peer. Failures are silent — a sluggish peer must not
-    # block the local response. Skipped on peer-originated requests
-    # (?local=1) to break the recursive aggregation cascade.
+    # Extension session post-processors. The federation extension
+    # (when installed + enabled) appends rows fetched from paired
+    # LAN peers via this hook. Skipped on peer-originated requests
+    # (?local=1) so the federation graph doesn't recursively walk
+    # itself: peer A asking peer B for sessions must not cause B to
+    # fan out to peers C, D…
     if merge_peers:
-        _merge_peer_sessions(out)
+        for name, fn in _session_post_processors:
+            try:
+                fn(out)
+            except Exception as exc:  # noqa: broad — per-extension isolation
+                # A failing post-processor must not blank the local
+                # session list. Record the error on the extension so
+                # the operator sees it in the Config UI's per-extension
+                # status, then keep going. Dedup on (name, message) so
+                # the dashboard's 1Hz refresh doesn't write to
+                # extensions.json on every tick when a deterministic
+                # bug fires every time.
+                msg = f"session post-processor failed: {exc}"
+                key = (name, msg)
+                if key not in _post_processor_errors_seen:
+                    _post_processor_errors_seen.add(key)
+                    extensions.record_error(name, msg)
 
     return SessionSummary(rows=out, tmux_unreachable=tmux_unreachable)
 
 
 # ---------------------------------------------------------------------------
-# Federation peer aggregation
+# Session post-processors (extension hook)
 # ---------------------------------------------------------------------------
+#
+# Populated at server start from ``httpd.extension_registry.session_post_processors``.
+# Module-level so ``_session_summary`` (a free function) can read it
+# without threading the registry through every caller.
+#
+# The federation extension is the canonical user: its registered
+# processor walks paired LAN peers and appends their session rows.
 
-# Per-peer fetch timeout. Loose enough for resource-constrained peers
-# (e.g. a 6-core ARM SBC capturing ~10 pane snapshots) to finish writing
-# their /api/sessions response. Slow / dead peers serve empty under
-# their hostname rather than stalling the dashboard.
-_PEER_FETCH_TIMEOUT_SEC = 5.0
+_session_post_processors: list[tuple[str, Callable[[list[dict]], None]]] = []
 
-# Total wall budget for the parallel-fetch step. Bounded by N peers ×
-# timeout in the worst case, but we ``join(timeout=...)`` each thread
-# with this cap to keep the total request fast even when peers misbehave.
-_PEER_AGGREGATE_BUDGET_SEC = 6.0
-
-
-def _fetch_peer_sessions(base_url: str, timeout: float = _PEER_FETCH_TIMEOUT_SEC) -> list[dict]:
-    """Best-effort GET <peer>/api/sessions; returns the rows or [].
-
-    Sends ``?local=1`` so the peer skips its own federation merge.
-    Without this the polling graph cascades: peer A → peer B → A → ...
-    """
-    url = f"{base_url}/api/sessions?local=1"
-    req = urllib.request.Request(url)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            rows = data.get("sessions") or []
-            return rows if isinstance(rows, list) else []
-    except (urllib.error.URLError, ValueError, UnicodeDecodeError, TimeoutError, OSError):
-        return []
-
-
-def _merge_peer_sessions(out: list[dict]) -> None:
-    """Walk *paired* LAN peers, fetch their session lists in parallel,
-    prefix names with the peer's hostname, and append to ``out``.
-
-    Pair status is consulted before any HTTP fetch — a discovered
-    peer that the operator hasn't accepted contributes nothing.
-    Peers that don't respond inside the budget contribute nothing
-    for this tick.
-    """
-    try:
-        from . import federation
-        from .federation import store as fed_store
-    except ImportError:
-        return  # federation module not on this build for some reason
-    peers = [p for p in federation.list_peers() if fed_store.is_paired(p.device_id)]
-    if not peers:
-        return
-    results: dict[str, list[dict]] = {}
-    threads: list[threading.Thread] = []
-    for peer in peers:
-        def _fetch(p=peer):
-            results[p.device_id] = _fetch_peer_sessions(p.base_url)
-        t = threading.Thread(target=_fetch, daemon=True,
-                             name=f"federation-fetch-{peer.device_id[:8]}")
-        t.start()
-        threads.append(t)
-    deadline = time.monotonic() + _PEER_AGGREGATE_BUDGET_SEC
-    for t in threads:
-        remaining = max(0.0, deadline - time.monotonic())
-        t.join(timeout=remaining)
-    for peer in peers:
-        for row in results.get(peer.device_id, []):
-            # Skip remote rows that are themselves remote (a peer
-            # showing us another peer's sessions). Only direct-host
-            # sessions get federated; otherwise the same row would
-            # appear under multiple hostname prefixes as the graph
-            # walks itself.
-            if row.get("device_id"):
-                continue
-            row["name"] = f"{peer.hostname}:{row.get('name', '')}"
-            row["device_id"] = peer.device_id
-            row["peer_url"] = peer.base_url
-            row["peer_hostname"] = peer.hostname
-            out.append(row)
+# Per-process dedup for post-processor errors. Without this, a
+# consistently-failing post-processor would call ``record_error`` —
+# which writes to extensions.json — on every 1Hz refresh tick, both
+# flooding the file and burning disk on the dashboard's hot path.
+# An entry is added on first occurrence and never cleared (process
+# restart resets it, which is the right behavior — operator restarts
+# the dashboard once the extension fix is deployed).
+_post_processor_errors_seen: set[tuple[str, str]] = set()
 
 
 # --- Connected client tracking ---
@@ -684,8 +639,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/sessions":           routes_sessions.h_sessions,
         "/api/sessions/stream":    routes_sessions_stream.h_sessions_stream,
         "/api/ports":              routes_ports.h_ports,
-        "/api/peers":              routes_peers.h_peers,
-        # Note: /api/peers/pair-request etc. are POST routes; see below.
         "/api/dashboard-config":   routes_config.h_dashboard_config_get,
         "/api/session/log":        routes_sessions.h_session_log,
         "/api/clients":            routes_clients.h_clients,
@@ -725,18 +678,6 @@ class Handler(BaseHTTPRequestHandler):
         "/api/tasks/launch":       routes_tasks.h_tasks_launch,
         "/api/server/restart":     routes_meta.h_server_restart,
         "/api/session/kill":       routes_sessions.h_session_kill,
-        # Federation pairing surface (J3). The two callback routes
-        # (pair-request / pair-accept-callback) are unauthenticated
-        # because the operator hasn't yet trusted the peer that's
-        # calling them; they only enqueue requests / write a pair
-        # if we have an outgoing record. The four operator-action
-        # routes are config-lock gated like every other mutation.
-        "/api/peers/pair-request":          routes_peers.h_pair_request,
-        "/api/peers/pair-accept-callback":  routes_peers.h_pair_accept_callback,
-        "/api/peers/pair-request-out":      routes_peers.h_pair_request_out,
-        "/api/peers/pair-accept":           routes_peers.h_pair_accept,
-        "/api/peers/pair-decline":          routes_peers.h_pair_decline,
-        "/api/peers/unpair":                routes_peers.h_unpair,
     })
 
 
@@ -790,10 +731,18 @@ def serve(bind: str, port: int, verbose: bool = False,
     # is only written when the operator clicks Enable in the Config pane.
     core_get = set(Handler._GET_ROUTES)
     core_post = set(Handler._POST_ROUTES)
+    skip = set()
+    if not enable_federation:
+        # ``--no-federation`` is a runtime opt-out: even if the
+        # federation extension is enabled in extensions.json, skip it
+        # for this session. No broadcaster, no listener, no /api/peers.
+        skip.add("federation")
+        print("  federation: skipped (--no-federation)")
     try:
         httpd.extension_registry = extensions.load_enabled(
             core_get_routes=core_get,
             core_post_routes=core_post,
+            skip_names=skip,
         )
     except RegistryConflict as e:
         print(f"  extensions: FATAL — {e}")
@@ -801,11 +750,16 @@ def serve(bind: str, port: int, verbose: bool = False,
     loaded_names = sorted(
         e["name"] for e in extensions.status()
         if e["enabled"] and e["installed"] and not e["last_error"]
+        and e["name"] not in skip
     )
     if loaded_names:
         print(f"  extensions: loaded {', '.join(loaded_names)}")
     else:
         print("  extensions: none enabled")
+    # Wire extension session post-processors into the module-level list
+    # that ``_session_summary`` reads. Done before startup hooks run so
+    # the first request after startup already sees the merged surface.
+    _session_post_processors[:] = list(httpd.extension_registry.session_post_processors)
     for name, fn in httpd.extension_registry.startup:
         try:
             fn(httpd)
@@ -828,22 +782,9 @@ def serve(bind: str, port: int, verbose: bool = False,
     server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     server_thread.start()
 
-    federation_stop = None
-    if enable_federation:
-        from . import federation
-        try:
-            federation_stop = federation.start_federation(
-                dashboard_port=port, scheme=scheme,
-            )
-        except Exception as e:
-            # Federation is best-effort — never block startup on it.
-            print(f"  federation: skipped ({e})")
-
     try:
         shutdown_event.wait()
     finally:
-        if federation_stop is not None:
-            federation_stop.set()
         print("\nshutting down")
         for name, fn in httpd.extension_registry.shutdown:
             try:
