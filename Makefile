@@ -5,7 +5,7 @@
 # and anyone who prefers the CLI. Both routes go through the same
 # ``lib.extensions`` functions — no duplicate logic.
 
-.PHONY: help list-extensions \
+.PHONY: help update list-extensions \
         install-agent update-agent enable-agent disable-agent \
         uninstall-agent uninstall-agent-with-state \
         install-federation update-federation enable-federation disable-federation \
@@ -15,6 +15,10 @@
 PY ?= python3
 
 help:
+	@echo "tmux-browse maintenance targets:"
+	@echo ""
+	@echo "  make update                    update this checkout to the latest release"
+	@echo ""
 	@echo "tmux-browse extension management targets:"
 	@echo ""
 	@echo "  make install-agent             clone/init + enable the agent extension"
@@ -37,6 +41,12 @@ help:
 	@echo "  make ci                        preflight + tests (what CI runs)"
 	@echo ""
 	@echo "After install/update/enable/disable, restart the dashboard."
+
+# Update this checkout to the latest release (delegates to bin/update.sh).
+# Pass flags through with ARGS, e.g.  make update ARGS="--restart"  or
+# make update ARGS="--ref v0.7.6.0 --check".
+update:
+	bash bin/update.sh $(ARGS)
 
 list-extensions:
 	$(PY) -m lib.extensions list

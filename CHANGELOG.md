@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.7.0 — `tb range` + an in-place updater (2026-05-28)
+
+**`tb range <count> <command>`.** Spin up a numbered batch of sessions
+in one call: `tb range 5 'codex --yolo'` creates `codex_1`…`codex_5`
+(detached) and runs `codex --yolo` in each. The base name defaults to
+the command's first word; override with `--name`. Other flags: `--start`
+(first suffix index), `--cwd`, `--no-run` (create only), `--no-log`
+(skip pipe-pane logging, like `tb new`). The whole target set is
+pre-checked, so a name clash fails the batch before any session is
+created rather than leaving a half-made set behind.
+
+**`bin/update.sh` — update an installed checkout in place.** The
+counterpart to the quickstart scripts: it advances an existing checkout
+to the latest release tag (picked the same way quickstart picks it),
+moves any installed extension submodules to the refs the new core pins,
+and re-runs `doctor`. `--check` is a dry run; `--ref <tag>` targets a
+specific version; `--force` is required to update over a dirty working
+tree; `--restart` asks a running dashboard to re-exec onto the new code
+via `/api/server/restart` (`--auth` / `--https` for token / TLS setups),
+otherwise it prints the restart command. Exposed as `make update`
+(`ARGS="…"` to pass flags).
+
 ## 0.7.6.0 — Federation extracted to its own extension (2026-05-03)
 
 LAN federation moves from core into the

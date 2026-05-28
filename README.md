@@ -74,6 +74,25 @@ Reaching the dashboard from your phone or off-LAN: see
 [`docs/recipes-remote.md`](docs/recipes-remote.md) for SSH-tunnel,
 Tailscale Funnel, Cloudflare Tunnel, and reverse-proxy patterns.
 
+### Updating
+
+Advance an existing checkout to the latest release in place:
+
+```bash
+bin/update.sh            # update to the latest release tag
+bin/update.sh --check    # dry run: report current vs latest, change nothing
+bin/update.sh --restart  # also restart a running local dashboard onto the new code
+make update              # same thing; pass flags via ARGS="--restart"
+```
+
+It picks the "latest release" exactly as the quickstart scripts do, advances
+any installed extension submodules to the refs the new core pins, and re-runs
+`doctor`. It refuses to clobber a dirty working tree unless you pass `--force`,
+and accepts `--ref <tag>` to move to a specific version. With `--restart` it
+asks the running dashboard to re-exec via `/api/server/restart` (pass `--auth`
+/ `--https` if the dashboard is token-protected or on TLS); otherwise it prints
+the exact command to restart yourself.
+
 ### Optional extensions
 
 Core stays small. Three optional extensions live in their own repos
@@ -350,7 +369,10 @@ tmux-browse/
 │   └── sandbox/              # tmux-browse-sandbox
 ├── bin/
 │   ├── ttyd_wrap.sh          # attach-only wrapper (exits on tty drop)
-│   └── install-prereqs.sh    # one-shot tmux + ttyd installer
+│   ├── install-prereqs.sh    # one-shot tmux + ttyd installer
+│   ├── quickstart_local.sh   # clone latest + launch (127.0.0.1)
+│   ├── quickstart_lan.sh     # clone latest + launch (0.0.0.0)
+│   └── update.sh             # update an existing checkout to the latest release
 ├── tests/                    # stdlib unittest tests
 ├── docs/
 │   ├── dashboard.md
