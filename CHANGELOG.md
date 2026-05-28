@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.8.0 — `tb stagger` (2026-05-28)
+
+**`tb stagger --name <base> …`** drives a `tb range` group one pane at a
+time: it sends input to `<base>_1`, waits for that pane to go idle, then
+sends to `<base>_2`, and so on. Useful for rolling out an action across a
+batch without all N sessions doing heavy work at once (e.g. accepting a
+prompt in each `codex_*` session in sequence).
+
+- `--key Enter` (or `--key C-c`, etc.) sends named tmux key(s); a
+  positional text argument instead types that line plus Enter. Exactly
+  one of the two is required.
+- `--idle` sets the quiet window that counts as idle (default 2s);
+  `--timeout` caps each per-pane wait (0 = no timeout); `--start` resumes
+  partway through the group.
+- Panes are discovered as existing `<base>_<n>` sessions and ordered by
+  suffix (gaps tolerated). The last pane is poked but not waited on —
+  there's no successor to gate, and it's often an interactive process
+  that never idles.
+
 ## 0.7.7.1 — `tb range` works with no server running (2026-05-28)
 
 Fixes a regression in 0.7.7.0: `tb range` failed with `no tmux server
