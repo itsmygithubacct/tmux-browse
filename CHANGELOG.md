@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.7.1 — `tb range` works with no server running (2026-05-28)
+
+Fixes a regression in 0.7.7.0: `tb range` failed with `no tmux server
+is running` on a clean host. Like `tb new`, `range` bootstraps a tmux
+server (its first `new-session` starts one), but it was missing from the
+allow-list of verbs permitted to run before a server exists, so the
+guard in `tb.py` rejected it up front. Added `range` to that set; it now
+creates the batch from a server-less state just like `new`.
+
 ## 0.7.7.0 — `tb range` + an in-place updater (2026-05-28)
 
 **`tb range <count> <command>`.** Spin up a numbered batch of sessions
