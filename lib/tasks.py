@@ -14,9 +14,11 @@ Task statuses: ``open``, ``done``, ``archived``.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -29,24 +31,52 @@ TASKS_FILE = config.STATE_DIR / "tasks.json"
 VALID_STATUSES = {"open", "done", "archived"}
 
 
-def _load() -> list[dict[str, Any]]:
-    if not TASKS_FILE.exists():
-        return []
-    try:
-        data = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError):
-        return []
-    return data if isinstance(data, list) else []
-
-
-def _save(tasks: list[dict[str, Any]]) -> None:
+@contextmanager
+def _locked_tasks():
+    """Yield ``(tasks, save_fn)`` with the task file locked for mutation."""
     config.ensure_dirs()
-    tmp = TASKS_FILE.with_suffix(".tmp")
     try:
-        tmp.write_text(json.dumps(tasks, indent=2) + "\n", encoding="utf-8")
-        tmp.replace(TASKS_FILE)
+        TASKS_FILE.touch(exist_ok=True)
     except OSError as e:
-        raise StateError(f"cannot write {TASKS_FILE}: {e.strerror or e}")
+        raise StateError(f"cannot create {TASKS_FILE}: {e.strerror or e}")
+    try:
+        f = TASKS_FILE.open("r+", encoding="utf-8")
+    except OSError as e:
+        raise StateError(f"cannot open {TASKS_FILE}: {e.strerror or e}")
+    with f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        except OSError as e:
+            raise StateError(f"cannot lock {TASKS_FILE}: {e.strerror or e}")
+        try:
+            try:
+                f.seek(0)
+                raw = f.read()
+                data = json.loads(raw) if raw.strip() else []
+            except (OSError, ValueError, TypeError):
+                data = []
+            tasks = data if isinstance(data, list) else []
+
+            def save() -> None:
+                try:
+                    f.seek(0)
+                    f.truncate()
+                    json.dump(tasks, f, indent=2)
+                    f.write("\n")
+                    f.flush()
+                except OSError as e:
+                    raise StateError(
+                        f"cannot write {TASKS_FILE}: {e.strerror or e}",
+                    )
+
+            yield tasks, save
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _load() -> list[dict[str, Any]]:
+    with _locked_tasks() as (tasks, _save):
+        return [dict(t) for t in tasks]
 
 
 def _new_id() -> str:
@@ -82,9 +112,9 @@ def create(*, title: str, repo_path: str, agent: str | None = None,
         "created_ts": int(time.time()),
         "updated_ts": int(time.time()),
     }
-    tasks = _load()
-    tasks.append(task)
-    _save(tasks)
+    with _locked_tasks() as (tasks, save):
+        tasks.append(task)
+        save()
     return task
 
 
@@ -100,27 +130,28 @@ def list_tasks(*, status: str | None = None,
 
 
 def get_task(task_id: str) -> dict[str, Any] | None:
-    for t in _load():
-        if t.get("id") == task_id:
-            return t
+    with _locked_tasks() as (tasks, _save):
+        for t in tasks:
+            if t.get("id") == task_id:
+                return dict(t)
     return None
 
 
 def update(task_id: str, **fields: Any) -> dict[str, Any]:
     """Update fields on a task. Returns the updated task."""
-    tasks = _load()
-    for i, t in enumerate(tasks):
-        if t.get("id") == task_id:
-            for key, val in fields.items():
-                if key == "status" and val not in VALID_STATUSES:
-                    raise UsageError(f"invalid status: {val}")
-                if key in {"id", "created_ts"}:
-                    continue
-                t[key] = val
-            t["updated_ts"] = int(time.time())
-            tasks[i] = t
-            _save(tasks)
-            return t
+    with _locked_tasks() as (tasks, save):
+        for i, t in enumerate(tasks):
+            if t.get("id") == task_id:
+                for key, val in fields.items():
+                    if key == "status" and val not in VALID_STATUSES:
+                        raise UsageError(f"invalid status: {val}")
+                    if key in {"id", "created_ts"}:
+                        continue
+                    t[key] = val
+                t["updated_ts"] = int(time.time())
+                tasks[i] = t
+                save()
+                return dict(t)
     raise UsageError(f"task {task_id} not found")
 
 

@@ -523,6 +523,11 @@ class Handler(BaseHTTPRequestHandler):
         status = 400 if err.exit_code == 2 else 500
         self._send_json({"ok": False, "error": err.message}, status=status)
 
+    def _send_unexpected_error(self, exc: Exception) -> None:
+        if getattr(self.server, "verbose", False):
+            self.log_error("unhandled request error: %r", exc)
+        self._send_json({"ok": False, "error": "internal server error"}, status=500)
+
     def _check_unlock(self) -> bool:
         """Gate for mutating endpoints. Returns True when the request may
         proceed; sends 403 and returns False when the config lock is set
@@ -581,7 +586,13 @@ class Handler(BaseHTTPRequestHandler):
         location = parsed.path + (f"?{new_query}" if new_query else "")
         self.send_response(302)
         self.send_header("Location", location)
-        self.send_header("Set-Cookie", auth.make_cookie_header(token))
+        self.send_header(
+            "Set-Cookie",
+            auth.make_cookie_header(
+                token,
+                secure=bool(getattr(self.server, "tls_paths", None)),
+            ),
+        )
         self.send_header("Content-Length", "0")
         self.end_headers()
         return True
@@ -594,38 +605,48 @@ class Handler(BaseHTTPRequestHandler):
     # line to the table here.
 
     def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
-        if not self._auth_gate():
-            return
-        _touch_client(self)
-        parsed = urlparse(self.path)
-        handler = self._GET_ROUTES.get(parsed.path)
-        if handler is None:
-            # Extension routes land here — server.extension_registry is
-            # populated at startup via ``extensions.load_enabled()``.
-            ext_handler = self.server.extension_registry.get_routes.get(parsed.path)
-            if ext_handler is not None:
-                ext_handler(self, parsed)
+        try:
+            if not self._auth_gate():
                 return
-            self._send_json({"ok": False, "error": "not found"}, status=404)
-            return
-        handler(self, parsed)
+            _touch_client(self)
+            parsed = urlparse(self.path)
+            handler = self._GET_ROUTES.get(parsed.path)
+            if handler is None:
+                # Extension routes land here — server.extension_registry is
+                # populated at startup via ``extensions.load_enabled()``.
+                ext_handler = self.server.extension_registry.get_routes.get(parsed.path)
+                if ext_handler is not None:
+                    ext_handler(self, parsed)
+                    return
+                self._send_json({"ok": False, "error": "not found"}, status=404)
+                return
+            handler(self, parsed)
+        except TBError as err:
+            self._send_tb_error(err)
+        except Exception as exc:  # noqa: broad — request boundary
+            self._send_unexpected_error(exc)
 
     def do_POST(self) -> None:  # noqa: N802
-        if not self._auth_gate():
-            return
-        _touch_client(self)
-        parsed = urlparse(self.path)
-        handler = self._POST_ROUTES.get(parsed.path)
-        if handler is None:
-            ext_handler = self.server.extension_registry.post_routes.get(parsed.path)
-            if ext_handler is not None:
-                body = self._read_json()
-                ext_handler(self, parsed, body)
+        try:
+            if not self._auth_gate():
                 return
-            self._send_json({"ok": False, "error": "not found"}, status=404)
-            return
-        body = self._read_json()
-        handler(self, parsed, body)
+            _touch_client(self)
+            parsed = urlparse(self.path)
+            handler = self._POST_ROUTES.get(parsed.path)
+            if handler is None:
+                ext_handler = self.server.extension_registry.post_routes.get(parsed.path)
+                if ext_handler is not None:
+                    body = self._read_json()
+                    ext_handler(self, parsed, body)
+                    return
+                self._send_json({"ok": False, "error": "not found"}, status=404)
+                return
+            body = self._read_json()
+            handler(self, parsed, body)
+        except TBError as err:
+            self._send_tb_error(err)
+        except Exception as exc:  # noqa: broad — request boundary
+            self._send_unexpected_error(exc)
 
     # --- route tables ------------------------------------------------------
     # Declared last so every method name they reference is bound in the

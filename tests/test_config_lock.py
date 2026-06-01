@@ -124,6 +124,70 @@ class MutationGateTests(_LockedConfigMixin, unittest.TestCase):
             fake, urlparse("/api/extensions/enable"), {"name": "agent"})
         self.assertEqual(fake.status, 403)
 
+    # Operational mutations (session control, ttyd lifecycle, server
+    # restart, task launch, client coordination) are gated too — the gate
+    # short-circuits before any tmux/subprocess/thread side effect, so these
+    # direct calls never touch the system when locked.
+
+    def test_session_type_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_sessions.h_session_type(
+            fake, urlparse("/api/session/type"),
+            {"session": "x", "text": "rm -rf /"})
+        self.assertEqual(fake.status, 403)
+
+    def test_session_kill_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_sessions.h_session_kill(
+            fake, urlparse("/api/session/kill"), {"session": "x"})
+        self.assertEqual(fake.status, 403)
+
+    def test_session_new_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_sessions.h_session_new(
+            fake, urlparse("/api/session/new"), {"name": "x"})
+        self.assertEqual(fake.status, 403)
+
+    def test_ttyd_start_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_ttyd.h_ttyd_start(
+            fake, urlparse("/api/ttyd/start"), {"session": "x"})
+        self.assertEqual(fake.status, 403)
+
+    def test_ttyd_raw_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_ttyd.h_ttyd_raw(
+            fake, urlparse("/api/ttyd/raw"), {})
+        self.assertEqual(fake.status, 403)
+
+    def test_server_restart_gated(self):
+        # Must 403 *before* spawning the re-exec thread.
+        fake = _FakeHandler(headers={})
+        server.routes_meta.h_server_restart(
+            fake, urlparse("/api/server/restart"), {})
+        self.assertEqual(fake.status, 403)
+
+    def test_tasks_launch_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_tasks.h_tasks_launch(
+            fake, urlparse("/api/tasks/launch"), {"id": "abc"})
+        self.assertEqual(fake.status, 403)
+
+    def test_clients_nickname_gated(self):
+        fake = _FakeHandler(headers={})
+        server.routes_clients.h_clients_nickname(
+            fake, urlparse("/api/clients/nickname"), {"nickname": "n"})
+        self.assertEqual(fake.status, 403)
+
+    def test_valid_token_lets_mutation_through(self):
+        # With a valid unlock token in the header, the gate is transparent
+        # and the handler proceeds (here: input validation fires, not 403).
+        token = server._issue_unlock_token()
+        fake = _FakeHandler(headers={"X-TB-Unlock-Token": token})
+        server.routes_sessions.h_session_type(
+            fake, urlparse("/api/session/type"), {"session": "", "text": ""})
+        self.assertEqual(fake.status, 400)  # missing 'session' — past the gate
+
 
 # Agent-endpoint lock coverage lives in
 # ``extensions/agent/tests/test_config_lock_agent_endpoints.py`` and runs

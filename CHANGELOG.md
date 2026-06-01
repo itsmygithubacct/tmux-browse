@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.7.9.0 — config-lock hardening + robustness (2026-06-01)
+
+**Security: the config-lock now gates *every* core mutation endpoint.**
+Previously the password lock only covered `/api/dashboard-config`,
+`/api/tasks` (create/update), and `/api/extensions/*`, while the most
+sensitive operations — typing into a pane, killing or creating sessions,
+spawning ttyd shells, launching agent tasks, and restarting the server —
+were reachable even with a lock set. All core mutating POST endpoints are
+now gated:
+
+- session control: `/api/session/new`, `/kill`, `/type`, `/key`,
+  `/resize`, `/scroll`, `/zoom`
+- ttyd lifecycle: `/api/ttyd/start`, `/raw`, `/stop`
+- `/api/tasks/launch` (was ungated despite shelling out to `tb agent
+  repl`), `/api/server/restart`, and the client-coordination endpoints
+  `/api/clients/nickname` + `/send-config`
+
+Read-only GETs and `/api/config-lock/verify` (the token issuer) stay
+open. The dashboard already sent the unlock token on every non-GET and
+handled the 403-retry, so locked sessions prompt for the password
+transparently. `docs/dashboard.md` updated to enumerate the full set.
+
+**Robustness:**
+
+- Every `tmux` subprocess call in `lib/sessions.py` now degrades
+  gracefully (returns a clean error) when tmux is missing or unresponsive
+  instead of raising into request/CLI flow.
+- The task store is fcntl-locked for concurrent-safe reads/writes.
+- HTTP request handling gained a request-boundary error handler so an
+  unexpected exception returns a JSON 500 instead of a bare traceback;
+  static responses (favicon, manifest, service-worker, PWA icons, 401)
+  are broken-pipe-safe.
+- The bootstrap auth cookie is marked `Secure` when serving over TLS.
+- Bearer-token compare fails closed (401) on a non-ASCII token rather
+  than surfacing a 500.
+- Per-session log paths are percent-encoded, so a session name containing
+  `/` can no longer escape the log directory or collide with another name.
+- `tb range` now names the sessions it already created when a mid-batch
+  failure aborts the run, instead of leaving the operator guessing.
+
+**New:** `bin/update_tb.py` — a stdlib-only, git-free puller that drops
+`tb.py` (and the `lib/` it needs) into any directory from a tmux-browse
+release, for hosts that aren't full git checkouts. Complements
+`bin/update.sh` (which updates a checkout in place).
+
 ## 0.7.8.0 — `tb stagger` (2026-05-28)
 
 **`tb stagger --name <base> …`** drives a `tb range` group one pane at a

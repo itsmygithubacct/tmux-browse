@@ -32,7 +32,7 @@ def h_favicon(handler: "Handler", _parsed: ParseResult) -> None:
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "public, max-age=86400")
     handler.end_headers()
-    handler.wfile.write(body)
+    handler._safe_write(body)
 
 
 def h_health(handler: "Handler", _parsed: ParseResult) -> None:
@@ -40,6 +40,8 @@ def h_health(handler: "Handler", _parsed: ParseResult) -> None:
 
 
 def h_server_restart(handler: "Handler", _parsed: ParseResult, _body: dict) -> None:
+    if not handler._check_unlock():
+        return
     # Lazy import — avoids a circular import on module load. ``_restart_self``
     # uses module-level ``_dashboard_state_*`` machinery in ``lib.server``.
     from ..server import _restart_self
@@ -54,7 +56,7 @@ def h_manifest(handler: "Handler", _parsed: ParseResult) -> None:
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "public, max-age=86400")
     handler.end_headers()
-    handler.wfile.write(body)
+    handler._safe_write(body)
 
 
 def h_service_worker(handler: "Handler", _parsed: ParseResult) -> None:
@@ -68,7 +70,7 @@ def h_service_worker(handler: "Handler", _parsed: ParseResult) -> None:
     handler.send_header("Cache-Control", "no-cache, max-age=0")
     handler.send_header("Service-Worker-Allowed", "/")
     handler.end_headers()
-    handler.wfile.write(body)
+    handler._safe_write(body)
 
 
 _PWA_ICONS = {"pwa-192.png", "pwa-512.png"}
@@ -85,4 +87,4 @@ def h_pwa_icon(handler: "Handler", parsed: ParseResult) -> None:
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "public, max-age=86400")
     handler.end_headers()
-    handler.wfile.write(body)
+    handler._safe_write(body)
