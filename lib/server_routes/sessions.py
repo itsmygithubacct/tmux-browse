@@ -19,6 +19,13 @@ if TYPE_CHECKING:
     from ..server import Handler
 
 
+def _parse_int_field(value) -> int | None:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return None
+
+
 def _resolve_launch_cmd(cmd: str | None) -> str | None:
     if not cmd:
         return None
@@ -83,6 +90,8 @@ def h_session_log(handler: "Handler", parsed: ParseResult) -> None:
 
 
 def h_session_new(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("name") or "").strip()
     cmd = _resolve_launch_cmd((body.get("cmd") or "").strip() or None)
     cwd = (body.get("cwd") or "").strip() or None
@@ -103,6 +112,8 @@ def h_session_new(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
 
 
 def h_session_kill(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     if not name:
         handler._send_json({"ok": False, "error": "missing 'session'"}, status=400)
@@ -117,15 +128,20 @@ def h_session_kill(handler: "Handler", _parsed: ParseResult, body: dict) -> None
 
 
 def h_session_resize(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
-    cols = int(body.get("cols") or 0)
+    cols = _parse_int_field(body.get("cols"))
     # ``rows`` is optional — old callers only sent ``cols`` and got a
     # window-width-only resize; the new fit-to-iframe button on the
     # dashboard sends both so the terminal actually fills its
     # container vertically too.
-    rows = int(body.get("rows") or 0)
+    rows = _parse_int_field(body.get("rows"))
     if not name:
         handler._send_json({"ok": False, "error": "missing 'session'"}, status=400)
+        return
+    if cols is None or rows is None:
+        handler._send_json({"ok": False, "error": "cols/rows must be integers"}, status=400)
         return
     if cols < 20 or cols > 500:
         handler._send_json({"ok": False, "error": "cols must be 20-500"}, status=400)
@@ -136,7 +152,11 @@ def h_session_resize(handler: "Handler", _parsed: ParseResult, body: dict) -> No
     argv = ["tmux", "resize-window", "-t", f"={name}", "-x", str(cols)]
     if rows:
         argv += ["-y", str(rows)]
-    r = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        handler._send_json({"ok": False, "error": "tmux unavailable"}, status=503)
+        return
     if r.returncode != 0:
         handler._send_json({"ok": False, "error": r.stderr.strip() or "resize failed"}, status=400)
         return
@@ -144,6 +164,8 @@ def h_session_resize(handler: "Handler", _parsed: ParseResult, body: dict) -> No
 
 
 def h_session_scroll(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     if not name:
         handler._send_json({"ok": False, "error": "missing 'session'"}, status=400)
@@ -156,6 +178,8 @@ def h_session_scroll(handler: "Handler", _parsed: ParseResult, body: dict) -> No
 
 
 def h_session_zoom(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     if not name:
         handler._send_json({"ok": False, "error": "missing 'session'"}, status=400)
@@ -168,6 +192,8 @@ def h_session_zoom(handler: "Handler", _parsed: ParseResult, body: dict) -> None
 
 
 def h_session_type(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     text = body.get("text")
     if not name:
@@ -184,6 +210,8 @@ def h_session_type(handler: "Handler", _parsed: ParseResult, body: dict) -> None
 
 
 def h_session_key(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     keys = body.get("keys")
     if not name:

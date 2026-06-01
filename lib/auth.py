@@ -92,10 +92,19 @@ def extract_token(handler) -> str | None:
 
 
 def matches(expected: str, given: str | None) -> bool:
-    """Constant-time token compare."""
+    """Constant-time token compare.
+
+    ``hmac.compare_digest`` raises ``TypeError`` on ``str`` inputs that
+    aren't ASCII-only; a client can trigger that with a non-ASCII
+    ``?token=`` / cookie value. Treat any such input as a non-match so a
+    malformed token fails closed (401) rather than escaping as a 500.
+    """
     if not given:
         return False
-    return hmac.compare_digest(expected, given)
+    try:
+        return hmac.compare_digest(expected, given)
+    except TypeError:
+        return False
 
 
 def path_is_open(path: str) -> bool:
@@ -114,15 +123,19 @@ def send_401(handler, *, reason: str = "authentication required") -> None:
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
-    handler.wfile.write(body)
+    handler._safe_write(body)
 
 
-def make_cookie_header(token: str, *, max_age: int = 7 * 24 * 3600) -> str:
+def make_cookie_header(token: str, *, max_age: int = 7 * 24 * 3600,
+                       secure: bool = False) -> str:
     """Build a Set-Cookie value. HttpOnly + Lax by default."""
-    return (
+    header = (
         f"{COOKIE_NAME}={token}; Path=/; HttpOnly; "
         f"SameSite=Lax; Max-Age={max_age}"
     )
+    if secure:
+        header += "; Secure"
+    return header
 
 
 def suggest_token() -> str:
