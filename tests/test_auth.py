@@ -10,6 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import auth  # noqa: E402
+from lib import server  # noqa: E402
 from lib.errors import StateError  # noqa: E402
 
 
@@ -18,6 +19,22 @@ class _FakeHandler:
     def __init__(self, headers: dict, path: str = "/"):
         self.headers = headers
         self.path = path
+
+
+class _RedirectHandler:
+    def __init__(self, *, path: str, tls_paths=None):
+        self.path = path
+        self.server = type("S", (), {"tls_paths": tls_paths, "verbose": False})()
+        self.sent = []
+
+    def send_response(self, status):
+        self.status = status
+
+    def send_header(self, key, value):
+        self.sent.append((key, value))
+
+    def end_headers(self):
+        self.ended = True
 
 
 class LoadTokenTests(unittest.TestCase):
@@ -107,6 +124,13 @@ class MatchesTests(unittest.TestCase):
         self.assertFalse(auth.matches("abc", ""))
         self.assertFalse(auth.matches("abc", None))
 
+    def test_non_ascii_given_fails_closed(self):
+        # compare_digest raises TypeError on non-ASCII str; matches() must
+        # swallow it and return a non-match (→ 401) rather than let a 500
+        # escape the auth gate.
+        self.assertFalse(auth.matches("abc", "ábc"))
+        self.assertFalse(auth.matches("abc", "tøken"))
+
 
 class PathIsOpenTests(unittest.TestCase):
 
@@ -131,6 +155,28 @@ class CookieTests(unittest.TestCase):
     def test_max_age_respected(self):
         header = auth.make_cookie_header("tok", max_age=42)
         self.assertIn("Max-Age=42", header)
+
+    def test_secure_flag_opt_in(self):
+        header = auth.make_cookie_header("tok", secure=True)
+        self.assertIn("Secure", header)
+
+
+class RedirectCookieTests(unittest.TestCase):
+
+    def test_tls_bootstrap_redirect_sets_secure_cookie(self):
+        h = _RedirectHandler(path="/?token=abc", tls_paths=(Path("/cert"), Path("/key")))
+        redirected = server.Handler._maybe_strip_token_redirect(h, "abc")
+        self.assertTrue(redirected)
+        self.assertEqual(h.status, 302)
+        cookie = dict(h.sent)["Set-Cookie"]
+        self.assertIn("Secure", cookie)
+
+    def test_http_bootstrap_redirect_omits_secure_cookie(self):
+        h = _RedirectHandler(path="/?token=abc", tls_paths=None)
+        redirected = server.Handler._maybe_strip_token_redirect(h, "abc")
+        self.assertTrue(redirected)
+        cookie = dict(h.sent)["Set-Cookie"]
+        self.assertNotIn("Secure", cookie)
 
 
 class SuggestTokenTests(unittest.TestCase):

@@ -59,6 +59,8 @@ def h_tasks_update(handler: "Handler", _parsed: ParseResult, body: dict) -> None
 
 
 def h_tasks_launch(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     task_id = (body.get("id") or "").strip()
     if not task_id:
         handler._send_json({"ok": False, "error": "missing 'id'"}, status=400)

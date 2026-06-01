@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 def h_ttyd_start(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     if not name:
         handler._send_json({"ok": False, "error": "missing 'session'"}, status=400)
@@ -28,12 +30,16 @@ def h_ttyd_start(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
 
 
 def h_ttyd_raw(handler: "Handler", _parsed: ParseResult, _body: dict) -> None:
+    if not handler._check_unlock():
+        return
     tls_paths = getattr(handler.server, "tls_paths", None)
     bind_addr = getattr(handler.server, "ttyd_bind_addr", None)
     handler._send_json(ttyd.start_raw(tls_paths=tls_paths, bind_addr=bind_addr))
 
 
 def h_ttyd_stop(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     name = (body.get("session") or "").strip()
     if not name:
         handler._send_json({"ok": False, "error": "missing 'session'"}, status=400)

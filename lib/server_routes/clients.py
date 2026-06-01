@@ -31,6 +31,8 @@ def h_clients(handler: "Handler", _parsed: ParseResult) -> None:
 
 
 def h_clients_nickname(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     from ..server import _touch_client, _clients
     cid = _touch_client(handler)
     nickname = (body.get("nickname") or "").strip()[:30]
@@ -40,6 +42,8 @@ def h_clients_nickname(handler: "Handler", _parsed: ParseResult, body: dict) -> 
 
 
 def h_clients_send_config(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
+    if not handler._check_unlock():
+        return
     from ..server import _touch_client, _clients, _client_inbox
     my_id = _touch_client(handler)
     target_id = (body.get("target") or "").strip()

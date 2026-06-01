@@ -2,6 +2,7 @@
 
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -62,6 +63,30 @@ class CreateTests(_TmpMixin, unittest.TestCase):
         t = tasks.create(title="simple", repo_path=str(self._repo))
         self.assertEqual(t["worktree_path"], "")
         self.assertEqual(t["branch"], "")
+
+    def test_create_is_safe_under_concurrent_writers(self):
+        errs = []
+        created = []
+        start = threading.Event()
+
+        def worker(i):
+            start.wait()
+            try:
+                created.append(tasks.create(title=f"t{i}", repo_path=str(self._repo))["id"])
+            except Exception as e:  # noqa: broad — test collects failures
+                errs.append(e)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+        for t in threads:
+            t.start()
+        start.set()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errs, [])
+        persisted = tasks.list_tasks(include_archived=True)
+        self.assertEqual(len(persisted), 20)
+        self.assertEqual(len({t["id"] for t in persisted}), 20)
 
 
 class ListTests(_TmpMixin, unittest.TestCase):

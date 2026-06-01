@@ -247,9 +247,17 @@ Below **Hidden** there is a furled **Config** pane backed by
   (e.g. `Tab`, `C-a`, `F5`). Click to remove, drag to reorder, reset
   to defaults. Stored in localStorage.
 - **Lock config pane:** optional password that gates both the Config
-  pane UI *and* every server-side mutation endpoint
-  (`/api/dashboard-config`, `/api/tasks`, `/api/extensions/*`, and any
-  mutation endpoint contributed by an enabled extension).
+  pane UI *and* every core server-side mutation endpoint — config
+  (`/api/dashboard-config`), tasks (`/api/tasks`, `/api/tasks/update`,
+  `/api/tasks/launch`), extensions (`/api/extensions/*`), session control
+  (`/api/session/new`, `/api/session/kill`, `/api/session/type`,
+  `/api/session/key`, `/api/session/resize`, `/api/session/scroll`,
+  `/api/session/zoom`), ttyd lifecycle (`/api/ttyd/start`, `/api/ttyd/raw`,
+  `/api/ttyd/stop`), server restart (`/api/server/restart`), client
+  coordination (`/api/clients/nickname`, `/api/clients/send-config`), and
+  any mutation endpoint contributed by an enabled extension. Read-only
+  GET endpoints and `/api/config-lock/verify` (which issues the unlock
+  token) stay open.
   `/api/config-lock/verify` issues a 32-byte unlock token with a
   12-hour TTL; the browser sends it as `X-TB-Unlock-Token` on every
   non-GET request. Password stored as SHA-256 hash at
