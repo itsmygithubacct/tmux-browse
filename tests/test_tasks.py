@@ -105,6 +105,18 @@ class ListTests(_TmpMixin, unittest.TestCase):
     def test_list_empty(self):
         self.assertEqual(tasks.list_tasks(), [])
 
+    def test_list_repairs_corrupt_store_once(self):
+        store = tasks.TASKS_FILE
+        store.write_text("{not json", encoding="utf-8")
+        self.assertEqual(tasks.list_tasks(), [])
+        repaired = store.read_text(encoding="utf-8")
+        self.assertEqual(repaired, "[]\n")
+        backups_before = sorted(store.parent.glob("tasks.json.corrupt.*"))
+        self.assertEqual(len(backups_before), 1)
+        self.assertEqual(tasks.list_tasks(), [])
+        backups_after = sorted(store.parent.glob("tasks.json.corrupt.*"))
+        self.assertEqual(backups_after, backups_before)
+
     def test_list_returns_created(self):
         tasks.create(title="a", repo_path=str(self._repo))
         tasks.create(title="b", repo_path=str(self._repo))
