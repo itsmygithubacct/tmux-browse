@@ -53,3 +53,24 @@ class SessionResizeRouteTests(unittest.TestCase):
             )
         self.assertEqual(fake.status, 503)
         self.assertEqual(fake.payload["error"], "tmux unavailable")
+
+
+class SessionNewRouteTests(unittest.TestCase):
+
+    def test_launch_ttyd_failure_is_returned(self):
+        fake = _FakeHandler()
+        with mock.patch.object(
+            routes_sessions.sessions, "new_session",
+            return_value=(True, ""),
+        ), mock.patch.object(
+            routes_sessions.ttyd, "start",
+            return_value={"ok": False, "error": "port conflict"},
+        ):
+            routes_sessions.h_session_new(
+                fake,
+                urlparse("/api/session/new"),
+                {"name": "demo", "launch_ttyd": True},
+            )
+        self.assertEqual(fake.status, 503)
+        self.assertFalse(fake.payload["ok"])
+        self.assertIn("port conflict", fake.payload["error"])

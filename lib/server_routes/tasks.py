@@ -99,10 +99,15 @@ def h_tasks_launch(handler: "Handler", _parsed: ParseResult, body: dict) -> None
         if not ok:
             handler._send_json({"ok": False, "error": err}, status=400)
             return
-    tasks_mod.update(task_id, session=session_name)
     tls_paths = getattr(handler.server, "tls_paths", None)
     bind_addr = getattr(handler.server, "ttyd_bind_addr", None)
     ttyd_result = ttyd.start(session_name, tls_paths=tls_paths, bind_addr=bind_addr)
+    if not ttyd_result.get("ok"):
+        handler._send_json(
+            {"ok": False, "error": ttyd_result.get("error", "ttyd start failed")},
+            status=503)
+        return
+    tasks_mod.update(task_id, session=session_name)
     handler._send_json({
         "ok": True,
         "task_id": task_id,

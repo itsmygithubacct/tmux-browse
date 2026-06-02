@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.7.9.3 — extension-name + ttyd ownership hardening (2026-06-02)
+
+- **Extension names are validated and path-contained.** Every extension
+  operation that touches the filesystem (`install`, `update`,
+  `uninstall`, and the path derivation behind them) now requires the name
+  to match `^[A-Za-z0-9_-]+$` and resolves to a strict descendant of the
+  `extensions/` directory — closing a path-traversal hole where a name
+  like `../../x` could escape it. The mutation routes return a clean 400
+  (`stage: invalid_name`) instead of a 500.
+- **`record_error` is resilient.** It's called during startup load and
+  the per-request post-processor path with filesystem-/manifest-derived
+  names, so it no longer validates (it only writes a JSON key, not a
+  path). A badly-named extension dir that fails to load is now recorded
+  and skipped rather than crashing `load_enabled` / 500-ing a request.
+- **ttyd verifies port ownership before re-linking.** When the target
+  port is already listening, `_spawn_ttyd` now confirms via `/proc` that
+  the listener is actually this session's ttyd before adopting it;
+  otherwise it fails closed instead of blindly embedding an iframe to
+  whatever process is squatting the port. (On non-Linux, where `/proc`
+  isn't available, this verification can't run, so the orphan-port
+  re-link path fails closed.)
+- **ttyd-start failures surface.** `/api/session/new` and
+  `/api/tasks/launch` now return 503 when the ttyd spawn fails instead of
+  reporting success; task-launch records the session association only
+  after ttyd is up.
+- README: documented the `update_tb.py` git-free `tb` puller.
+
 ## 0.7.9.2 — request hardening + loop fixes (2026-06-02)
 
 Another robustness release; no new surface.
