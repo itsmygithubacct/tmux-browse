@@ -153,6 +153,12 @@ def cmd_install_ttyd(args: argparse.Namespace) -> int:
         print(f"{path}: {r['note']}")
     else:
         print(f"installed ttyd {r.get('version')} → {path}")
+        if "sha256_verified" in r:
+            if r["sha256_verified"]:
+                print(f"  sha256 verified against release manifest: {r.get('sha256')}")
+            else:
+                print("  warning: release shipped no SHA256SUMS manifest; "
+                      "binary not checksum-verified (HTTPS transport only)")
     return 0
 
 
