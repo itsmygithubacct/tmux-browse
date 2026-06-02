@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.9.2 — request hardening + loop fixes (2026-06-02)
+
+Another robustness release; no new surface.
+
+- **JSON request hardening.** `_read_json` now rejects a non-integer
+  `Content-Length` (400), caps request bodies at 1 MB before reading, and
+  applies a 5-second socket read timeout so a client that declares a large
+  body and then trickles bytes can no longer pin a handler thread
+  indefinitely (slow-loris). The original socket timeout is restored
+  afterward so keep-alive connections are unaffected.
+- **No double-send on late failure.** The `Handler` now tracks whether a
+  response has begun; if a handler raises *after* starting to write,
+  neither the generic-error path (`_send_unexpected_error`) nor the
+  `TBError` path (`_send_tb_error`) tries to send a second status line
+  over the in-flight response.
+- **`tb watch` no longer busy-loops.** On a transient `capture-pane`
+  failure while the session is still alive, the poll loop skipped its
+  sleep via `continue` and spun at 100% CPU — hammering tmux exactly when
+  it was already struggling. The interval sleep now runs at the top of the
+  loop, so every iteration pays it.
+- **Task store survives corruption** (carried from in-flight work): a
+  malformed `tasks.json` is moved aside with a timestamped backup and
+  reinitialised in place rather than raising, matching the port registry's
+  self-healing.
+
 ## 0.7.9.1 — supply-chain + streaming hardening (2026-06-02)
 
 A robustness release: no new surface, several sharp edges filed down.

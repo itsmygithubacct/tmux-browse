@@ -8,6 +8,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import sys
 import threading
 import time
@@ -84,6 +85,8 @@ class DashboardServer(ThreadingHTTPServer):
 # bootstrap URL would otherwise land in logs. Uppercase match is defensive;
 # tokens are compared case-sensitively but URLs commonly normalize.
 _TOKEN_PARAM_RE = re.compile(r"([?&])token=[^&\s]*", re.IGNORECASE)
+_MAX_JSON_BODY_BYTES = 1_000_000
+_JSON_READ_TIMEOUT_SEC = 5.0
 
 
 def _redact_token(s: str) -> str:
@@ -614,13 +617,39 @@ class Handler(BaseHTTPRequestHandler):
             raise UsageError("invalid Content-Length header")
         if length <= 0:
             return {}
-        raw = self.rfile.read(length)
+        if length > _MAX_JSON_BODY_BYTES:
+            raise UsageError(
+                f"request body too large ({length} bytes > {_MAX_JSON_BODY_BYTES})",
+            )
+        conn = getattr(self, "connection", None)
+        old_timeout = None
+        if conn is not None:
+            try:
+                old_timeout = conn.gettimeout()
+                conn.settimeout(_JSON_READ_TIMEOUT_SEC)
+            except OSError:
+                old_timeout = None
+        try:
+            raw = self.rfile.read(length)
+        except (OSError, socket.timeout):
+            raise UsageError("timed out reading request body")
+        finally:
+            if conn is not None:
+                try:
+                    conn.settimeout(old_timeout)
+                except OSError:
+                    pass
         try:
             return json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return {}
 
     def _send_tb_error(self, err: TBError) -> None:
+        # If a handler already began a response before raising, we can't send
+        # fresh status/headers without corrupting the in-flight one. Mirror
+        # the guard in ``_send_unexpected_error``.
+        if getattr(self, "_tb_response_started", False):
+            return
         status = 400 if err.exit_code == 2 else 500
         self._send_json({"ok": False, "error": err.message}, status=status)
 

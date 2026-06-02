@@ -48,6 +48,14 @@ def _recover_corrupt(path: Path, err: Exception | str) -> list[dict[str, Any]]:
     return []
 
 
+def _write_tasks_file(f, tasks: list[dict[str, Any]]) -> None:
+    f.seek(0)
+    f.truncate()
+    json.dump(tasks, f, indent=2)
+    f.write("\n")
+    f.flush()
+
+
 @contextmanager
 def _locked_tasks():
     """Yield ``(tasks, save_fn)`` with the task file locked for mutation."""
@@ -66,6 +74,7 @@ def _locked_tasks():
         except OSError as e:
             raise StateError(f"cannot lock {TASKS_FILE}: {e.strerror or e}")
         try:
+            repaired = False
             try:
                 f.seek(0)
                 raw = f.read()
@@ -74,21 +83,27 @@ def _locked_tasks():
                         data = json.loads(raw)
                     except (ValueError, TypeError) as e:
                         data = _recover_corrupt(TASKS_FILE, e)
+                        repaired = True
                 else:
                     data = []
             except OSError as e:
                 data = _recover_corrupt(TASKS_FILE, e)
+                repaired = True
             if not isinstance(data, list):
                 data = _recover_corrupt(TASKS_FILE, "expected a JSON list")
+                repaired = True
             tasks = data
+            if repaired:
+                try:
+                    _write_tasks_file(f, tasks)
+                except OSError as e:
+                    raise StateError(
+                        f"cannot write {TASKS_FILE}: {e.strerror or e}",
+                    )
 
             def save() -> None:
                 try:
-                    f.seek(0)
-                    f.truncate()
-                    json.dump(tasks, f, indent=2)
-                    f.write("\n")
-                    f.flush()
+                    _write_tasks_file(f, tasks)
                 except OSError as e:
                     raise StateError(
                         f"cannot write {TASKS_FILE}: {e.strerror or e}",
