@@ -143,6 +143,14 @@ class ExtensionsStatusEndpointTests(unittest.TestCase):
             fake, urlparse("/api/extensions/uninstall"), {})
         self.assertEqual(fake.status, 400)
 
+    def test_uninstall_endpoint_rejects_path_traversal_name(self):
+        fake = _FakeHandler(_FakeServer())
+        server.routes_extensions.h_extensions_uninstall(
+            fake, urlparse("/api/extensions/uninstall"),
+            {"name": "../outside"})
+        self.assertEqual(fake.status, 400)
+        self.assertEqual(fake.payload["stage"], "invalid_name")
+
     def test_enable_endpoint_rejects_missing_name(self):
         fake = _FakeHandler(_FakeServer())
         server.routes_extensions.h_extensions_enable(
@@ -261,12 +269,29 @@ class TasksLaunchAgentExtensionGuardTests(unittest.TestCase):
             "id": "t1", "agent": "opus", "repo_path": "/tmp",
         }), mock.patch.object(tasks_mod, "update"), \
              mock.patch.object(sessions, "exists", return_value=True), \
-             mock.patch.object(ttyd, "start", return_value={"port": 9999}):
+             mock.patch.object(ttyd, "start", return_value={"ok": True, "port": 9999}):
             fake = _FakeHandler(self._server_with_agent_verb())
             server.routes_tasks.h_tasks_launch(
                 fake, urlparse("/api/tasks/launch"), {"id": "t1"})
         self.assertEqual(fake.status, 200)
         self.assertTrue(fake.payload["ok"])
+
+    def test_surfaces_ttyd_start_failure(self):
+        from lib import sessions, tasks as tasks_mod, ttyd
+        with mock.patch.object(tasks_mod, "get_task", return_value={
+            "id": "t1", "agent": "opus", "repo_path": "/tmp",
+        }), mock.patch.object(tasks_mod, "update") as update, \
+             mock.patch.object(sessions, "exists", return_value=True), \
+             mock.patch.object(ttyd, "start", return_value={
+                 "ok": False, "error": "port conflict",
+             }):
+            fake = _FakeHandler(self._server_with_agent_verb())
+            server.routes_tasks.h_tasks_launch(
+                fake, urlparse("/api/tasks/launch"), {"id": "t1"})
+        self.assertEqual(fake.status, 503)
+        self.assertFalse(fake.payload["ok"])
+        self.assertIn("port conflict", fake.payload["error"])
+        update.assert_not_called()
 
 
 class RouteTableRegistrationTests(unittest.TestCase):

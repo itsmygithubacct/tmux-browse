@@ -104,6 +104,11 @@ def h_session_new(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
         tls_paths = getattr(handler.server, "tls_paths", None)
         bind_addr = getattr(handler.server, "ttyd_bind_addr", None)
         ttyd_result = ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr)
+        if not ttyd_result.get("ok"):
+            handler._send_json(
+                {"ok": False, "error": ttyd_result.get("error", "ttyd start failed")},
+                status=503)
+            return
         handler._send_json({"ok": True, "name": name,
                             "port": ttyd_result.get("port"),
                             "url": ttyd_result.get("url", "")})

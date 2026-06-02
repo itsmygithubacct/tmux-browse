@@ -30,6 +30,14 @@ curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bi
 curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_lan.sh | bash
 ```
 
+If you only want the `tb` CLI (not the dashboard checkout), pull just
+`tb.py` plus the `lib/` package it needs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/update_tb.py -o update_tb.py
+python3 update_tb.py --dir ~/bin/tmux-browse
+```
+
 Both honor `--dir`, `--port`, `--ref`, `--no-prereqs`, and `--no-launch`
 (pass them after `bash -s --`, e.g.
 `curl -fsSL .../quickstart_local.sh | bash -s -- --port 8097 --no-launch`).
