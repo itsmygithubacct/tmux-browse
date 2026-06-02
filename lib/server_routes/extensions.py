@@ -106,6 +106,11 @@ def h_extensions_uninstall(handler: "Handler", _parsed: ParseResult, body: dict)
     remove_state = bool(body.get("remove_state"))
     try:
         summary = extensions.uninstall(name, remove_state=remove_state)
+    except extensions.InvalidExtensionName as e:
+        handler._send_json(
+            {"ok": False, "error": str(e), "stage": "invalid_name"},
+            status=400)
+        return
     except Exception as e:  # noqa: broad — surface every failure
         handler._send_json(
             {"ok": False, "error": str(e), "stage": "uninstall"},
@@ -133,6 +138,11 @@ def h_extensions_update(handler: "Handler", _parsed: ParseResult, body: dict) ->
         return
     try:
         result = extensions.update(name)
+    except extensions.InvalidExtensionName as e:
+        handler._send_json(
+            {"ok": False, "error": str(e), "stage": "invalid_name"},
+            status=400)
+        return
     except extensions.UpdateError as e:
         handler._send_json(
             {"ok": False, "error": e.msg, "stage": e.stage},
@@ -165,7 +175,13 @@ def h_extensions_enable(handler: "Handler", _parsed: ParseResult, body: dict) ->
         handler._send_json({"ok": False, "error": "missing 'name'"},
                            status=400)
         return
-    entry = extensions.enable(name)
+    try:
+        entry = extensions.enable(name)
+    except extensions.InvalidExtensionName as e:
+        handler._send_json(
+            {"ok": False, "error": str(e), "stage": "invalid_name"},
+            status=400)
+        return
     _extensions_pending_restart[name] = True
     handler._send_json({
         "ok": True, "name": name, "entry": entry,
@@ -184,7 +200,13 @@ def h_extensions_disable(handler: "Handler", _parsed: ParseResult, body: dict) -
         handler._send_json({"ok": False, "error": "missing 'name'"},
                            status=400)
         return
-    entry = extensions.disable(name)
+    try:
+        entry = extensions.disable(name)
+    except extensions.InvalidExtensionName as e:
+        handler._send_json(
+            {"ok": False, "error": str(e), "stage": "invalid_name"},
+            status=400)
+        return
     _extensions_pending_restart[name] = True
     handler._send_json({
         "ok": True, "name": name, "entry": entry,
