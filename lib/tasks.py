@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import fcntl
 import json
+import shutil
+import sys
 import time
 import uuid
 from contextlib import contextmanager
@@ -29,6 +31,21 @@ from .errors import StateError, UsageError
 TASKS_FILE = config.STATE_DIR / "tasks.json"
 
 VALID_STATUSES = {"open", "done", "archived"}
+
+
+def _recover_corrupt(path: Path, err: Exception | str) -> list[dict[str, Any]]:
+    """Move a corrupt task store aside and continue with an empty list."""
+    backup = path.with_suffix(path.suffix + f".corrupt.{int(time.time())}")
+    try:
+        shutil.copy2(path, backup)
+    except OSError:
+        backup = None
+    sys.stderr.write(
+        f"tmux-browse: task store at {path} was corrupt ({err}); reinitialised"
+        + (f", backup kept at {backup}" if backup else "")
+        + "\n",
+    )
+    return []
 
 
 @contextmanager
@@ -52,10 +69,18 @@ def _locked_tasks():
             try:
                 f.seek(0)
                 raw = f.read()
-                data = json.loads(raw) if raw.strip() else []
-            except (OSError, ValueError, TypeError):
-                data = []
-            tasks = data if isinstance(data, list) else []
+                if raw.strip():
+                    try:
+                        data = json.loads(raw)
+                    except (ValueError, TypeError) as e:
+                        data = _recover_corrupt(TASKS_FILE, e)
+                else:
+                    data = []
+            except OSError as e:
+                data = _recover_corrupt(TASKS_FILE, e)
+            if not isinstance(data, list):
+                data = _recover_corrupt(TASKS_FILE, "expected a JSON list")
+            tasks = data
 
             def save() -> None:
                 try:

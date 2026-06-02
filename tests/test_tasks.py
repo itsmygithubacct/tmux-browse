@@ -88,6 +88,17 @@ class CreateTests(_TmpMixin, unittest.TestCase):
         self.assertEqual(len(persisted), 20)
         self.assertEqual(len({t["id"] for t in persisted}), 20)
 
+    def test_create_recovers_corrupt_store_and_keeps_backup(self):
+        store = tasks.TASKS_FILE
+        store.write_text("{not json", encoding="utf-8")
+        tasks.create(title="recovered", repo_path=str(self._repo))
+        backups = list(store.parent.glob("tasks.json.corrupt.*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(encoding="utf-8"), "{not json")
+        persisted = tasks.list_tasks(include_archived=True)
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(persisted[0]["title"], "recovered")
+
 
 class ListTests(_TmpMixin, unittest.TestCase):
 

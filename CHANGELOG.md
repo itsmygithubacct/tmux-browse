@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.7.9.1 — supply-chain + streaming hardening (2026-06-02)
+
+A robustness release: no new surface, several sharp edges filed down.
+
+- **Shared SSE producer.** `/api/sessions/stream` previously ran an
+  independent once-per-second `_session_summary()` loop *per connection*,
+  so N open dashboard tabs meant N× the tmux subprocess + ports-flock
+  load every second. A single producer thread now computes the summary at
+  most once per tick and fans the payload out to every subscriber, so the
+  cost is O(1) regardless of how many clients are watching. The producer
+  runs only while at least one client is connected, payloads coalesce to
+  the latest state, new connections render immediately, and
+  heartbeat/clean-disconnect behaviour is unchanged.
+- **ttyd install is checksum-verified.** `install-ttyd` now hashes the
+  downloaded binary and compares it against the digest in the release's
+  `SHA256SUMS` manifest, refusing to install on a mismatch (the bad binary
+  is never written to disk). If a release ships no manifest the install
+  proceeds — HTTPS still covers transport — but reports
+  `sha256_verified: false` and the CLI prints a warning.
+- **Extension uninstall can't delete the state root.** `uninstall
+  --remove-state` only removes *strict descendants* of the state dir now;
+  a manifest whose `state_paths` lists `"."` (or anything resolving back
+  to `~/.tmux-browse`) is rejected instead of wiping the port registry,
+  dashboard config, and every other extension's state.
+- **Task store survives corruption.** A malformed `tasks.json` is moved
+  aside (with a timestamped backup) and reinitialised to an empty list
+  rather than raising — same self-healing the port registry already had.
+- Added low-level `Handler` input-guard tests.
+
 ## 0.7.9.0 — config-lock hardening + robustness (2026-06-01)
 
 **Security: the config-lock now gates *every* core mutation endpoint.**

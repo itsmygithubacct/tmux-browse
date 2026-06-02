@@ -44,7 +44,7 @@ from . import (
     ttyd,
 )
 from .extensions import MergedRegistry, RegistryConflict
-from .errors import TBError
+from .errors import TBError, UsageError
 from .targeting import Target
 
 
@@ -290,6 +290,96 @@ _session_post_processors: list[tuple[str, Callable[[list[dict]], None]]] = []
 _post_processor_errors_seen: set[tuple[str, str]] = set()
 
 
+# ---------------------------------------------------------------------------
+# Shared SSE producer
+# ---------------------------------------------------------------------------
+#
+# A single background thread computes ``_session_summary()`` at most once per
+# interval and fans the serialized payload out to every
+# ``/api/sessions/stream`` subscriber. Before this, each SSE connection ran
+# its own 1 Hz summary loop, so N open dashboard tabs meant N× the tmux
+# subprocess + ports-flock load every second; with the hub the cost is O(1)
+# per tick regardless of subscriber count. The producer runs only while at
+# least one subscriber is connected, preserving the "zero work on an
+# unwatched dashboard" property.
+
+_SESSIONS_STREAM_INTERVAL_SEC = 1.0
+
+
+class _SessionStreamHub:
+    def __init__(self, interval: float = _SESSIONS_STREAM_INTERVAL_SEC) -> None:
+        self._interval = interval
+        self._cond = threading.Condition()
+        self._subscribers = 0
+        self._payload: str | None = None
+        self._version = 0
+        self._thread: threading.Thread | None = None
+
+    def subscribe(self) -> tuple[int, str | None]:
+        """Register a subscriber and (re)start the producer if needed.
+
+        Returns the current ``(version, payload)`` so a freshly-connected
+        client renders immediately instead of waiting for the next change.
+        """
+        with self._cond:
+            self._subscribers += 1
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(
+                    target=self._run, name="sse-session-producer", daemon=True)
+                self._thread.start()
+            return self._version, self._payload
+
+    def unsubscribe(self) -> None:
+        with self._cond:
+            self._subscribers = max(0, self._subscribers - 1)
+            if self._subscribers == 0:
+                # Wake the producer so it observes the zero count and exits.
+                self._cond.notify_all()
+
+    def wait(self, last_version: int, timeout: float) -> tuple[int, str | None]:
+        """Block until the payload version advances past ``last_version`` or
+        ``timeout`` elapses; return the current ``(version, payload)``."""
+        with self._cond:
+            if self._version <= last_version:
+                self._cond.wait(timeout)
+            return self._version, self._payload
+
+    def _compute_wire(self) -> str | None:
+        try:
+            summary = _session_summary()
+        except Exception:
+            # A transient summary failure shouldn't kill the producer or
+            # tear down every stream — keep the last good payload and retry
+            # next tick. Subscribers still get heartbeats meanwhile.
+            return None
+        return json.dumps({
+            "ok": True,
+            "sessions": summary.rows,
+            "tmux_unreachable": summary.tmux_unreachable,
+        }, separators=(",", ":"))
+
+    def _run(self) -> None:
+        while True:
+            with self._cond:
+                if self._subscribers == 0:
+                    self._thread = None
+                    return
+            wire = self._compute_wire()
+            with self._cond:
+                if self._subscribers == 0:
+                    self._thread = None
+                    return
+                if wire is not None and wire != self._payload:
+                    self._payload = wire
+                    self._version += 1
+                    self._cond.notify_all()
+                # Inter-tick sleep; unsubscribe-to-zero wakes us early.
+                self._cond.wait(self._interval)
+
+
+_session_stream_hub = _SessionStreamHub()
+
+
 # --- Connected client tracking ---
 
 _CLIENT_TIMEOUT = 60  # seconds before a client is considered gone
@@ -460,6 +550,14 @@ def _lock_is_active() -> bool:
 class Handler(BaseHTTPRequestHandler):
     server_version = f"tmux-browse/{__version__}"
 
+    def send_response(self, code, message=None):  # noqa: D401 - stdlib shape
+        self._tb_response_started = True
+        return super().send_response(code, message)
+
+    def end_headers(self):
+        self._tb_headers_ended = True
+        return super().end_headers()
+
     # Keep the default stderr logger quiet unless --verbose was used, and
     # redact any ``?token=`` before it hits stderr.
     def log_message(self, format, *args):
@@ -510,7 +608,10 @@ class Handler(BaseHTTPRequestHandler):
         self._safe_write(body)
 
     def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length") or "0")
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            raise UsageError("invalid Content-Length header")
         if length <= 0:
             return {}
         raw = self.rfile.read(length)
@@ -526,6 +627,8 @@ class Handler(BaseHTTPRequestHandler):
     def _send_unexpected_error(self, exc: Exception) -> None:
         if getattr(self.server, "verbose", False):
             self.log_error("unhandled request error: %r", exc)
+        if getattr(self, "_tb_response_started", False):
+            return
         self._send_json({"ok": False, "error": "internal server error"}, status=500)
 
     def _check_unlock(self) -> bool:
