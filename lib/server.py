@@ -492,7 +492,7 @@ def _clear_dashboard_state() -> None:
         config.DASHBOARD_FILE.unlink(missing_ok=True)
 
 
-from . import __version__
+from .version import __version__
 
 
 # -----------------------------------------------------------------------------

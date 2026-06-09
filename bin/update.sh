@@ -84,7 +84,7 @@ g() { git -C "$INSTALL_DIR" "$@"; }
 # --- current version -------------------------------------------------------
 # __version__ is the single source of truth and is readable regardless of
 # git state (shallow clone, detached HEAD, etc.); git describe is a nicety.
-current_version() { python3 -c "import sys; sys.path.insert(0, '$INSTALL_DIR'); from lib import __version__; print(__version__)"; }
+current_version() { python3 -c "import sys; sys.path.insert(0, '$INSTALL_DIR/tmux-cli'); from lib.version import __version__; print(__version__)"; }
 CUR_VER="$(current_version 2>/dev/null || echo '?')"
 CUR_REF="$(g describe --tags --always 2>/dev/null || echo '?')"
 
@@ -156,6 +156,14 @@ if ! g checkout "${co_flags[@]}" "$REF" 2>/dev/null; then
     else
         die "checkout of $REF failed (does the ref exist?)"
     fi
+fi
+
+# --- pull the vendored tb CLI core (required submodule) --------------------
+# tmux-cli ships tb.py + the lib/ the dashboard imports; unlike extensions it
+# is not opt-in, so always init/update it to the commit this ref pins.
+if g config -f .gitmodules --get submodule.tmux-cli.path >/dev/null 2>&1; then
+    g submodule update --init --recursive -- tmux-cli >/dev/null 2>&1 \
+        || die "failed to pull the tmux-cli submodule — run: git -C $INSTALL_DIR submodule update --init -- tmux-cli"
 fi
 
 # --- advance extensions ----------------------------------------------------

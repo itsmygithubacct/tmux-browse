@@ -56,8 +56,9 @@ def _git(*args: str, cwd: Path) -> tuple[int, str, str]:
 
 
 def _core_version() -> str:
-    sys.path.insert(0, str(REPO))
-    from lib import __version__
+    # __version__ lives in the vendored core (the tmux-cli submodule).
+    sys.path.insert(0, str(REPO / "tmux-cli"))
+    from lib.version import __version__
     return __version__
 
 
@@ -132,7 +133,8 @@ def check_one(name: str, spec: dict) -> bool:
 
 
 def main() -> int:
-    sys.path.insert(0, str(REPO))
+    # The extension catalog ships with the vendored core (tmux-cli submodule).
+    sys.path.insert(0, str(REPO / "tmux-cli"))
     try:
         from lib.extensions.catalog import KNOWN
     except ImportError as e:
