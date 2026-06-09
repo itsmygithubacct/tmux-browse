@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.7.9.4 — tb CLI flag, pipe, and error-envelope hardening (2026-06-09)
+
+A `tb` robustness release: the CLI now honours its documented contracts in
+the corners an LLM tool-use loop actually hits. No new verbs.
+
+- **Global flags work before *and* after the verb.** `--json`, `--quiet`,
+  and `--no-header` were silently dropped when placed before the verb
+  (`tb --json ls` printed a human table; only `tb ls --json` emitted JSON) —
+  the shared parent parser's subcommand copy clobbered the pre-verb value
+  back to its default. The flags now use `SUPPRESS` defaults and are
+  reconciled once after parsing, so either position works, including the
+  `{ok:false,…}` failure envelope.
+- **Broken pipes are silent.** Piping a `tb` verb into a reader that closes
+  early (`tb capture work | head`, `tb tail -f | head`) leaked a
+  `BrokenPipeError` traceback and a non-zero exit. `main()` now catches it,
+  redirects stdout, and exits 0.
+- **No more raw tracebacks.** Any unexpected (non-`TBError`) exception is now
+  caught and reported as `{ok:false, code:"EUNKNOWN", exit:1}` under `--json`
+  or a `tb: …` line otherwise, instead of dumping a Python traceback and
+  bypassing the envelope. Set `TB_DEBUG=1` to re-raise the original for
+  debugging.
+- **Usage errors honour `--json`.** Argparse-level errors (unknown/missing
+  verb, missing argument) previously printed a plaintext banner and exited 2
+  outside the envelope machinery. They now flow through the same
+  `UsageError → {ok:false, code:"EUSAGE", exit:2}` path as every other
+  failure.
+- **`tb web url` / `tb web stop` no longer require a tmux server.** Both are
+  pure ports-registry / ttyd operations, but were short-circuited with
+  `ENOSERVER` (exit 6) when no server was running. The per-verb server gate
+  is now a single source of truth (a `needs_server` default on each
+  subparser) rather than a hand-maintained name set; `web start`, which
+  checks the session exists, still needs a server.
+- **`server_running()` no longer false-positives on a missing socket.** On a
+  host where the tmux socket was never created, tmux prints
+  `error connecting … (No such file…)` rather than `no server running`; the
+  probe treated that as "server up", so server-needing verbs returned a
+  misleading `ENOENT` instead of `ENOSERVER`. The socket-absent messages are
+  now recognised.
+- **Smaller fixes.** `--version` works after the verb too; non-ASCII output
+  degrades (`backslashreplace`) instead of crashing under an ascii-locked
+  stdio; a subcommand group with no handler returns a clean usage error
+  instead of an `AttributeError`; the `tb.py` exit-code docstring lists all
+  codes (8/9/130); and `tb range` / `tb stagger` are now documented in
+  `docs/tb.md`. New `tests/test_tb_main.py` covers all of the above (38
+  cases).
+
 ## 0.7.9.3 — extension-name + ttyd ownership hardening (2026-06-02)
 
 - **Extension names are validated and path-contained.** Every extension
