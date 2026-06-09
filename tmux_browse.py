@@ -18,13 +18,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
-if str(_SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPT_DIR))
+# The `tb` CLI core ships as the `tmux-cli` submodule. Put both it and this
+# repo on sys.path so the `lib` namespace package merges the core (submodule)
+# and the dashboard-only modules (this repo).
+for _p in (_SCRIPT_DIR / "tmux-cli", _SCRIPT_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+# This repo — not the vendored core — is the project root for extensions/ and
+# .gitmodules. Child processes (e.g. a shelled-out `tb agent`) inherit it.
+os.environ.setdefault("TB_PROJECT_DIR", str(_SCRIPT_DIR))
 
 from lib import (
     auth,
