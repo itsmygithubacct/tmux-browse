@@ -12,9 +12,17 @@ the way."
    `urllib`, `subprocess`, `json`. That means: no virtualenv dance required
    to try it, no supply-chain surprises, and the project runs on whatever
    Python a freshly imaged Linux box ships with.
-2. **Two CLIs, one library.** `tmux_browse.py` (dashboard) and `tb.py`
-   (general CLI) share everything under `lib/`. A bug fixed in
-   `lib/sessions.py` improves both surfaces at once.
+2. **Two repos, one library.** The `tb` CLI and the core it needs live in
+   their own repo, **[tmux-cli](https://github.com/itsmygithubacct/tmux-cli)**;
+   this repo (the dashboard) vendors it as the `tmux-cli/` git submodule and
+   adds only its server-side modules. At runtime `lib` is a single PEP 420
+   **namespace package** merging the two portions — the submodule's core
+   (`lib/sessions.py`, `lib/ttyd.py`, `lib/tb_cmds/`, …) and this repo's
+   dashboard modules (`lib/server.py`, `lib/auth.py`, `lib/server_routes/`, …)
+   — so a fix in core improves the CLI and the dashboard at once. Users who
+   only want the CLI install tmux-cli alone; no webserver. (`tmux_browse.py`
+   puts the submodule on `sys.path` and sets `TB_PROJECT_DIR` so extensions
+   resolve against this repo, not the vendored core.)
 3. **Stable contracts.** Exit codes, error `code` strings, and JSON
    envelopes don't change between patch versions. Human messages can.
 4. **Boring defaults.** Sensible port numbers, 0.0.0.0 bind, no
