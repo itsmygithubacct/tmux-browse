@@ -14,3 +14,7 @@
 	path = extensions/federation
 	url = https://github.com/itsmygithubacct/tmux-browse-federation.git
 	branch = main
+[submodule "tmux-cli"]
+	path = tmux-cli
+	url = https://github.com/itsmygithubacct/tmux-cli.git
+	branch = main

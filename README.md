@@ -9,7 +9,9 @@ Two ways to look at your tmux sessions:
    shell or from an LLM tool-use loop. Tables for humans, stable JSON for
    machines.
 
-Both share the same Python library. Stdlib-only (`http.server`, `urllib`,
+Both share the same Python library. The CLI half lives in its own repo,
+**[tmux-cli](https://github.com/itsmygithubacct/tmux-cli)**, which tmux-browse
+vendors as a git submodule (`tmux-cli/`). Stdlib-only (`http.server`, `urllib`,
 `subprocess`, `ssl`) — no pip dependencies; the only external is `ttyd`
 itself, which the CLI can install for you.
 
@@ -30,12 +32,25 @@ curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bi
 curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_lan.sh | bash
 ```
 
-If you only want the `tb` CLI (not the dashboard checkout), pull just
-`tb.py` plus the `lib/` package it needs:
+The quickstart scripts pull the bundled `tmux-cli` core automatically. Cloning
+the dashboard by hand instead? Add `--recurse-submodules` (or run `make init`
+afterwards) so the `tmux-cli/` submodule is fetched:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/update_tb.py -o update_tb.py
-python3 update_tb.py --dir ~/bin/tmux-browse
+git clone --recurse-submodules https://github.com/itsmygithubacct/tmux-browse.git
+```
+
+If you only want the `tb` CLI (no dashboard, no webserver), install
+**[tmux-cli](https://github.com/itsmygithubacct/tmux-cli)** directly — a
+smaller, self-contained project:
+
+```bash
+git clone https://github.com/itsmygithubacct/tmux-cli.git ~/tmux-cli
+cd ~/tmux-cli && make install      # symlinks tb.py -> ~/bin/tb
+
+# ...or pull just the files, no git:
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-cli/main/bin/update_tb.py -o update_tb.py
+python3 update_tb.py --dir ~/bin/tmux-cli
 ```
 
 Both honor `--dir`, `--port`, `--ref`, `--no-prereqs`, and `--no-launch`
