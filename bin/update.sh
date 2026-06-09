@@ -161,8 +161,10 @@ fi
 # --- pull the vendored tb CLI core (required submodule) --------------------
 # tmux-cli ships tb.py + the lib/ the dashboard imports; unlike extensions it
 # is not opt-in, so always init/update it to the commit this ref pins.
-g submodule update --init --recursive -- tmux-cli >/dev/null 2>&1 \
-    || die "failed to pull the tmux-cli submodule — run: git -C $INSTALL_DIR submodule update --init -- tmux-cli"
+if g config -f .gitmodules --get submodule.tmux-cli.path >/dev/null 2>&1; then
+    g submodule update --init --recursive -- tmux-cli >/dev/null 2>&1 \
+        || die "failed to pull the tmux-cli submodule — run: git -C $INSTALL_DIR submodule update --init -- tmux-cli"
+fi
 
 # --- advance extensions ----------------------------------------------------
 # Only touches already-initialised submodules; extensions are opt-in, so we
