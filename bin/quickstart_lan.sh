@@ -105,8 +105,12 @@ cd "$INSTALL_DIR"
 # --- pull the tb CLI core --------------------------------------------------
 # tmux-cli (tb.py + the lib/ the dashboard imports) is a required submodule;
 # extension submodules stay opt-in, so init only this one.
-say "Pulling the tmux-cli core submodule"
-git submodule update --init tmux-cli || die "failed to pull the tmux-cli submodule"
+# Only when this ref vendors the core as a submodule (newer layouts); older
+# monorepo refs bundle lib/ directly and have no tmux-cli submodule.
+if git config -f .gitmodules --get submodule.tmux-cli.path >/dev/null 2>&1; then
+    say "Pulling the tmux-cli core submodule"
+    git submodule update --init tmux-cli || die "failed to pull the tmux-cli submodule"
+fi
 
 # --- prereqs ---------------------------------------------------------------
 # Two checks: tmux on PATH, and ttyd reachable — either on PATH or via
