@@ -96,6 +96,12 @@ fi
 
 cd "$INSTALL_DIR"
 
+# --- pull the tb CLI core --------------------------------------------------
+# tmux-cli (tb.py + the lib/ the dashboard imports) is a required submodule;
+# extension submodules stay opt-in, so init only this one.
+say "Pulling the tmux-cli core submodule"
+git submodule update --init tmux-cli || die "failed to pull the tmux-cli submodule"
+
 # --- prereqs ---------------------------------------------------------------
 # Two checks: tmux on PATH, and ttyd reachable — either on PATH or via
 # tmux_browse.py's bundled installer that drops a static binary in

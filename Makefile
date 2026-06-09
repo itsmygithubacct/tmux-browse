@@ -4,8 +4,13 @@
 # targets exist for headless hosts, Docker builds, bootstrap scripts,
 # and anyone who prefers the CLI. Both routes go through the same
 # ``lib.extensions`` functions — no duplicate logic.
+#
+# The `tb` CLI core ships as the `tmux-cli` git submodule. Everything that
+# imports `lib` runs with the submodule on PYTHONPATH (so the `lib` namespace
+# package merges core + dashboard) and TB_PROJECT_DIR pointed at this checkout
+# (so extensions/ + .gitmodules here, not in the vendored core, are the root).
 
-.PHONY: help update list-extensions \
+.PHONY: help init update list-extensions \
         install-agent update-agent enable-agent disable-agent \
         uninstall-agent uninstall-agent-with-state \
         install-federation update-federation enable-federation disable-federation \
@@ -13,10 +18,12 @@
         preflight test ci
 
 PY ?= python3
+RUN := PYTHONPATH=tmux-cli TB_PROJECT_DIR=$(CURDIR) $(PY)
 
 help:
 	@echo "tmux-browse maintenance targets:"
 	@echo ""
+	@echo "  make init                      pull the tmux-cli submodule (git submodule update --init --recursive)"
 	@echo "  make update                    update this checkout to the latest release"
 	@echo ""
 	@echo "tmux-browse extension management targets:"
@@ -37,10 +44,14 @@ help:
 	@echo ""
 	@echo "  make list-extensions           show status of every known extension"
 	@echo "  make preflight                 check core/extension version alignment"
-	@echo "  make test                      run the core test suite"
+	@echo "  make test                      run the dashboard test suite"
 	@echo "  make ci                        preflight + tests (what CI runs)"
 	@echo ""
 	@echo "After install/update/enable/disable, restart the dashboard."
+
+# Pull (or refresh) the vendored tb CLI core.
+init:
+	git submodule update --init --recursive
 
 # Update this checkout to the latest release (delegates to bin/update.sh).
 # Pass flags through with ARGS, e.g.  make update ARGS="--restart"  or
@@ -49,48 +60,48 @@ update:
 	bash bin/update.sh $(ARGS)
 
 list-extensions:
-	$(PY) -m lib.extensions list
+	$(RUN) -m lib.extensions list
 
 install-agent:
-	$(PY) -m lib.extensions install agent
+	$(RUN) -m lib.extensions install agent
 
 update-agent:
-	$(PY) -m lib.extensions update agent
+	$(RUN) -m lib.extensions update agent
 
 enable-agent:
-	$(PY) -m lib.extensions enable agent
+	$(RUN) -m lib.extensions enable agent
 
 disable-agent:
-	$(PY) -m lib.extensions disable agent
+	$(RUN) -m lib.extensions disable agent
 
 uninstall-agent:
-	$(PY) -m lib.extensions uninstall agent
+	$(RUN) -m lib.extensions uninstall agent
 
 uninstall-agent-with-state:
-	$(PY) -m lib.extensions uninstall agent --remove-state
+	$(RUN) -m lib.extensions uninstall agent --remove-state
 
 install-federation:
-	$(PY) -m lib.extensions install federation
+	$(RUN) -m lib.extensions install federation
 
 update-federation:
-	$(PY) -m lib.extensions update federation
+	$(RUN) -m lib.extensions update federation
 
 enable-federation:
-	$(PY) -m lib.extensions enable federation
+	$(RUN) -m lib.extensions enable federation
 
 disable-federation:
-	$(PY) -m lib.extensions disable federation
+	$(RUN) -m lib.extensions disable federation
 
 uninstall-federation:
-	$(PY) -m lib.extensions uninstall federation
+	$(RUN) -m lib.extensions uninstall federation
 
 uninstall-federation-with-state:
-	$(PY) -m lib.extensions uninstall federation --remove-state
+	$(RUN) -m lib.extensions uninstall federation --remove-state
 
 preflight:
-	$(PY) scripts/preflight.py
+	$(RUN) scripts/preflight.py
 
 test:
-	$(PY) -m unittest discover tests
+	$(RUN) -m unittest discover tests
 
 ci: preflight test
