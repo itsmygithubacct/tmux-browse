@@ -697,10 +697,20 @@ class Handler(BaseHTTPRequestHandler):
     #   * SAMEORIGIN   — anti-clickjacking; nothing legitimately frames the
     #                    dashboard's own pages cross-origin (ttyd panes are
     #                    framed from ttyd's own port, a different origin).
+    #   * CSP          — only the directives that can't break the dashboard's
+    #                    inline <style>/<script> design (no script-src /
+    #                    style-src restriction): frame-ancestors mirrors the
+    #                    XFO clickjacking guard, object-src 'none' blocks
+    #                    <object>/<embed> injection, and base-uri 'self'
+    #                    stops an injected <base> from hijacking the page's
+    #                    relative URLs. Inline scripts/styles and extension
+    #                    UI blocks keep working.
     _SECURITY_HEADERS = (
         ("X-Content-Type-Options", "nosniff"),
         ("Referrer-Policy", "no-referrer"),
         ("X-Frame-Options", "SAMEORIGIN"),
+        ("Content-Security-Policy",
+         "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"),
     )
 
     def send_response(self, code, message=None):  # noqa: D401 - stdlib shape
