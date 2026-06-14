@@ -4,10 +4,11 @@
 # 0.0.0.0 so other devices on the network can reach it.
 #
 # Heads-up: binding 0.0.0.0 puts the dashboard on every network the
-# host is reachable from. tmux-browse defaults to writing an auth
-# token at first launch (printed in the URL it shows on stdout) but
-# anything bound to all interfaces deserves a moment of thought.
-# For localhost-only, use bin/quickstart_local.sh instead.
+# host is reachable from, and that exposes the per-session ttyd shells
+# too. So this quickstart generates a random auth token and launches
+# with it by default — printed below as a /?token=... bootstrap URL.
+# Pass --no-auth to launch open, or set TMUX_BROWSE_TOKEN to use your
+# own. For localhost-only (no token needed), use quickstart_local.sh.
 #
 # Usage from the internet:
 #
@@ -25,6 +26,7 @@
 #   --dir <path>     install directory (default: ~/tmux-browse)
 #   --port <n>       HTTP port (default: 8096)
 #   --bind <addr>    bind address (default: 0.0.0.0; override to restrict)
+#   --no-auth        launch without an auth token (default: generate one)
 #   --ref <tag>      git ref to check out (default: the latest release tag)
 #   --no-prereqs     skip running bin/install-prereqs.sh
 #   --no-launch      install only; don't start the server
@@ -39,6 +41,7 @@ BIND="0.0.0.0"
 REF=""
 SKIP_PREREQS=0
 NO_LAUNCH=0
+NO_AUTH=0
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -58,6 +61,7 @@ while [[ $# -gt 0 ]]; do
         --ref) REF="$2"; shift 2 ;;
         --no-prereqs) SKIP_PREREQS=1; shift ;;
         --no-launch) NO_LAUNCH=1; shift ;;
+        --no-auth) NO_AUTH=1; shift ;;
         --help|-h) usage ;;
         *) die "unknown flag: $1 (try --help)" ;;
     esac
@@ -138,13 +142,41 @@ if [[ "$SKIP_PREREQS" -eq 0 ]]; then
     fi
 fi
 
+# --- auth token (LAN exposure defaults to ON) ------------------------------
+# A 0.0.0.0 bind reaches the per-session ttyd shells as well as the
+# dashboard, so default to a bearer token. Respect a pre-set
+# TMUX_BROWSE_TOKEN; honor --no-auth as an explicit opt-out.
+AUTH_TOKEN=""
+if [[ "$NO_AUTH" -eq 0 ]]; then
+    if [[ -n "${TMUX_BROWSE_TOKEN:-}" ]]; then
+        AUTH_TOKEN="$TMUX_BROWSE_TOKEN"
+    else
+        AUTH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    fi
+fi
+
 # --- launch ----------------------------------------------------------------
 if [[ "$NO_LAUNCH" -eq 1 ]]; then
     say "Install complete. To start the server:"
-    printf '\n    cd %s && python3 tmux_browse.py serve --port %s --bind %s\n\n' \
-        "$INSTALL_DIR" "$PORT" "$BIND"
+    if [[ -n "$AUTH_TOKEN" ]]; then
+        printf '\n    cd %s && TMUX_BROWSE_TOKEN=%s python3 tmux_browse.py serve --port %s --bind %s\n' \
+            "$INSTALL_DIR" "$AUTH_TOKEN" "$PORT" "$BIND"
+        printf '    then open: http://<this-host-ip>:%s/?token=%s\n\n' "$PORT" "$AUTH_TOKEN"
+    else
+        warn "no auth (--no-auth): anyone on the network can control every session and open a shell"
+        printf '\n    cd %s && python3 tmux_browse.py serve --port %s --bind %s\n\n' \
+            "$INSTALL_DIR" "$PORT" "$BIND"
+    fi
     exit 0
 fi
 
+if [[ -n "$AUTH_TOKEN" ]]; then
+    # Pass via the environment so the token never lands in `ps`/argv.
+    export TMUX_BROWSE_TOKEN="$AUTH_TOKEN"
+    say "Auth enabled — open this once to set the cookie:"
+    printf '\n    http://<this-host-ip>:%s/?token=%s\n\n' "$PORT" "$AUTH_TOKEN"
+else
+    warn "Launching WITHOUT auth (--no-auth): anyone reaching ${BIND}:${PORT} can control every session and open a shell"
+fi
 say "Starting the dashboard on http://${BIND}:${PORT}/"
 exec python3 tmux_browse.py serve --port "$PORT" --bind "$BIND"
