@@ -230,7 +230,19 @@ class SecurityHeadersTests(unittest.TestCase):
         keys = {k for k, _ in server.Handler._SECURITY_HEADERS}
         self.assertEqual(
             keys,
-            {"X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options"})
+            {"X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options",
+             "Content-Security-Policy"})
+
+    def test_csp_uses_only_safe_directives(self):
+        csp = dict(server.Handler._SECURITY_HEADERS)["Content-Security-Policy"]
+        self.assertIn("frame-ancestors 'self'", csp)
+        self.assertIn("object-src 'none'", csp)
+        self.assertIn("base-uri 'self'", csp)
+        # Must NOT restrict scripts/styles — that would break the inline
+        # <style>/<script> bundle and extension UI blocks.
+        self.assertNotIn("script-src", csp)
+        self.assertNotIn("style-src", csp)
+        self.assertNotIn("default-src", csp)
 
 
 class _RedirectShim:
