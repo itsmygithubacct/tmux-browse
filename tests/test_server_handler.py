@@ -184,6 +184,25 @@ class BuildAllowedHostsTests(unittest.TestCase):
         self.assertIn("dash.example.com", allowed)
         self.assertIn("tb.local", allowed)
 
+    def test_primary_outbound_ip_included_when_available(self):
+        # On a host with any default route the primary LAN IP must be in
+        # the allow-set so a LAN client reaching us by IP isn't rejected.
+        primary = server._primary_outbound_ip()
+        if primary is None:
+            self.skipTest("no routable interface in this environment")
+        self.assertIn(primary.lower(), server._build_allowed_hosts("0.0.0.0"))
+
+
+class PrimaryOutboundIpTests(unittest.TestCase):
+
+    def test_returns_ip_or_none(self):
+        result = server._primary_outbound_ip()
+        if result is not None:
+            # Looks like a dotted-quad; never loopback (we connect outward).
+            parts = result.split(".")
+            self.assertEqual(len(parts), 4)
+            self.assertTrue(all(p.isdigit() for p in parts))
+
 
 class UnexpectedErrorTests(unittest.TestCase):
 

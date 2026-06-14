@@ -141,6 +141,25 @@ def _host_without_port(host_header: str) -> str:
     return h
 
 
+def _primary_outbound_ip() -> str | None:
+    """Best-effort primary LAN IP of this host.
+
+    ``getaddrinfo(gethostname())`` misses the LAN address on hosts whose
+    hostname isn't in ``/etc/hosts`` (common on containers and minimal
+    SBC images) — there it resolves only to ``127.0.1.1`` or fails. A UDP
+    socket "connected" to a routable address exposes the kernel's chosen
+    source IP without sending a packet, which is the address a LAN client
+    actually reaches us on. Returns None if there's no route.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(0.2)
+            s.connect(("203.0.113.1", 9))  # TEST-NET-3; never routed off-LAN
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
 def _build_allowed_hosts(bind: str) -> frozenset[str] | None:
     """Compute the set of acceptable ``Host`` values, or None when the
     guard is disabled via ``TMUX_BROWSE_DISABLE_HOST_CHECK``."""
@@ -163,6 +182,12 @@ def _build_allowed_hosts(bind: str) -> frozenset[str] | None:
             allowed.add(str(info[4][0]).lower())
     except OSError:
         pass
+    # Fallback for hosts where gethostname() doesn't resolve to the LAN
+    # address (containers, minimal SBC images) — otherwise a legitimate
+    # LAN client reaching us by IP would be rejected by the guard.
+    primary = _primary_outbound_ip()
+    if primary:
+        allowed.add(primary.lower())
     extra = os.environ.get("TMUX_BROWSE_ALLOWED_HOSTS", "")
     for item in extra.replace(",", " ").split():
         allowed.add(item.strip().lower())
