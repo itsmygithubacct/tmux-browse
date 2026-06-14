@@ -89,6 +89,32 @@ class UnlockTokenTests(_LockedConfigMixin, unittest.TestCase):
         t = server._issue_unlock_token()
         self.assertTrue(server._unlock_token_valid(t))
 
+    def test_rotating_password_revokes_existing_tokens(self):
+        # Unlock to get a token, then set a NEW password while unlocked.
+        # The old token must no longer be valid — rotation revokes grants.
+        token = server._issue_unlock_token()
+        self.assertTrue(server._unlock_token_valid(token))
+        fake = _FakeHandler(headers={"X-TB-Unlock-Token": token})
+        server.routes_config.h_config_lock_set(
+            fake, urlparse("/api/config-lock"), {"password": "newsecret"})
+        self.assertEqual(fake.status, 200)
+        self.assertTrue(fake.payload["locked"])
+        self.assertFalse(server._unlock_token_valid(token),
+                         "rotating the lock password must revoke old tokens")
+        # The new secret is what's now stored.
+        self.assertEqual(
+            cfg.CONFIG_LOCK_FILE.read_text().strip(),
+            hashlib.sha256(b"newsecret").hexdigest())
+
+    def test_clearing_lock_revokes_existing_tokens(self):
+        token = server._issue_unlock_token()
+        fake = _FakeHandler(headers={"X-TB-Unlock-Token": token})
+        server.routes_config.h_config_lock_set(
+            fake, urlparse("/api/config-lock"), {"password": ""})
+        self.assertEqual(fake.status, 200)
+        self.assertFalse(fake.payload["locked"])
+        self.assertFalse(server._unlock_token_valid(token))
+
 
 class MutationGateTests(_LockedConfigMixin, unittest.TestCase):
     """Core mutation endpoints require a valid unlock token when locked."""

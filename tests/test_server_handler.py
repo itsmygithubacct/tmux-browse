@@ -1,6 +1,7 @@
 """Low-level Handler guards around malformed input and late failures."""
 
 import io
+import os
 import socket
 import sys
 import unittest
@@ -74,6 +75,278 @@ class ReadJsonTests(unittest.TestCase):
         with self.assertRaises(UsageError):
             server.Handler._read_json(shim)
         self.assertIsNone(conn.timeout)
+
+
+class HostWithoutPortTests(unittest.TestCase):
+
+    def test_bare_name(self):
+        self.assertEqual(server._host_without_port("example.com"), "example.com")
+
+    def test_name_with_port(self):
+        self.assertEqual(server._host_without_port("example.com:8096"), "example.com")
+
+    def test_ipv4_with_port(self):
+        self.assertEqual(server._host_without_port("127.0.0.1:8096"), "127.0.0.1")
+
+    def test_ipv6_bracketed_with_port(self):
+        self.assertEqual(server._host_without_port("[::1]:8096"), "::1")
+
+    def test_ipv6_bracketed_no_port(self):
+        self.assertEqual(server._host_without_port("[::1]"), "::1")
+
+    def test_empty(self):
+        self.assertEqual(server._host_without_port(""), "")
+
+
+class _RebindShim:
+    """Minimal stand-in for a Handler exercising ``_rebind_gate``."""
+
+    def __init__(self, *, allowed, headers, path="/api/session/type"):
+        self.server = type("S", (), {"allowed_hosts": allowed})()
+        self.headers = headers
+        self.path = path
+        self.sent = []
+
+    def _send_json(self, obj, status=200):
+        self.sent.append((status, obj))
+
+
+class RebindGateTests(unittest.TestCase):
+
+    ALLOWED = frozenset({"localhost", "127.0.0.1", "192.168.50.50"})
+
+    def test_disabled_when_allowed_is_none(self):
+        shim = _RebindShim(allowed=None, headers={"Host": "evil.example"})
+        self.assertTrue(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent, [])
+
+    def test_allows_known_host(self):
+        shim = _RebindShim(allowed=self.ALLOWED, headers={"Host": "127.0.0.1:8096"})
+        self.assertTrue(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent, [])
+
+    def test_rejects_unknown_host(self):
+        shim = _RebindShim(allowed=self.ALLOWED, headers={"Host": "attacker.test:8096"})
+        self.assertFalse(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent[0][0], 403)
+
+    def test_rejects_cross_origin_even_with_allowed_host(self):
+        # The classic rebinding/CSRF shape: Host looks right but the page
+        # driving the request lives on the attacker's origin.
+        shim = _RebindShim(
+            allowed=self.ALLOWED,
+            headers={"Host": "127.0.0.1:8096",
+                     "Origin": "http://attacker.test"})
+        self.assertFalse(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent[0][0], 403)
+
+    def test_allows_same_origin(self):
+        shim = _RebindShim(
+            allowed=self.ALLOWED,
+            headers={"Host": "192.168.50.50:8096",
+                     "Origin": "http://192.168.50.50:8096"})
+        self.assertTrue(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent, [])
+
+    def test_open_path_is_never_gated(self):
+        shim = _RebindShim(
+            allowed=self.ALLOWED, headers={"Host": "attacker.test"},
+            path="/health")
+        self.assertTrue(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent, [])
+
+
+class BuildAllowedHostsTests(unittest.TestCase):
+
+    def setUp(self):
+        for k in ("TMUX_BROWSE_DISABLE_HOST_CHECK", "TMUX_BROWSE_ALLOWED_HOSTS"):
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        self.setUp()
+
+    def test_disabled_returns_none(self):
+        os.environ["TMUX_BROWSE_DISABLE_HOST_CHECK"] = "1"
+        self.assertIsNone(server._build_allowed_hosts("0.0.0.0"))
+
+    def test_always_includes_loopback(self):
+        allowed = server._build_allowed_hosts("0.0.0.0")
+        self.assertIn("localhost", allowed)
+        self.assertIn("127.0.0.1", allowed)
+
+    def test_concrete_bind_is_allowed(self):
+        allowed = server._build_allowed_hosts("192.168.50.50")
+        self.assertIn("192.168.50.50", allowed)
+
+    def test_extra_hosts_from_env(self):
+        os.environ["TMUX_BROWSE_ALLOWED_HOSTS"] = "dash.example.com, tb.local"
+        allowed = server._build_allowed_hosts("0.0.0.0")
+        self.assertIn("dash.example.com", allowed)
+        self.assertIn("tb.local", allowed)
+
+    def test_primary_outbound_ip_included_when_available(self):
+        # On a host with any default route the primary LAN IP must be in
+        # the allow-set so a LAN client reaching us by IP isn't rejected.
+        primary = server._primary_outbound_ip()
+        if primary is None:
+            self.skipTest("no routable interface in this environment")
+        self.assertIn(primary.lower(), server._build_allowed_hosts("0.0.0.0"))
+
+
+class PrimaryOutboundIpTests(unittest.TestCase):
+
+    def test_returns_ip_or_none(self):
+        result = server._primary_outbound_ip()
+        if result is not None:
+            # Looks like a dotted-quad; never loopback (we connect outward).
+            parts = result.split(".")
+            self.assertEqual(len(parts), 4)
+            self.assertTrue(all(p.isdigit() for p in parts))
+
+
+class _HeaderRecorderShim:
+    """Records send_header calls for the _emit_security_headers test."""
+
+    _SECURITY_HEADERS = server.Handler._SECURITY_HEADERS
+
+    def __init__(self):
+        self.headers_sent = []
+
+    def send_header(self, key, value):
+        self.headers_sent.append((key, value))
+
+
+class SecurityHeadersTests(unittest.TestCase):
+
+    def test_emits_expected_hardening_headers(self):
+        shim = _HeaderRecorderShim()
+        server.Handler._emit_security_headers(shim)
+        sent = dict(shim.headers_sent)
+        self.assertEqual(sent.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(sent.get("Referrer-Policy"), "no-referrer")
+        self.assertEqual(sent.get("X-Frame-Options"), "SAMEORIGIN")
+
+    def test_security_headers_constant_is_complete(self):
+        keys = {k for k, _ in server.Handler._SECURITY_HEADERS}
+        self.assertEqual(
+            keys,
+            {"X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options",
+             "Content-Security-Policy"})
+
+    def test_csp_uses_only_safe_directives(self):
+        csp = dict(server.Handler._SECURITY_HEADERS)["Content-Security-Policy"]
+        self.assertIn("frame-ancestors 'self'", csp)
+        self.assertIn("object-src 'none'", csp)
+        self.assertIn("base-uri 'self'", csp)
+        # Must NOT restrict scripts/styles — that would break the inline
+        # <style>/<script> bundle and extension UI blocks.
+        self.assertNotIn("script-src", csp)
+        self.assertNotIn("style-src", csp)
+        self.assertNotIn("default-src", csp)
+
+
+class _RedirectShim:
+    """Captures the 302 a token-strip redirect would send."""
+
+    def __init__(self, path, *, tls=False):
+        self.path = path
+        self.server = type("S", (), {
+            "tls_paths": (Path("c"), Path("k")) if tls else None})()
+        self.status = None
+        self.headers_sent = {}
+        self.ended = False
+
+    def send_response(self, code):
+        self.status = code
+
+    def send_header(self, key, value):
+        self.headers_sent[key] = value
+
+    def end_headers(self):
+        self.ended = True
+
+
+class TokenStripRedirectTests(unittest.TestCase):
+
+    def _redirect(self, path, **kw):
+        shim = _RedirectShim(path, **kw)
+        sent = server.Handler._maybe_strip_token_redirect(shim, "tok123")
+        return shim, sent
+
+    def _location_query(self, shim):
+        from urllib.parse import parse_qs as _pq, urlparse as _up
+        return _pq(_up(shim.headers_sent["Location"]).query, keep_blank_values=True)
+
+    def test_non_root_path_does_not_redirect(self):
+        shim, sent = self._redirect("/api/sessions?token=tok123")
+        self.assertFalse(sent)
+        self.assertIsNone(shim.status)
+
+    def test_root_without_token_does_not_redirect(self):
+        shim, sent = self._redirect("/?foo=1")
+        self.assertFalse(sent)
+
+    def test_token_only_redirects_to_clean_root(self):
+        shim, sent = self._redirect("/?token=tok123")
+        self.assertTrue(sent)
+        self.assertEqual(shim.status, 302)
+        self.assertEqual(shim.headers_sent["Location"], "/")
+        self.assertIn("tb_auth=tok123", shim.headers_sent["Set-Cookie"])
+
+    def test_other_params_preserved_token_dropped(self):
+        shim, _ = self._redirect("/?token=tok123&foo=1&bar=2")
+        q = self._location_query(shim)
+        self.assertNotIn("token", q)
+        self.assertEqual(q["foo"], ["1"])
+        self.assertEqual(q["bar"], ["2"])
+
+    def test_special_chars_in_value_are_reencoded(self):
+        # Regression: a value containing & must survive the round-trip as
+        # one param, not split into two on the redirect target.
+        shim, _ = self._redirect("/?token=tok123&q=a%26b%3Dc")
+        q = self._location_query(shim)
+        self.assertEqual(q["q"], ["a&b=c"])
+
+    def test_blank_valued_param_preserved(self):
+        shim, _ = self._redirect("/?token=tok123&debug=")
+        q = self._location_query(shim)
+        self.assertIn("debug", q)
+
+    def test_secure_cookie_when_tls(self):
+        shim, _ = self._redirect("/?token=tok123", tls=True)
+        self.assertIn("Secure", shim.headers_sent["Set-Cookie"])
+
+
+class StartupSecurityWarningTests(unittest.TestCase):
+
+    def test_loopback_bind_has_no_warnings(self):
+        for bind in ("127.0.0.1", "localhost", "::1"):
+            self.assertEqual(
+                server._startup_security_warnings(bind, None, None), [],
+                f"loopback bind {bind!r} should not warn")
+
+    def test_wildcard_bind_warns_about_unauthenticated_ttyd(self):
+        warns = server._startup_security_warnings("0.0.0.0", "tok", None)
+        joined = " ".join(warns).lower()
+        self.assertIn("ttyd", joined)
+        self.assertIn("not protected", joined)
+
+    def test_open_dashboard_warning_only_when_auth_off(self):
+        with_auth = server._startup_security_warnings("0.0.0.0", "tok", None)
+        without_auth = server._startup_security_warnings("0.0.0.0", None, None)
+        self.assertFalse(any("no auth" in w for w in with_auth))
+        self.assertTrue(any("no auth" in w for w in without_auth))
+
+    def test_plain_http_warning_only_without_tls(self):
+        no_tls = server._startup_security_warnings("0.0.0.0", "tok", None)
+        with_tls = server._startup_security_warnings(
+            "0.0.0.0", "tok", (Path("c"), Path("k")))
+        self.assertTrue(any("plain http" in w.lower() for w in no_tls))
+        self.assertFalse(any("plain http" in w.lower() for w in with_tls))
+
+    def test_concrete_lan_ip_is_treated_as_exposed(self):
+        warns = server._startup_security_warnings("192.168.50.50", "tok", None)
+        self.assertTrue(warns)
 
 
 class UnexpectedErrorTests(unittest.TestCase):

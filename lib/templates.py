@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -31,6 +30,29 @@ _SLOTS: tuple[str, ...] = (
 )
 
 _SLOT_RE = re.compile(r"<!--slot:([a-z_][a-z0-9_]*)-->")
+
+
+def known_slots() -> frozenset[str]:
+    """The template slots extensions may fill (the authoritative set)."""
+    return frozenset(_SLOTS)
+
+
+def validate_ui_blocks(ui_blocks: dict[str, str] | None) -> None:
+    """Raise ``ValueError`` if any provided block targets a slot the
+    template doesn't define.
+
+    Enforces the contract documented above: an ``ui_blocks.html`` typo
+    (e.g. ``topbar_extra`` for ``topbar_extras``) fails loudly at startup
+    rather than silently landing nothing on the page — which is otherwise
+    near-impossible for an extension author to debug.
+    """
+    if not ui_blocks:
+        return
+    unknown = sorted(set(ui_blocks) - set(_SLOTS))
+    if unknown:
+        raise ValueError(
+            "extension UI block(s) target unknown template slot(s): "
+            f"{unknown}; known slots are {sorted(_SLOTS)}")
 
 
 def _apply_slots(html: str, ui_blocks: dict[str, str] | None) -> str:

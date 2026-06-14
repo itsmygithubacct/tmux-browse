@@ -50,6 +50,13 @@ from lib.errors import TBError
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    if not (1 <= args.port <= 65535):
+        # argparse only enforces int-ness; catch the out-of-range case
+        # here with a clean message instead of letting socket.bind raise
+        # an OverflowError traceback deep in serve().
+        print(f"error: --port must be between 1 and 65535 (got {args.port})",
+              file=sys.stderr)
+        return 2
     if not args.skip_checks:
         missing = doctor.required_missing()
         if missing:
