@@ -1115,6 +1115,14 @@ def serve(bind: str, port: int, verbose: bool = False,
     except RegistryConflict as e:
         print(f"  extensions: FATAL — {e}")
         raise
+    # Fail loudly when an extension fills a template slot that doesn't
+    # exist (almost always an ui_blocks.html typo). Without this the
+    # block silently vanishes from the page, which is near-undebuggable.
+    try:
+        templates.validate_ui_blocks(httpd.extension_registry.ui_blocks)
+    except ValueError as e:
+        print(f"  extensions: FATAL — {e}")
+        raise
     loaded_names = sorted(
         e["name"] for e in extensions.status()
         if e["enabled"] and e["installed"] and not e["last_error"]
