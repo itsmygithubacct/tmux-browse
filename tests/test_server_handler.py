@@ -113,7 +113,7 @@ class _RebindShim:
 
 class RebindGateTests(unittest.TestCase):
 
-    ALLOWED = frozenset({"localhost", "127.0.0.1", "192.168.1.154"})
+    ALLOWED = frozenset({"localhost", "127.0.0.1", "192.168.50.50"})
 
     def test_disabled_when_allowed_is_none(self):
         shim = _RebindShim(allowed=None, headers={"Host": "evil.example"})
@@ -143,8 +143,8 @@ class RebindGateTests(unittest.TestCase):
     def test_allows_same_origin(self):
         shim = _RebindShim(
             allowed=self.ALLOWED,
-            headers={"Host": "192.168.1.154:8096",
-                     "Origin": "http://192.168.1.154:8096"})
+            headers={"Host": "192.168.50.50:8096",
+                     "Origin": "http://192.168.50.50:8096"})
         self.assertTrue(server.Handler._rebind_gate(shim))
         self.assertEqual(shim.sent, [])
 
@@ -175,8 +175,8 @@ class BuildAllowedHostsTests(unittest.TestCase):
         self.assertIn("127.0.0.1", allowed)
 
     def test_concrete_bind_is_allowed(self):
-        allowed = server._build_allowed_hosts("192.168.1.154")
-        self.assertIn("192.168.1.154", allowed)
+        allowed = server._build_allowed_hosts("192.168.50.50")
+        self.assertIn("192.168.50.50", allowed)
 
     def test_extra_hosts_from_env(self):
         os.environ["TMUX_BROWSE_ALLOWED_HOSTS"] = "dash.example.com, tb.local"
@@ -345,7 +345,7 @@ class StartupSecurityWarningTests(unittest.TestCase):
         self.assertFalse(any("plain http" in w.lower() for w in with_tls))
 
     def test_concrete_lan_ip_is_treated_as_exposed(self):
-        warns = server._startup_security_warnings("192.168.1.154", "tok", None)
+        warns = server._startup_security_warnings("192.168.50.50", "tok", None)
         self.assertTrue(warns)
 
 
