@@ -160,6 +160,46 @@ def _primary_outbound_ip() -> str | None:
         return None
 
 
+def _bind_is_loopback(bind: str) -> bool:
+    """True when ``bind`` only exposes the dashboard on the local host.
+
+    An empty bind and the wildcards ``0.0.0.0`` / ``::`` are network-facing.
+    """
+    return (bind or "").strip().lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def _startup_security_warnings(bind: str, expected_token: str | None,
+                               tls_paths: tuple[Path, Path] | None) -> list[str]:
+    """Lines warning the operator about network exposure at startup.
+
+    The per-session ttyd terminals bind to the same address as the
+    dashboard but are NOT protected by the dashboard token — so a
+    non-loopback bind exposes raw shells to anyone who can reach the
+    ttyd port range, independently of dashboard auth. This is easy to
+    miss (the LAN quickstart binds 0.0.0.0), so surface it loudly.
+    Returns an empty list for a loopback bind.
+    """
+    if _bind_is_loopback(bind):
+        return []
+    warnings = [
+        "per-session ttyd terminals are reachable on this address and are "
+        "NOT protected by the dashboard token — anyone who can reach the "
+        f"ttyd port range ({config.TTYD_PORT_START}-{config.TTYD_PORT_END}) "
+        "gets an unauthenticated shell.",
+    ]
+    if not expected_token:
+        warnings.append(
+            "the dashboard itself has no auth (--auth / TMUX_BROWSE_TOKEN "
+            "unset), so any reachable client can control every session.")
+    if tls_paths is None:
+        warnings.append(
+            "traffic is plain HTTP and can be sniffed on the network.")
+    warnings.append(
+        "to lock this down: bind 127.0.0.1 and tunnel in over SSH, or put "
+        "the stack behind an authenticating TLS reverse proxy.")
+    return warnings
+
+
 def _build_allowed_hosts(bind: str) -> frozenset[str] | None:
     """Compute the set of acceptable ``Host`` values, or None when the
     guard is disabled via ``TMUX_BROWSE_DISABLE_HOST_CHECK``."""
@@ -1047,6 +1087,11 @@ def serve(bind: str, port: int, verbose: bool = False,
     else:
         print(f"  host-guard: ENABLED (DNS-rebinding/cross-origin) — "
               f"allowed hosts: {', '.join(sorted(allowed_hosts))}")
+    security_warnings = _startup_security_warnings(bind, expected_token, tls_paths)
+    if security_warnings:
+        print("  ⚠ SECURITY:")
+        for line in security_warnings:
+            print(f"    - {line}")
 
     # Load optional extensions. A failing extension is logged and
     # skipped; a route / verb / slot collision with core is fatal.
