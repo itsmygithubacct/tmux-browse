@@ -15,6 +15,17 @@ When enabled, every HTTP endpoint requires one of:
 
 The ``/health`` endpoint remains open so monitoring still works.
 
+**DNS-rebinding / cross-origin guard (separate from auth).** Independent
+of the token, the server rejects requests whose ``Host`` or ``Origin``
+names a host it isn't serving (see ``lib.server._rebind_gate``). This
+stops a web page the operator visits from rebinding its hostname to the
+dashboard's IP and driving mutating endpoints — which matters most in the
+auth-disabled default. The allow-set is loopback + this host's
+hostname(s) + local interface IPs + the bind address. Reverse-proxy or
+Tailscale/mDNS names must be added via ``TMUX_BROWSE_ALLOWED_HOSTS``
+(comma/space separated); ``TMUX_BROWSE_DISABLE_HOST_CHECK=1`` turns the
+guard off entirely.
+
 **Caveat:** this guards the dashboard HTTP surface only. The per-session
 ttyd processes spawned by the dashboard run on their own ports (7700-7799)
 and are NOT protected by this token. If you need authenticated terminals,
