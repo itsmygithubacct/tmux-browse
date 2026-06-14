@@ -55,14 +55,17 @@ def h_config_lock_set(handler: "Handler", _parsed: ParseResult, body: dict) -> N
     if not handler._check_unlock():
         return
     password = (body.get("password") or "").strip()
+    # Any change to the lock secret — setting, rotating, or clearing it —
+    # revokes every previously-issued unlock token. Otherwise rotating the
+    # password to cut off access would leave old grants valid for the rest
+    # of their 12h TTL.
+    _unlock_tokens.clear()
     if not password:
         # Clear the lock
         try:
             conf.CONFIG_LOCK_FILE.unlink(missing_ok=True)
         except OSError:
             pass
-        # Drop every issued token on clear so they can't be reused.
-        _unlock_tokens.clear()
         handler._send_json({"ok": True, "locked": False})
         return
     hashed = hashlib.sha256(password.encode("utf-8")).hexdigest()
