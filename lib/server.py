@@ -67,12 +67,16 @@ class DashboardServer(ThreadingHTTPServer):
                  verbose: bool = False,
                  expected_token: str | None = None,
                  tls_paths: tuple[Path, Path] | None = None,
-                 ttyd_bind_addr: str | None = None) -> None:
+                 ttyd_bind_addr: str | None = None,
+                 allowed_hosts: frozenset[str] | None = None) -> None:
         super().__init__(server_address, RequestHandlerClass)
         self.verbose = verbose
         self.expected_token = expected_token
         self.tls_paths = tls_paths
         self.ttyd_bind_addr = ttyd_bind_addr
+        # None => DNS-rebinding/cross-origin guard disabled. Otherwise the
+        # set of acceptable Host/Origin hostnames (see _build_allowed_hosts).
+        self.allowed_hosts = allowed_hosts
         # Populated by the agent extension's startup hook when enabled.
         self.scheduler = None
         # Extensions load once at server start; Handler reads their
@@ -91,6 +95,78 @@ _JSON_READ_TIMEOUT_SEC = 5.0
 
 def _redact_token(s: str) -> str:
     return _TOKEN_PARAM_RE.sub(r"\1token=<redacted>", s)
+
+
+# ---------------------------------------------------------------------------
+# DNS-rebinding / cross-origin guard
+# ---------------------------------------------------------------------------
+#
+# Auth is OFF by default and, even when on, the cookie path means a
+# browser will attach credentials to requests a malicious page triggers.
+# A page the operator visits can rebind its own hostname to the
+# dashboard's IP (127.0.0.1 or the LAN address) and then drive mutating
+# endpoints — ``/api/session/type`` is arbitrary command execution. The
+# server doesn't enforce ``Content-Type``, so such a request can be sent
+# as a CORS-"simple" request that skips the preflight.
+#
+# Two cheap checks defeat this without touching the auth model:
+#   * Origin: a cross-origin browser request carries an ``Origin`` whose
+#     host is the attacker's — reject when it isn't an allowed host.
+#   * Host: a rebinding request carries the attacker's hostname in
+#     ``Host`` (that's the whole mechanism) — reject when it isn't allowed.
+#
+# The allow-set is the loopback names, this host's hostname(s), every
+# local interface IP, the concrete bind address, plus anything in
+# ``TMUX_BROWSE_ALLOWED_HOSTS`` (comma/space separated) for reverse-proxy
+# or Tailscale/mDNS names. Set ``TMUX_BROWSE_DISABLE_HOST_CHECK=1`` to
+# opt out entirely (e.g. when a trusted proxy already validates Host).
+
+
+def _host_without_port(host_header: str) -> str:
+    """Return the hostname portion of a ``Host``/``Origin`` netloc, port
+    stripped. Handles bare names, ``name:port``, ``[::1]`` and
+    ``[::1]:port``. Returns "" for empty input."""
+    h = (host_header or "").strip()
+    if not h:
+        return ""
+    if h.startswith("["):  # bracketed IPv6 literal, optionally :port
+        end = h.find("]")
+        return h[1:end] if end != -1 else h[1:]
+    # A single colon with a numeric tail is host:port; anything else
+    # (bare IPv6, no colon) is returned verbatim.
+    if h.count(":") == 1:
+        name, _, port = h.rpartition(":")
+        if port.isdigit():
+            return name
+    return h
+
+
+def _build_allowed_hosts(bind: str) -> frozenset[str] | None:
+    """Compute the set of acceptable ``Host`` values, or None when the
+    guard is disabled via ``TMUX_BROWSE_DISABLE_HOST_CHECK``."""
+    if (os.environ.get("TMUX_BROWSE_DISABLE_HOST_CHECK", "").strip().lower()
+            in ("1", "true", "yes")):
+        return None
+    allowed = {"localhost", "127.0.0.1", "::1"}
+    try:
+        allowed.add(socket.gethostname().lower())
+        allowed.add(socket.getfqdn().lower())
+    except OSError:
+        pass
+    b = (bind or "").strip().lower()
+    if b and b not in ("0.0.0.0", "::", ""):
+        allowed.add(b)
+    # Every IP bound to a local interface — covers the LAN address when
+    # the dashboard is bound to 0.0.0.0 and reached via that IP.
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            allowed.add(str(info[4][0]).lower())
+    except OSError:
+        pass
+    extra = os.environ.get("TMUX_BROWSE_ALLOWED_HOSTS", "")
+    for item in extra.replace(",", " ").split():
+        allowed.add(item.strip().lower())
+    return frozenset(a for a in allowed if a)
 
 
 @dataclass
@@ -675,6 +751,40 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": False, "error": "config locked"}, status=403)
         return False
 
+    # --- rebinding / cross-origin guard ------------------------------------
+
+    def _rebind_gate(self) -> bool:
+        """Reject DNS-rebinding and cross-origin browser requests.
+
+        Runs before auth (it must protect the auth-disabled default, which
+        is exactly when it matters most). Returns True when the request may
+        proceed; sends a 403 and returns False otherwise. ``/health`` and
+        favicon stay open so monitors aren't tripped.
+        """
+        allowed = getattr(self.server, "allowed_hosts", None)
+        if not allowed:
+            return True  # guard disabled
+        if auth.path_is_open(self.path):
+            return True
+        origin = self.headers.get("Origin")
+        if origin:
+            origin_host = _host_without_port(urlparse(origin).netloc).lower()
+            if origin_host and origin_host not in allowed:
+                self._send_json(
+                    {"ok": False, "error": "cross-origin request rejected"},
+                    status=403)
+                return False
+        host = _host_without_port(self.headers.get("Host", "")).lower()
+        if host and host not in allowed:
+            self._send_json(
+                {"ok": False,
+                 "error": ("host not allowed (DNS-rebinding guard); add it to "
+                           "TMUX_BROWSE_ALLOWED_HOSTS or set "
+                           "TMUX_BROWSE_DISABLE_HOST_CHECK=1")},
+                status=403)
+            return False
+        return True
+
     # --- auth --------------------------------------------------------------
 
     def _auth_gate(self) -> bool:
@@ -738,6 +848,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
         try:
+            if not self._rebind_gate():
+                return
             if not self._auth_gate():
                 return
             _touch_client(self)
@@ -760,6 +872,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         try:
+            if not self._rebind_gate():
+                return
             if not self._auth_gate():
                 return
             _touch_client(self)
@@ -853,12 +967,14 @@ def serve(bind: str, port: int, verbose: bool = False,
         print(f"  startup gc: skipped ({e})")
 
     _write_dashboard_state(bind, port)
+    allowed_hosts = _build_allowed_hosts(bind)
     httpd = DashboardServer(
         (bind, port), Handler,
         verbose=verbose,
         expected_token=expected_token,
         tls_paths=tls_paths,
         ttyd_bind_addr=bind,
+        allowed_hosts=allowed_hosts,
     )
     if tls_paths is not None:
         ctx = tls_mod.build_context(*tls_paths)
@@ -877,6 +993,11 @@ def serve(bind: str, port: int, verbose: bool = False,
         print("  auth: ENABLED (Bearer token required — see docs/dashboard.md)")
     else:
         print("  auth: disabled (any reachable client can access the dashboard)")
+    if allowed_hosts is None:
+        print("  host-guard: disabled (TMUX_BROWSE_DISABLE_HOST_CHECK set)")
+    else:
+        print(f"  host-guard: ENABLED (DNS-rebinding/cross-origin) — "
+              f"allowed hosts: {', '.join(sorted(allowed_hosts))}")
 
     # Load optional extensions. A failing extension is logged and
     # skipped; a route / verb / slot collision with core is fatal.
