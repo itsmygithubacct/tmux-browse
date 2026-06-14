@@ -92,6 +92,45 @@ class SessionStreamHubTests(unittest.TestCase):
                 hub.unsubscribe()
                 hub.unsubscribe()
 
+    def test_summary_exception_retains_payload_and_keeps_producer_alive(self):
+        # Documented resilience: a transient _session_summary failure must
+        # not bump the version, blank the last good payload, or kill the
+        # producer — subscribers keep the last state and recovery resumes.
+        state = {"raise": False,
+                 "s": SessionSummary(rows=[{"name": "a"}], tmux_unreachable=False)}
+
+        def fake_summary(*a, **k):
+            if state["raise"]:
+                raise RuntimeError("boom")
+            return state["s"]
+
+        with mock.patch.object(server, "_session_summary", fake_summary):
+            hub = _SessionStreamHub(interval=0.02)
+            v0, _ = hub.subscribe()
+            try:
+                v1, p1 = hub.wait(v0, timeout=2.0)
+                self.assertIn('"name":"a"', p1)
+
+                # Start failing: version must hold and payload must persist.
+                state["raise"] = True
+                t0 = time.monotonic()
+                v2, p2 = hub.wait(v1, timeout=0.3)
+                self.assertEqual(v2, v1)
+                self.assertEqual(p2, p1)
+                self.assertGreaterEqual(time.monotonic() - t0, 0.25)
+                self.assertIsNotNone(hub._thread)
+                self.assertTrue(hub._thread.is_alive())
+
+                # Recovery: a fresh good summary resumes version bumps.
+                state["s"] = SessionSummary(rows=[{"name": "b"}],
+                                            tmux_unreachable=False)
+                state["raise"] = False
+                v3, p3 = hub.wait(v2, timeout=2.0)
+                self.assertGreater(v3, v2)
+                self.assertIn('"name":"b"', p3)
+            finally:
+                hub.unsubscribe()
+
     def test_producer_stops_when_last_subscriber_leaves(self):
         with mock.patch.object(
                 server, "_session_summary",
