@@ -396,11 +396,8 @@ def _session_summary(merge_peers: bool = True) -> SessionSummary:
                 # the dashboard's 1Hz refresh doesn't write to
                 # extensions.json on every tick when a deterministic
                 # bug fires every time.
-                msg = f"session post-processor failed: {exc}"
-                key = (name, msg)
-                if key not in _post_processor_errors_seen:
-                    _post_processor_errors_seen.add(key)
-                    extensions.record_error(name, msg)
+                _record_post_processor_error(
+                    name, f"session post-processor failed: {exc}")
 
     return SessionSummary(rows=out, tmux_unreachable=tmux_unreachable)
 
@@ -422,10 +419,28 @@ _session_post_processors: list[tuple[str, Callable[[list[dict]], None]]] = []
 # consistently-failing post-processor would call ``record_error`` —
 # which writes to extensions.json — on every 1Hz refresh tick, both
 # flooding the file and burning disk on the dashboard's hot path.
-# An entry is added on first occurrence and never cleared (process
-# restart resets it, which is the right behavior — operator restarts
-# the dashboard once the extension fix is deployed).
+# An entry is added on first occurrence; the set is bounded (see
+# ``_record_post_processor_error``) so a post-processor failing with
+# ever-changing messages can't grow it without limit.
 _post_processor_errors_seen: set[tuple[str, str]] = set()
+
+# Cap on the dedup set. A post-processor whose exception text varies on
+# every tick (a peer address, an errno, a timestamp) would otherwise add
+# a fresh entry each second on the hot path. At the cap we reset and
+# re-throttle from scratch — worst case a handful of duplicate records.
+_MAX_POST_PROCESSOR_ERRORS_SEEN = 512
+
+
+def _record_post_processor_error(name: str, msg: str) -> None:
+    """Record a post-processor failure at most once per (name, message),
+    keeping the dedup set bounded."""
+    key = (name, msg)
+    if key in _post_processor_errors_seen:
+        return
+    if len(_post_processor_errors_seen) >= _MAX_POST_PROCESSOR_ERRORS_SEEN:
+        _post_processor_errors_seen.clear()
+    _post_processor_errors_seen.add(key)
+    extensions.record_error(name, msg)
 
 
 # ---------------------------------------------------------------------------
