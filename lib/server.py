@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
-import shutil
 import signal
 import socket
 import sys
@@ -32,21 +30,17 @@ from .server_routes import (
 )
 from . import (
     auth,
-    tasks as tasks_mod,
     config,
-    dashboard_config,
     session_logs,
     extensions,
     ports,
     sessions,
-    static,
     templates,
     tls as tls_mod,
     ttyd,
 )
 from .extensions import MergedRegistry, RegistryConflict
 from .errors import TBError, UsageError
-from .targeting import Target
 
 
 class DashboardServer(ThreadingHTTPServer):
