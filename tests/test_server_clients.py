@@ -129,6 +129,45 @@ class ClientRoutesTests(unittest.TestCase):
 
     # --- inbox read clears ------------------------------------------------
 
+    # --- stale-client pruning --------------------------------------------
+
+    def test_prune_drops_idle_clients_and_inboxes(self):
+        now = 1_000_000
+        server._clients["fresh"] = {"client_id": "fresh", "ip": "1.1.1.1",
+                                    "last_seen": now}
+        server._clients["stale"] = {"client_id": "stale", "ip": "2.2.2.2",
+                                    "last_seen": now - server._CLIENT_TIMEOUT - 1}
+        server._client_inbox["stale"] = [{"x": 1}]
+        server._prune_clients(now)
+        self.assertIn("fresh", server._clients)
+        self.assertNotIn("stale", server._clients)
+        self.assertNotIn("stale", server._client_inbox)
+
+    def test_touch_new_client_prunes_stale_even_without_clients_poll(self):
+        # Simulate a long-lived dashboard where /api/clients is never hit
+        # (Connected pane disabled): a stale entry must still be swept when
+        # a *new* client registers via any request.
+        server._clients["stale"] = {"client_id": "stale", "ip": "9.9.9.9",
+                                    "last_seen": 0}
+        # _touch_client uses real time.time(); the stale entry (last_seen=0)
+        # is far past the timeout.
+        h = _HandlerShim(ip="10.0.0.99", ua="new")
+        server._touch_client(h)
+        self.assertNotIn("stale", server._clients,
+                         "registering a new client should sweep stale ones")
+
+    def test_touch_existing_client_does_not_prune(self):
+        # A heartbeat from an already-known client must not trigger a sweep
+        # (keeps the hot path cheap). The stale entry stays until a new
+        # client or an /api/clients poll prunes it.
+        h = _HandlerShim(ip="10.0.0.1", ua="known")
+        cid = server._touch_client(h)
+        server._clients["stale"] = {"client_id": "stale", "ip": "9.9.9.9",
+                                    "last_seen": 0}
+        server._touch_client(h)  # same fingerprint -> not a new client
+        self.assertIn("stale", server._clients)
+        self.assertIn(cid, server._clients)
+
     def test_inbox_pop_clears_messages(self):
         sender, _ = self._register("10.0.0.1")
         target, target_id = self._register("10.0.0.2")
