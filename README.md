@@ -32,6 +32,12 @@ curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bi
 curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_lan.sh | bash
 ```
 
+Because a `0.0.0.0` bind also exposes the per-session terminals, the LAN
+quickstart **generates a bearer token and launches with it by default**,
+printing a `…/?token=<token>` URL to open once. Pass `--no-auth` to opt
+out, or set `TMUX_BROWSE_TOKEN` to supply your own. The localhost
+quickstart binds `127.0.0.1` and stays auth-free.
+
 The quickstart scripts pull the bundled `tmux-cli` core automatically. Cloning
 the dashboard by hand instead? Add `--recurse-submodules` (or run `make init`
 afterwards) so the `tmux-cli/` submodule is fetched:
@@ -250,9 +256,13 @@ pocket is just a window onto the workstation.
 
 ### Before exposing on a LAN
 
-The default build is **unauthenticated plaintext HTTP**. Anyone on the
-network segment can open any of your tmux panes. Turn on both gates
-before using this outside of a trusted single-user LAN:
+A bare `python3 tmux_browse.py serve` (and the localhost quickstart) is
+**unauthenticated plaintext HTTP** — fine on loopback, not on a shared
+network. `quickstart_lan.sh` already turns on a bearer token; the steps
+below add TLS and also apply to the manual `serve` path. Without a token,
+anyone who reaches the dashboard — or any of the per-session ttyd ports,
+which the token does **not** cover — can open your shells. Turn on both
+gates before using this outside a trusted single-user LAN:
 
 ```bash
 # Generate a self-signed cert (one-off) + pick a token
@@ -266,6 +276,15 @@ python3 tmux_browse.py serve --cert cert.pem --key key.pem --auth "$TOKEN"
 ```
 
 Phones will warn about the self-signed cert — accept once and it's pinned.
+
+**DNS-rebinding guard.** Independent of auth, the server rejects requests
+whose `Host`/`Origin` it isn't serving, so a web page you visit can't
+rebind to the dashboard's address and drive it. The allow-set is
+loopback, this host's hostname, its local IPs, and the bind address.
+Reaching the dashboard by another name — behind a reverse proxy, or via
+Tailscale/mDNS — needs that name added:
+`TMUX_BROWSE_ALLOWED_HOSTS=dash.example.com,tb.local`. Set
+`TMUX_BROWSE_DISABLE_HOST_CHECK=1` to turn the guard off entirely.
 For a stricter setup (public network, multiple users, untrusted devices),
 front the dashboard with an authenticating reverse proxy or reach it over
 a VPN / SSH port-forward instead.
