@@ -109,6 +109,52 @@ class SessionSummaryTests(unittest.TestCase):
             assignments={"ghost": 7702}, pids={"ghost": 5})
         self.assertEqual(summary.rows, [])
 
+    # --- per-request snapshot budget (degradation branch) ----------------
+
+    def _summary_over_budget(self, *, seed_cache):
+        """Run _session_summary with the 200ms snapshot budget already
+        exhausted. Returns (summary, get_cached_snapshot_mock)."""
+        row = _tmux_row("work")
+        with ExitStack() as es:
+            p = es.enter_context
+            p(mock.patch.object(server.sessions, "server_responsive",
+                                return_value=True))
+            p(mock.patch.object(server.sessions, "list_sessions",
+                                return_value=[row]))
+            p(mock.patch.object(server.session_logs, "ensure_logging_all"))
+            p(mock.patch.object(server.session_logs, "idle_seconds",
+                                return_value=None))
+            p(mock.patch.object(server.ports, "all_assignments",
+                                return_value={"work": 7700}))
+            p(mock.patch.object(server.ttyd, "read_pid",
+                                side_effect=lambda n: None))
+            gcs = p(mock.patch.object(server.sessions, "get_cached_snapshot"))
+            p(mock.patch.object(server.sessions, "gc_snapshots"))
+            p(mock.patch.object(hi, "get_or_create_device_id",
+                                return_value="dev"))
+            p(mock.patch.object(hi, "get_hostname", return_value="h"))
+            # First perf_counter call sets the deadline; every later call is
+            # well past it, forcing the over-budget branch.
+            p(mock.patch.object(server.time, "perf_counter",
+                                side_effect=[1000.0] + [2000.0] * 20))
+            server.sessions._snapshot_cache.pop("work", None)
+            if seed_cache is not None:
+                server.sessions._snapshot_cache["work"] = (123, seed_cache)
+            try:
+                return server._session_summary(merge_peers=False), gcs
+            finally:
+                server.sessions._snapshot_cache.pop("work", None)
+
+    def test_over_budget_serves_cached_snapshot_without_recapture(self):
+        summary, gcs = self._summary_over_budget(seed_cache="STALE-SNAP")
+        self.assertEqual(summary.rows[0]["snapshot"], "STALE-SNAP")
+        gcs.assert_not_called()  # over budget: must not re-capture
+
+    def test_over_budget_empty_snapshot_when_no_cache(self):
+        summary, gcs = self._summary_over_budget(seed_cache=None)
+        self.assertEqual(summary.rows[0]["snapshot"], "")
+        gcs.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
