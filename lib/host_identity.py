@@ -14,31 +14,64 @@ peer that has paired with us still recognizes us after a reboot.
 
 from __future__ import annotations
 
+import os
 import socket
+import threading
 import uuid
 from pathlib import Path
 
 from . import config
+
+# The device_id is stable for the process lifetime, but the dashboard's
+# hot path (``_session_summary``) reads it on every request. Cache it so
+# that's a single in-memory read instead of a per-request disk stat+read.
+_cache_lock = threading.Lock()
+_cached_device_id: str | None = None
 
 
 def _device_id_path() -> Path:
     return config.STATE_DIR / "device-id"
 
 
-def get_or_create_device_id() -> str:
-    p = _device_id_path()
-    if p.exists():
-        existing = p.read_text(encoding="utf-8").strip()
-        if existing:
-            return existing
-    config.ensure_dirs()
-    did = str(uuid.uuid4())
-    p.write_text(did + "\n", encoding="utf-8")
+def _read_device_id(p: Path) -> str | None:
     try:
-        p.chmod(0o600)
+        return p.read_text(encoding="utf-8").strip() or None
     except OSError:
-        pass
-    return did
+        return None
+
+
+def _load_or_create_device_id() -> str:
+    p = _device_id_path()
+    existing = _read_device_id(p)
+    if existing:
+        return existing
+    config.ensure_dirs()
+    candidate = str(uuid.uuid4())
+    # Exclusive create with 0600 from the start: no world-readable window
+    # (the old write-then-chmod left one), and race-safe — if another
+    # process created the file between our read and open, we adopt theirs
+    # rather than clobbering it, so all callers converge on one id.
+    try:
+        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return _read_device_id(p) or candidate
+    except OSError:
+        # Can't create the file (e.g. read-only FS) — still return a
+        # usable id for this process rather than raising into a request.
+        return candidate
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(candidate + "\n")
+    return candidate
+
+
+def get_or_create_device_id() -> str:
+    global _cached_device_id
+    if _cached_device_id is not None:
+        return _cached_device_id
+    with _cache_lock:
+        if _cached_device_id is None:
+            _cached_device_id = _load_or_create_device_id()
+        return _cached_device_id
 
 
 def get_hostname() -> str:
