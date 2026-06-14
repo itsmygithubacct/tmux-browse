@@ -564,12 +564,28 @@ def _log_error_html(name: str, msg: str) -> str:
     )
 
 
+def _prune_clients(now: int) -> None:
+    """Drop clients (and their inboxes) idle past the timeout."""
+    for cid in [c for c, e in list(_clients.items())
+                if now - e.get("last_seen", 0) > _CLIENT_TIMEOUT]:
+        _clients.pop(cid, None)
+        _client_inbox.pop(cid, None)
+
+
 def _touch_client(handler: "Handler") -> str:
     """Record a client heartbeat. Returns the client_id."""
     ip = handler.client_address[0]
     ua = handler.headers.get("User-Agent", "")
     cid = _client_id(ip, ua)
     now = int(time.time())
+    if cid not in _clients:
+        # Registering a new client: opportunistically sweep stale entries.
+        # _active_clients() also prunes, but it only runs when /api/clients
+        # is polled — and the Connected-clients pane can be toggled off, so
+        # without this the dicts would grow unbounded across a long-lived
+        # dashboard's churn of client fingerprints. New-client events are
+        # rare next to heartbeats, so this stays off the hot path.
+        _prune_clients(now)
     entry = _clients.get(cid, {})
     entry["client_id"] = cid
     entry["ip"] = ip
@@ -583,20 +599,16 @@ def _touch_client(handler: "Handler") -> str:
 
 def _active_clients() -> list[dict]:
     now = int(time.time())
+    _prune_clients(now)
     result = []
-    for cid, entry in list(_clients.items()):
-        age = now - entry.get("last_seen", 0)
-        if age > _CLIENT_TIMEOUT:
-            _clients.pop(cid, None)
-            _client_inbox.pop(cid, None)
-            continue
+    for cid, entry in _clients.items():
         result.append({
             "client_id": cid,
             "ip": entry["ip"],
             "nickname": entry.get("nickname", ""),
             "last_seen": entry["last_seen"],
             "first_seen": entry.get("first_seen", 0),
-            "idle_seconds": age,
+            "idle_seconds": now - entry.get("last_seen", 0),
         })
     return sorted(result, key=lambda c: c["last_seen"], reverse=True)
 
