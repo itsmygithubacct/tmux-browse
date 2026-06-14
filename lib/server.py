@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import MappingProxyType
 from typing import Callable
-from urllib.parse import ParseResult, parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, urlencode, urlparse
 
 from .server_routes import (
     clients as routes_clients,
@@ -908,12 +908,18 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path != "/":
             return False
-        query = parse_qs(parsed.query)
+        # keep_blank_values so ``?token=x&debug=`` keeps ``debug=`` rather
+        # than silently dropping it.
+        query = parse_qs(parsed.query, keep_blank_values=True)
         if "token" not in query:
             return False
-        cleaned = [f"{k}={v}" for k, vs in query.items()
-                   if k != "token" for v in vs]
-        new_query = "&".join(cleaned)
+        # Re-encode through urlencode: parse_qs already percent-decoded the
+        # values, so joining them raw would corrupt any value containing
+        # ``&``/``=``/space (splitting it into bogus extra params on the
+        # redirect target). urlencode round-trips them correctly.
+        kept_pairs = [(k, v) for k, vs in query.items()
+                      if k != "token" for v in vs]
+        new_query = urlencode(kept_pairs)
         location = parsed.path + (f"?{new_query}" if new_query else "")
         self.send_response(302)
         self.send_header("Location", location)

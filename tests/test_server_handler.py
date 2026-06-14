@@ -233,6 +233,78 @@ class SecurityHeadersTests(unittest.TestCase):
             {"X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options"})
 
 
+class _RedirectShim:
+    """Captures the 302 a token-strip redirect would send."""
+
+    def __init__(self, path, *, tls=False):
+        self.path = path
+        self.server = type("S", (), {
+            "tls_paths": (Path("c"), Path("k")) if tls else None})()
+        self.status = None
+        self.headers_sent = {}
+        self.ended = False
+
+    def send_response(self, code):
+        self.status = code
+
+    def send_header(self, key, value):
+        self.headers_sent[key] = value
+
+    def end_headers(self):
+        self.ended = True
+
+
+class TokenStripRedirectTests(unittest.TestCase):
+
+    def _redirect(self, path, **kw):
+        shim = _RedirectShim(path, **kw)
+        sent = server.Handler._maybe_strip_token_redirect(shim, "tok123")
+        return shim, sent
+
+    def _location_query(self, shim):
+        from urllib.parse import parse_qs as _pq, urlparse as _up
+        return _pq(_up(shim.headers_sent["Location"]).query, keep_blank_values=True)
+
+    def test_non_root_path_does_not_redirect(self):
+        shim, sent = self._redirect("/api/sessions?token=tok123")
+        self.assertFalse(sent)
+        self.assertIsNone(shim.status)
+
+    def test_root_without_token_does_not_redirect(self):
+        shim, sent = self._redirect("/?foo=1")
+        self.assertFalse(sent)
+
+    def test_token_only_redirects_to_clean_root(self):
+        shim, sent = self._redirect("/?token=tok123")
+        self.assertTrue(sent)
+        self.assertEqual(shim.status, 302)
+        self.assertEqual(shim.headers_sent["Location"], "/")
+        self.assertIn("tb_auth=tok123", shim.headers_sent["Set-Cookie"])
+
+    def test_other_params_preserved_token_dropped(self):
+        shim, _ = self._redirect("/?token=tok123&foo=1&bar=2")
+        q = self._location_query(shim)
+        self.assertNotIn("token", q)
+        self.assertEqual(q["foo"], ["1"])
+        self.assertEqual(q["bar"], ["2"])
+
+    def test_special_chars_in_value_are_reencoded(self):
+        # Regression: a value containing & must survive the round-trip as
+        # one param, not split into two on the redirect target.
+        shim, _ = self._redirect("/?token=tok123&q=a%26b%3Dc")
+        q = self._location_query(shim)
+        self.assertEqual(q["q"], ["a&b=c"])
+
+    def test_blank_valued_param_preserved(self):
+        shim, _ = self._redirect("/?token=tok123&debug=")
+        q = self._location_query(shim)
+        self.assertIn("debug", q)
+
+    def test_secure_cookie_when_tls(self):
+        shim, _ = self._redirect("/?token=tok123", tls=True)
+        self.assertIn("Secure", shim.headers_sent["Set-Cookie"])
+
+
 class StartupSecurityWarningTests(unittest.TestCase):
 
     def test_loopback_bind_has_no_warnings(self):
