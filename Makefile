@@ -15,7 +15,7 @@
         uninstall-agent uninstall-agent-with-state \
         install-federation update-federation enable-federation disable-federation \
         uninstall-federation uninstall-federation-with-state \
-        preflight test ci
+        preflight test ci clean
 
 PY ?= python3
 RUN := PYTHONPATH=tmux-cli TB_PROJECT_DIR=$(CURDIR) $(PY)
@@ -46,6 +46,7 @@ help:
 	@echo "  make preflight                 check core/extension version alignment"
 	@echo "  make test                      run the dashboard test suite"
 	@echo "  make ci                        preflight + tests (what CI runs)"
+	@echo "  make clean                     remove __pycache__, *.pyc, .pytest_cache"
 	@echo ""
 	@echo "After install/update/enable/disable, restart the dashboard."
 
@@ -105,3 +106,10 @@ test:
 	$(RUN) -m unittest discover tests
 
 ci: preflight test
+
+# Remove Python bytecode caches and the pytest cache. Safe to run any
+# time; everything it deletes is regenerated on the next run.
+clean:
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+	find . -type f -name '*.pyc' -delete
+	rm -rf .pytest_cache
