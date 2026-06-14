@@ -14,10 +14,16 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
-from urllib.parse import ParseResult
+from urllib.parse import ParseResult, urlparse
 
 if TYPE_CHECKING:
     from ..server import Handler
+
+# Upper bound on a shared config URL. The legitimate sender builds
+# ``<origin>/?import-cfg=<base64-of-view-config>``; 8 KiB is generous
+# for that while keeping a hostile client from parking a large blob in
+# another client's inbox.
+_MAX_CONFIG_URL_LEN = 8192
 
 
 def h_clients(handler: "Handler", _parsed: ParseResult) -> None:
@@ -50,6 +56,19 @@ def h_clients_send_config(handler: "Handler", _parsed: ParseResult, body: dict) 
     config_url = (body.get("config_url") or "").strip()
     if not target_id or not config_url:
         handler._send_json({"ok": False, "error": "missing target or config_url"}, status=400)
+        return
+    if len(config_url) > _MAX_CONFIG_URL_LEN:
+        handler._send_json({"ok": False, "error": "config_url too long"}, status=400)
+        return
+    # Only forward http(s) URLs. The receiver merely regex-extracts the
+    # ``import-cfg`` payload today, but refusing other schemes
+    # (javascript:, data:, file:) keeps a hostile client from seeding
+    # another browser's inbox with a URL that could become dangerous if
+    # the consuming code ever navigated to it.
+    if urlparse(config_url).scheme not in ("http", "https"):
+        handler._send_json(
+            {"ok": False, "error": "config_url must be an http(s) URL"},
+            status=400)
         return
     if target_id not in _clients:
         handler._send_json({"ok": False, "error": "target client not connected"}, status=404)

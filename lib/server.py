@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
-import shutil
 import signal
 import socket
 import sys
@@ -17,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import MappingProxyType
 from typing import Callable
-from urllib.parse import ParseResult, parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, urlencode, urlparse
 
 from .server_routes import (
     clients as routes_clients,
@@ -32,21 +30,17 @@ from .server_routes import (
 )
 from . import (
     auth,
-    tasks as tasks_mod,
     config,
-    dashboard_config,
     session_logs,
     extensions,
     ports,
     sessions,
-    static,
     templates,
     tls as tls_mod,
     ttyd,
 )
 from .extensions import MergedRegistry, RegistryConflict
 from .errors import TBError, UsageError
-from .targeting import Target
 
 
 class DashboardServer(ThreadingHTTPServer):
@@ -67,12 +61,16 @@ class DashboardServer(ThreadingHTTPServer):
                  verbose: bool = False,
                  expected_token: str | None = None,
                  tls_paths: tuple[Path, Path] | None = None,
-                 ttyd_bind_addr: str | None = None) -> None:
+                 ttyd_bind_addr: str | None = None,
+                 allowed_hosts: frozenset[str] | None = None) -> None:
         super().__init__(server_address, RequestHandlerClass)
         self.verbose = verbose
         self.expected_token = expected_token
         self.tls_paths = tls_paths
         self.ttyd_bind_addr = ttyd_bind_addr
+        # None => DNS-rebinding/cross-origin guard disabled. Otherwise the
+        # set of acceptable Host/Origin hostnames (see _build_allowed_hosts).
+        self.allowed_hosts = allowed_hosts
         # Populated by the agent extension's startup hook when enabled.
         self.scheduler = None
         # Extensions load once at server start; Handler reads their
@@ -91,6 +89,143 @@ _JSON_READ_TIMEOUT_SEC = 5.0
 
 def _redact_token(s: str) -> str:
     return _TOKEN_PARAM_RE.sub(r"\1token=<redacted>", s)
+
+
+# ---------------------------------------------------------------------------
+# DNS-rebinding / cross-origin guard
+# ---------------------------------------------------------------------------
+#
+# Auth is OFF by default and, even when on, the cookie path means a
+# browser will attach credentials to requests a malicious page triggers.
+# A page the operator visits can rebind its own hostname to the
+# dashboard's IP (127.0.0.1 or the LAN address) and then drive mutating
+# endpoints — ``/api/session/type`` is arbitrary command execution. The
+# server doesn't enforce ``Content-Type``, so such a request can be sent
+# as a CORS-"simple" request that skips the preflight.
+#
+# Two cheap checks defeat this without touching the auth model:
+#   * Origin: a cross-origin browser request carries an ``Origin`` whose
+#     host is the attacker's — reject when it isn't an allowed host.
+#   * Host: a rebinding request carries the attacker's hostname in
+#     ``Host`` (that's the whole mechanism) — reject when it isn't allowed.
+#
+# The allow-set is the loopback names, this host's hostname(s), every
+# local interface IP, the concrete bind address, plus anything in
+# ``TMUX_BROWSE_ALLOWED_HOSTS`` (comma/space separated) for reverse-proxy
+# or Tailscale/mDNS names. Set ``TMUX_BROWSE_DISABLE_HOST_CHECK=1`` to
+# opt out entirely (e.g. when a trusted proxy already validates Host).
+
+
+def _host_without_port(host_header: str) -> str:
+    """Return the hostname portion of a ``Host``/``Origin`` netloc, port
+    stripped. Handles bare names, ``name:port``, ``[::1]`` and
+    ``[::1]:port``. Returns "" for empty input."""
+    h = (host_header or "").strip()
+    if not h:
+        return ""
+    if h.startswith("["):  # bracketed IPv6 literal, optionally :port
+        end = h.find("]")
+        return h[1:end] if end != -1 else h[1:]
+    # A single colon with a numeric tail is host:port; anything else
+    # (bare IPv6, no colon) is returned verbatim.
+    if h.count(":") == 1:
+        name, _, port = h.rpartition(":")
+        if port.isdigit():
+            return name
+    return h
+
+
+def _primary_outbound_ip() -> str | None:
+    """Best-effort primary LAN IP of this host.
+
+    ``getaddrinfo(gethostname())`` misses the LAN address on hosts whose
+    hostname isn't in ``/etc/hosts`` (common on containers and minimal
+    SBC images) — there it resolves only to ``127.0.1.1`` or fails. A UDP
+    socket "connected" to a routable address exposes the kernel's chosen
+    source IP without sending a packet, which is the address a LAN client
+    actually reaches us on. Returns None if there's no route.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(0.2)
+            s.connect(("203.0.113.1", 9))  # TEST-NET-3; never routed off-LAN
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
+def _bind_is_loopback(bind: str) -> bool:
+    """True when ``bind`` only exposes the dashboard on the local host.
+
+    An empty bind and the wildcards ``0.0.0.0`` / ``::`` are network-facing.
+    """
+    return (bind or "").strip().lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def _startup_security_warnings(bind: str, expected_token: str | None,
+                               tls_paths: tuple[Path, Path] | None) -> list[str]:
+    """Lines warning the operator about network exposure at startup.
+
+    The per-session ttyd terminals bind to the same address as the
+    dashboard but are NOT protected by the dashboard token — so a
+    non-loopback bind exposes raw shells to anyone who can reach the
+    ttyd port range, independently of dashboard auth. This is easy to
+    miss (the LAN quickstart binds 0.0.0.0), so surface it loudly.
+    Returns an empty list for a loopback bind.
+    """
+    if _bind_is_loopback(bind):
+        return []
+    warnings = [
+        "per-session ttyd terminals are reachable on this address and are "
+        "NOT protected by the dashboard token — anyone who can reach the "
+        f"ttyd port range ({config.TTYD_PORT_START}-{config.TTYD_PORT_END}) "
+        "gets an unauthenticated shell.",
+    ]
+    if not expected_token:
+        warnings.append(
+            "the dashboard itself has no auth (--auth / TMUX_BROWSE_TOKEN "
+            "unset), so any reachable client can control every session.")
+    if tls_paths is None:
+        warnings.append(
+            "traffic is plain HTTP and can be sniffed on the network.")
+    warnings.append(
+        "to lock this down: bind 127.0.0.1 and tunnel in over SSH, or put "
+        "the stack behind an authenticating TLS reverse proxy.")
+    return warnings
+
+
+def _build_allowed_hosts(bind: str) -> frozenset[str] | None:
+    """Compute the set of acceptable ``Host`` values, or None when the
+    guard is disabled via ``TMUX_BROWSE_DISABLE_HOST_CHECK``."""
+    if (os.environ.get("TMUX_BROWSE_DISABLE_HOST_CHECK", "").strip().lower()
+            in ("1", "true", "yes")):
+        return None
+    allowed = {"localhost", "127.0.0.1", "::1"}
+    try:
+        allowed.add(socket.gethostname().lower())
+        allowed.add(socket.getfqdn().lower())
+    except OSError:
+        pass
+    b = (bind or "").strip().lower()
+    if b and b not in ("0.0.0.0", "::", ""):
+        allowed.add(b)
+    # Every IP bound to a local interface — covers the LAN address when
+    # the dashboard is bound to 0.0.0.0 and reached via that IP.
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            allowed.add(str(info[4][0]).lower())
+    except OSError:
+        pass
+    # Fallback for hosts where gethostname() doesn't resolve to the LAN
+    # address (containers, minimal SBC images) — otherwise a legitimate
+    # LAN client reaching us by IP would be rejected by the guard.
+    primary = _primary_outbound_ip()
+    if primary:
+        allowed.add(primary.lower())
+    extra = os.environ.get("TMUX_BROWSE_ALLOWED_HOSTS", "")
+    for item in extra.replace(",", " ").split():
+        allowed.add(item.strip().lower())
+    return frozenset(a for a in allowed if a)
 
 
 @dataclass
@@ -261,11 +396,8 @@ def _session_summary(merge_peers: bool = True) -> SessionSummary:
                 # the dashboard's 1Hz refresh doesn't write to
                 # extensions.json on every tick when a deterministic
                 # bug fires every time.
-                msg = f"session post-processor failed: {exc}"
-                key = (name, msg)
-                if key not in _post_processor_errors_seen:
-                    _post_processor_errors_seen.add(key)
-                    extensions.record_error(name, msg)
+                _record_post_processor_error(
+                    name, f"session post-processor failed: {exc}")
 
     return SessionSummary(rows=out, tmux_unreachable=tmux_unreachable)
 
@@ -287,10 +419,28 @@ _session_post_processors: list[tuple[str, Callable[[list[dict]], None]]] = []
 # consistently-failing post-processor would call ``record_error`` —
 # which writes to extensions.json — on every 1Hz refresh tick, both
 # flooding the file and burning disk on the dashboard's hot path.
-# An entry is added on first occurrence and never cleared (process
-# restart resets it, which is the right behavior — operator restarts
-# the dashboard once the extension fix is deployed).
+# An entry is added on first occurrence; the set is bounded (see
+# ``_record_post_processor_error``) so a post-processor failing with
+# ever-changing messages can't grow it without limit.
 _post_processor_errors_seen: set[tuple[str, str]] = set()
+
+# Cap on the dedup set. A post-processor whose exception text varies on
+# every tick (a peer address, an errno, a timestamp) would otherwise add
+# a fresh entry each second on the hot path. At the cap we reset and
+# re-throttle from scratch — worst case a handful of duplicate records.
+_MAX_POST_PROCESSOR_ERRORS_SEEN = 512
+
+
+def _record_post_processor_error(name: str, msg: str) -> None:
+    """Record a post-processor failure at most once per (name, message),
+    keeping the dedup set bounded."""
+    key = (name, msg)
+    if key in _post_processor_errors_seen:
+        return
+    if len(_post_processor_errors_seen) >= _MAX_POST_PROCESSOR_ERRORS_SEEN:
+        _post_processor_errors_seen.clear()
+    _post_processor_errors_seen.add(key)
+    extensions.record_error(name, msg)
 
 
 # ---------------------------------------------------------------------------
@@ -429,12 +579,28 @@ def _log_error_html(name: str, msg: str) -> str:
     )
 
 
+def _prune_clients(now: int) -> None:
+    """Drop clients (and their inboxes) idle past the timeout."""
+    for cid in [c for c, e in list(_clients.items())
+                if now - e.get("last_seen", 0) > _CLIENT_TIMEOUT]:
+        _clients.pop(cid, None)
+        _client_inbox.pop(cid, None)
+
+
 def _touch_client(handler: "Handler") -> str:
     """Record a client heartbeat. Returns the client_id."""
     ip = handler.client_address[0]
     ua = handler.headers.get("User-Agent", "")
     cid = _client_id(ip, ua)
     now = int(time.time())
+    if cid not in _clients:
+        # Registering a new client: opportunistically sweep stale entries.
+        # _active_clients() also prunes, but it only runs when /api/clients
+        # is polled — and the Connected-clients pane can be toggled off, so
+        # without this the dicts would grow unbounded across a long-lived
+        # dashboard's churn of client fingerprints. New-client events are
+        # rare next to heartbeats, so this stays off the hot path.
+        _prune_clients(now)
     entry = _clients.get(cid, {})
     entry["client_id"] = cid
     entry["ip"] = ip
@@ -448,20 +614,16 @@ def _touch_client(handler: "Handler") -> str:
 
 def _active_clients() -> list[dict]:
     now = int(time.time())
+    _prune_clients(now)
     result = []
-    for cid, entry in list(_clients.items()):
-        age = now - entry.get("last_seen", 0)
-        if age > _CLIENT_TIMEOUT:
-            _clients.pop(cid, None)
-            _client_inbox.pop(cid, None)
-            continue
+    for cid, entry in _clients.items():
         result.append({
             "client_id": cid,
             "ip": entry["ip"],
             "nickname": entry.get("nickname", ""),
             "last_seen": entry["last_seen"],
             "first_seen": entry.get("first_seen", 0),
-            "idle_seconds": age,
+            "idle_seconds": now - entry.get("last_seen", 0),
         })
     return sorted(result, key=lambda c: c["last_seen"], reverse=True)
 
@@ -553,11 +715,45 @@ def _lock_is_active() -> bool:
 class Handler(BaseHTTPRequestHandler):
     server_version = f"tmux-browse/{__version__}"
 
+    # Defense-in-depth headers added to every response (JSON, HTML, SSE,
+    # 401, redirects) via the end_headers hook below:
+    #   * nosniff      — don't let a browser MIME-sniff a JSON/text body
+    #                    into executable HTML.
+    #   * no-referrer  — a bootstrap URL still carrying ``?token=`` must
+    #                    never leak to a third party via the Referer header.
+    #   * SAMEORIGIN   — anti-clickjacking; nothing legitimately frames the
+    #                    dashboard's own pages cross-origin (ttyd panes are
+    #                    framed from ttyd's own port, a different origin).
+    #   * CSP          — only the directives that can't break the dashboard's
+    #                    inline <style>/<script> design (no script-src /
+    #                    style-src restriction): frame-ancestors mirrors the
+    #                    XFO clickjacking guard, object-src 'none' blocks
+    #                    <object>/<embed> injection, and base-uri 'self'
+    #                    stops an injected <base> from hijacking the page's
+    #                    relative URLs. Inline scripts/styles and extension
+    #                    UI blocks keep working.
+    _SECURITY_HEADERS = (
+        ("X-Content-Type-Options", "nosniff"),
+        ("Referrer-Policy", "no-referrer"),
+        ("X-Frame-Options", "SAMEORIGIN"),
+        ("Content-Security-Policy",
+         "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"),
+    )
+
     def send_response(self, code, message=None):  # noqa: D401 - stdlib shape
         self._tb_response_started = True
         return super().send_response(code, message)
 
+    def _emit_security_headers(self) -> None:
+        for key, value in self._SECURITY_HEADERS:
+            self.send_header(key, value)
+
     def end_headers(self):
+        # Emit once per response, before the blank-line terminator. The
+        # guard makes a defensive double-call idempotent.
+        if not getattr(self, "_tb_security_headers_sent", False):
+            self._tb_security_headers_sent = True
+            self._emit_security_headers()
         self._tb_headers_ended = True
         return super().end_headers()
 
@@ -675,6 +871,40 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": False, "error": "config locked"}, status=403)
         return False
 
+    # --- rebinding / cross-origin guard ------------------------------------
+
+    def _rebind_gate(self) -> bool:
+        """Reject DNS-rebinding and cross-origin browser requests.
+
+        Runs before auth (it must protect the auth-disabled default, which
+        is exactly when it matters most). Returns True when the request may
+        proceed; sends a 403 and returns False otherwise. ``/health`` and
+        favicon stay open so monitors aren't tripped.
+        """
+        allowed = getattr(self.server, "allowed_hosts", None)
+        if not allowed:
+            return True  # guard disabled
+        if auth.path_is_open(self.path):
+            return True
+        origin = self.headers.get("Origin")
+        if origin:
+            origin_host = _host_without_port(urlparse(origin).netloc).lower()
+            if origin_host and origin_host not in allowed:
+                self._send_json(
+                    {"ok": False, "error": "cross-origin request rejected"},
+                    status=403)
+                return False
+        host = _host_without_port(self.headers.get("Host", "")).lower()
+        if host and host not in allowed:
+            self._send_json(
+                {"ok": False,
+                 "error": ("host not allowed (DNS-rebinding guard); add it to "
+                           "TMUX_BROWSE_ALLOWED_HOSTS or set "
+                           "TMUX_BROWSE_DISABLE_HOST_CHECK=1")},
+                status=403)
+            return False
+        return True
+
     # --- auth --------------------------------------------------------------
 
     def _auth_gate(self) -> bool:
@@ -709,12 +939,18 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path != "/":
             return False
-        query = parse_qs(parsed.query)
+        # keep_blank_values so ``?token=x&debug=`` keeps ``debug=`` rather
+        # than silently dropping it.
+        query = parse_qs(parsed.query, keep_blank_values=True)
         if "token" not in query:
             return False
-        cleaned = [f"{k}={v}" for k, vs in query.items()
-                   if k != "token" for v in vs]
-        new_query = "&".join(cleaned)
+        # Re-encode through urlencode: parse_qs already percent-decoded the
+        # values, so joining them raw would corrupt any value containing
+        # ``&``/``=``/space (splitting it into bogus extra params on the
+        # redirect target). urlencode round-trips them correctly.
+        kept_pairs = [(k, v) for k, vs in query.items()
+                      if k != "token" for v in vs]
+        new_query = urlencode(kept_pairs)
         location = parsed.path + (f"?{new_query}" if new_query else "")
         self.send_response(302)
         self.send_header("Location", location)
@@ -738,6 +974,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
         try:
+            if not self._rebind_gate():
+                return
             if not self._auth_gate():
                 return
             _touch_client(self)
@@ -760,6 +998,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         try:
+            if not self._rebind_gate():
+                return
             if not self._auth_gate():
                 return
             _touch_client(self)
@@ -853,12 +1093,14 @@ def serve(bind: str, port: int, verbose: bool = False,
         print(f"  startup gc: skipped ({e})")
 
     _write_dashboard_state(bind, port)
+    allowed_hosts = _build_allowed_hosts(bind)
     httpd = DashboardServer(
         (bind, port), Handler,
         verbose=verbose,
         expected_token=expected_token,
         tls_paths=tls_paths,
         ttyd_bind_addr=bind,
+        allowed_hosts=allowed_hosts,
     )
     if tls_paths is not None:
         ctx = tls_mod.build_context(*tls_paths)
@@ -877,6 +1119,16 @@ def serve(bind: str, port: int, verbose: bool = False,
         print("  auth: ENABLED (Bearer token required — see docs/dashboard.md)")
     else:
         print("  auth: disabled (any reachable client can access the dashboard)")
+    if allowed_hosts is None:
+        print("  host-guard: disabled (TMUX_BROWSE_DISABLE_HOST_CHECK set)")
+    else:
+        print(f"  host-guard: ENABLED (DNS-rebinding/cross-origin) — "
+              f"allowed hosts: {', '.join(sorted(allowed_hosts))}")
+    security_warnings = _startup_security_warnings(bind, expected_token, tls_paths)
+    if security_warnings:
+        print("  ⚠ SECURITY:")
+        for line in security_warnings:
+            print(f"    - {line}")
 
     # Load optional extensions. A failing extension is logged and
     # skipped; a route / verb / slot collision with core is fatal.
@@ -898,6 +1150,14 @@ def serve(bind: str, port: int, verbose: bool = False,
             skip_names=skip,
         )
     except RegistryConflict as e:
+        print(f"  extensions: FATAL — {e}")
+        raise
+    # Fail loudly when an extension fills a template slot that doesn't
+    # exist (almost always an ui_blocks.html typo). Without this the
+    # block silently vanishes from the page, which is near-undebuggable.
+    try:
+        templates.validate_ui_blocks(httpd.extension_registry.ui_blocks)
+    except ValueError as e:
         print(f"  extensions: FATAL — {e}")
         raise
     loaded_names = sorted(
