@@ -204,6 +204,35 @@ class PrimaryOutboundIpTests(unittest.TestCase):
             self.assertTrue(all(p.isdigit() for p in parts))
 
 
+class _HeaderRecorderShim:
+    """Records send_header calls for the _emit_security_headers test."""
+
+    _SECURITY_HEADERS = server.Handler._SECURITY_HEADERS
+
+    def __init__(self):
+        self.headers_sent = []
+
+    def send_header(self, key, value):
+        self.headers_sent.append((key, value))
+
+
+class SecurityHeadersTests(unittest.TestCase):
+
+    def test_emits_expected_hardening_headers(self):
+        shim = _HeaderRecorderShim()
+        server.Handler._emit_security_headers(shim)
+        sent = dict(shim.headers_sent)
+        self.assertEqual(sent.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(sent.get("Referrer-Policy"), "no-referrer")
+        self.assertEqual(sent.get("X-Frame-Options"), "SAMEORIGIN")
+
+    def test_security_headers_constant_is_complete(self):
+        keys = {k for k, _ in server.Handler._SECURITY_HEADERS}
+        self.assertEqual(
+            keys,
+            {"X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options"})
+
+
 class UnexpectedErrorTests(unittest.TestCase):
 
     def test_sends_json_when_no_response_started(self):
