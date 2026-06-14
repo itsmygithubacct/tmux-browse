@@ -233,6 +233,38 @@ class SecurityHeadersTests(unittest.TestCase):
             {"X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options"})
 
 
+class StartupSecurityWarningTests(unittest.TestCase):
+
+    def test_loopback_bind_has_no_warnings(self):
+        for bind in ("127.0.0.1", "localhost", "::1"):
+            self.assertEqual(
+                server._startup_security_warnings(bind, None, None), [],
+                f"loopback bind {bind!r} should not warn")
+
+    def test_wildcard_bind_warns_about_unauthenticated_ttyd(self):
+        warns = server._startup_security_warnings("0.0.0.0", "tok", None)
+        joined = " ".join(warns).lower()
+        self.assertIn("ttyd", joined)
+        self.assertIn("not protected", joined)
+
+    def test_open_dashboard_warning_only_when_auth_off(self):
+        with_auth = server._startup_security_warnings("0.0.0.0", "tok", None)
+        without_auth = server._startup_security_warnings("0.0.0.0", None, None)
+        self.assertFalse(any("no auth" in w for w in with_auth))
+        self.assertTrue(any("no auth" in w for w in without_auth))
+
+    def test_plain_http_warning_only_without_tls(self):
+        no_tls = server._startup_security_warnings("0.0.0.0", "tok", None)
+        with_tls = server._startup_security_warnings(
+            "0.0.0.0", "tok", (Path("c"), Path("k")))
+        self.assertTrue(any("plain http" in w.lower() for w in no_tls))
+        self.assertFalse(any("plain http" in w.lower() for w in with_tls))
+
+    def test_concrete_lan_ip_is_treated_as_exposed(self):
+        warns = server._startup_security_warnings("192.168.1.154", "tok", None)
+        self.assertTrue(warns)
+
+
 class UnexpectedErrorTests(unittest.TestCase):
 
     def test_sends_json_when_no_response_started(self):
