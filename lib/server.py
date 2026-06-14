@@ -654,11 +654,35 @@ def _lock_is_active() -> bool:
 class Handler(BaseHTTPRequestHandler):
     server_version = f"tmux-browse/{__version__}"
 
+    # Defense-in-depth headers added to every response (JSON, HTML, SSE,
+    # 401, redirects) via the end_headers hook below:
+    #   * nosniff      — don't let a browser MIME-sniff a JSON/text body
+    #                    into executable HTML.
+    #   * no-referrer  — a bootstrap URL still carrying ``?token=`` must
+    #                    never leak to a third party via the Referer header.
+    #   * SAMEORIGIN   — anti-clickjacking; nothing legitimately frames the
+    #                    dashboard's own pages cross-origin (ttyd panes are
+    #                    framed from ttyd's own port, a different origin).
+    _SECURITY_HEADERS = (
+        ("X-Content-Type-Options", "nosniff"),
+        ("Referrer-Policy", "no-referrer"),
+        ("X-Frame-Options", "SAMEORIGIN"),
+    )
+
     def send_response(self, code, message=None):  # noqa: D401 - stdlib shape
         self._tb_response_started = True
         return super().send_response(code, message)
 
+    def _emit_security_headers(self) -> None:
+        for key, value in self._SECURITY_HEADERS:
+            self.send_header(key, value)
+
     def end_headers(self):
+        # Emit once per response, before the blank-line terminator. The
+        # guard makes a defensive double-call idempotent.
+        if not getattr(self, "_tb_security_headers_sent", False):
+            self._tb_security_headers_sent = True
+            self._emit_security_headers()
         self._tb_headers_ended = True
         return super().end_headers()
 
