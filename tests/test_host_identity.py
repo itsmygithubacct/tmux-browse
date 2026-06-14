@@ -82,13 +82,13 @@ class HostnameTests(unittest.TestCase):
 
     def test_short_hostname_strips_domain(self):
         with mock.patch.object(host_identity.socket, "gethostname",
-                               return_value="opib.lan.example.com"):
-            self.assertEqual(host_identity.get_hostname(), "opib")
+                               return_value="myhost.lan.example.com"):
+            self.assertEqual(host_identity.get_hostname(), "myhost")
 
     def test_bare_hostname_unchanged(self):
         with mock.patch.object(host_identity.socket, "gethostname",
-                               return_value="opib"):
-            self.assertEqual(host_identity.get_hostname(), "opib")
+                               return_value="myhost"):
+            self.assertEqual(host_identity.get_hostname(), "myhost")
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ class SessionSummaryTests(unittest.TestCase):
             p(mock.patch.object(server.sessions, "gc_snapshots"))
             p(mock.patch.object(hi, "get_or_create_device_id",
                                 return_value="dev-1"))
-            p(mock.patch.object(hi, "get_hostname", return_value="opib"))
+            p(mock.patch.object(hi, "get_hostname", return_value="myhost"))
             # merge_peers=False keeps this to local rows only.
             return server._session_summary(merge_peers=False)
 
@@ -71,7 +71,7 @@ class SessionSummaryTests(unittest.TestCase):
         self.assertEqual(r["pid"], 123)
         self.assertTrue(r["ttyd_running"])
         self.assertEqual(r["device_id"], "dev-1")
-        self.assertEqual(r["peer_hostname"], "opib")
+        self.assertEqual(r["peer_hostname"], "myhost")
 
     def test_tmux_session_without_ttyd_is_not_running(self):
         summary = self._summary(
