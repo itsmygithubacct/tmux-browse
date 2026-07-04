@@ -114,6 +114,13 @@ bin/update.sh --restart  # also restart a running local dashboard onto the new c
 make update              # same thing; pass flags via ARGS="--restart"
 ```
 
+From anywhere, you can also refresh the default `~/tmux-browse` checkout
+without launching the dashboard; this updates the root `tb.py` wrapper too:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsmygithubacct/tmux-browse/main/bin/quickstart_local.sh | bash -s -- --no-launch
+```
+
 It picks the "latest release" exactly as the quickstart scripts do, advances
 any installed extension submodules to the refs the new core pins, and re-runs
 `doctor`. It refuses to clobber a dirty working tree unless you pass `--force`,
