@@ -179,8 +179,8 @@ useful once at least one tmux session exists.
 ![Driving a coding agent from one pane, output in another](docs/images/tmux_browse_2.png)
 
 Because `tb` exposes tmux as a CLI, an agent can use it as a tool: you run
-the agent in one session and tell it to drive a coding session (assistant,
-codex, aider, …) in another, pinning the build/test output to a third.
+the agent in one session and tell it to drive a coding session (Codex,
+Aider, and others) in another, pinning the build/test output to a third.
 Each session is its own pane in the dashboard, so you watch the whole
 pipeline from a second monitor or your phone.
 
@@ -191,7 +191,7 @@ tb new coder
 tb new website_terminal
 
 # Start a coding agent in "coder" and a long-running build in "website_terminal"
-tb type coder "assistant"
+tb type coder "codex"
 tb type website_terminal "npm run dev"
 
 # Kick off the orchestrating agent and give it the targets as instructions
@@ -222,7 +222,7 @@ the same browser tab.
 tb new coder
 tb new builder_a
 tb new builder_b
-tb type coder       "ssh dev-laptop -- assistant"
+tb type coder       "ssh dev-laptop -- codex"
 tb type builder_a   "ssh builder-1.internal"
 tb type builder_b   "ssh builder-2.internal"
 ```

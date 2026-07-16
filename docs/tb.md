@@ -110,7 +110,7 @@ command, pid, cwd, active flag).
 $ tb show work
 work   1 windows, 1 attached
 W  P  WINDOW-NAME  CMD   PID    CWD            ACTIVE
-0  0  bash         vim   12345  /workspace/user/proj   True
+0  0  bash         vim   12345  /workspace/example   True
 ```
 
 #### `tb capture <target> [-n LINES] [--ansi]`
@@ -428,7 +428,7 @@ Prose summary suitable for LLM context:
 ```
 $ tb describe work
 Session 'work': 1 windows, 1 attached, idle 12s.
-  * 0.0 bash  cmd=vim  pid=12345  cwd=/workspace/user/proj
+  * 0.0 bash  cmd=vim  pid=12345  cwd=/workspace/example
 ttyd: port 7702, running (pid 881122)
 ```
 

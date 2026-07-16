@@ -357,7 +357,7 @@ pops a "Leave site?" dialog.
 
 **Agent extension catalog.** Pin moved from `v0.7.2-agent` to
 `v0.7.3-agent`. The new extension release adds the CLI-agent
-breadth surface (10 supported CLI agents — assistant Code, Codex,
+breadth surface (supported CLI agents — Codex,
 OpenCode, Vibe, Gemini, Cursor, Copilot, Pi, Droid, settl) with
 spawn / status / hooks / launch UI. See the agent extension's own
 CHANGELOG for the K-phase detail.
