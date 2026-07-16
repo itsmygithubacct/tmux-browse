@@ -154,7 +154,7 @@ refine:
 
 ```bash
 # Terminal 1 — the agent's work session
-tb new ralph --cmd "assistant --dangerously-skip-permissions"
+tb new ralph --cmd "codex --full-auto"
 
 # Terminal 2 — edit the prompt
 ${EDITOR:-vim} PROMPT.md

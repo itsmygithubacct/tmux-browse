@@ -94,8 +94,6 @@ def _render(js: str) -> str:
     </h1>
     <input type="text" id="new-name" placeholder="new session name" />
     <button class="btn green" id="new-btn">New</button>
-    <button class="btn" id="launch-assistant-btn" title="Launch assistant Code" hidden>assistant</button>
-    <button class="btn" id="launch-assistant-yolo-btn" title="Launch assistant --dangerously-skip-permissions" hidden>assistant YOLO</button>
     <button class="btn" id="launch-codex-btn" title="Launch Codex" hidden>Codex</button>
     <button class="btn" id="launch-codex-yolo-btn" title="Launch Codex --full-auto" hidden>Codex YOLO</button>
     <button class="btn" id="launch-kimi-btn" title="Launch Kimi Code" hidden>Kimi</button>
@@ -216,8 +214,6 @@ def _render(js: str) -> str:
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-refresh" /><span>Refresh button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-restart" /><span>Restart button</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-topbar-os-restart" /><span>Restart icon (&#x23FB;)</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-launch-assistant" /><span>assistant launcher</span></label>
-                <label class="check-row"><input type="checkbox" id="cfg-show-launch-assistant-yolo" /><span>assistant YOLO launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-codex" /><span>Codex launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-codex-yolo" /><span>Codex YOLO launcher</span></label>
                 <label class="check-row"><input type="checkbox" id="cfg-show-launch-kimi" /><span>Kimi launcher</span></label>
@@ -564,5 +560,4 @@ if ("serviceWorker" in navigator
 </body>
 </html>
 """
-
 

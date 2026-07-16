@@ -37,7 +37,7 @@ class CheckTests(unittest.TestCase):
     def test_ttyd_missing_when_neither_bundled_nor_path(self):
         bundled = mock.Mock()
         bundled.is_file.return_value = False
-        bundled.__str__ = lambda self: "/workspace/user/.local/bin/ttyd"
+        bundled.__str__ = lambda self: "/opt/tmux-browse/bin/ttyd"
         with mock.patch.object(doctor.config, "TTYD_BIN", bundled), \
              mock.patch("lib.doctor.shutil.which", return_value=None):
             r = doctor._check_ttyd()
@@ -48,7 +48,7 @@ class CheckTests(unittest.TestCase):
     def test_ttyd_prefers_bundled_over_path(self):
         bundled = mock.Mock()
         bundled.is_file.return_value = True
-        bundled.__str__ = lambda self: "/workspace/user/.local/bin/ttyd"
+        bundled.__str__ = lambda self: "/opt/tmux-browse/bin/ttyd"
         proc = mock.Mock(returncode=0, stdout="ttyd version 1.7.7\n", stderr="")
         with mock.patch.object(doctor.config, "TTYD_BIN", bundled), \
              mock.patch("lib.doctor.os.access", return_value=True), \
@@ -56,7 +56,7 @@ class CheckTests(unittest.TestCase):
              mock.patch("lib.doctor.subprocess.run", return_value=proc):
             r = doctor._check_ttyd()
         self.assertEqual(r.status, "ok")
-        self.assertEqual(r.path, "/workspace/user/.local/bin/ttyd")
+        self.assertEqual(r.path, "/opt/tmux-browse/bin/ttyd")
         self.assertEqual(r.version, "ttyd version 1.7.7")
 
     def test_required_missing_filters_to_failures_only(self):

@@ -20,8 +20,6 @@ function configFieldMap() {
         show_topbar_refresh: document.getElementById("cfg-show-topbar-refresh"),
         show_topbar_restart: document.getElementById("cfg-show-topbar-restart"),
         show_topbar_os_restart: document.getElementById("cfg-show-topbar-os-restart"),
-        show_launch_assistant: document.getElementById("cfg-show-launch-assistant"),
-        show_launch_assistant_yolo: document.getElementById("cfg-show-launch-assistant-yolo"),
         show_launch_codex: document.getElementById("cfg-show-launch-codex"),
         show_launch_codex_yolo: document.getElementById("cfg-show-launch-codex-yolo"),
         show_launch_kimi: document.getElementById("cfg-show-launch-kimi"),
@@ -107,8 +105,6 @@ function applyTopbarConfig() {
     setVisible(document.getElementById("os-restart-btn"), cfg.show_topbar_os_restart);
 
     // Launcher buttons
-    setVisible(document.getElementById("launch-assistant-btn"), cfg.show_launch_assistant);
-    setVisible(document.getElementById("launch-assistant-yolo-btn"), cfg.show_launch_assistant_yolo);
     setVisible(document.getElementById("launch-codex-btn"), cfg.show_launch_codex);
     setVisible(document.getElementById("launch-codex-yolo-btn"), cfg.show_launch_codex_yolo);
     setVisible(document.getElementById("launch-kimi-btn"), cfg.show_launch_kimi);
@@ -153,7 +149,6 @@ const TOPBAR_TOGGLE_KEYS = [
     "show_topbar_title", "show_topbar_count", "show_topbar_new_session",
     "show_topbar_raw_ttyd", "show_topbar_refresh", "show_topbar_restart",
     "show_topbar_os_restart",
-    "show_launch_assistant", "show_launch_assistant_yolo",
     "show_launch_codex", "show_launch_codex_yolo",
     "show_launch_kimi", "show_launch_kimi_yolo",
     "show_launch_monitor", "show_launch_top",

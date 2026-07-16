@@ -199,8 +199,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             syncModalChrome();
         }
     });
-    document.getElementById("launch-assistant-btn").addEventListener("click", () => launchCodingSession("assistant", "assistant"));
-    document.getElementById("launch-assistant-yolo-btn").addEventListener("click", () => launchCodingSession("assistant-yolo", "assistant --dangerously-skip-permissions"));
     document.getElementById("launch-codex-btn").addEventListener("click", () => launchCodingSession("codex", "codex"));
     document.getElementById("launch-codex-yolo-btn").addEventListener("click", () => launchCodingSession("codex-yolo", "codex --full-auto"));
     document.getElementById("launch-kimi-btn").addEventListener("click", () => launchCodingSession("kimi", "kimi-code"));

@@ -30,8 +30,6 @@ const DASHBOARD_CONFIG_DEFAULTS = {
     show_topbar_refresh: false,
     show_topbar_restart: false,
     show_topbar_os_restart: true,
-    show_launch_assistant: false,
-    show_launch_assistant_yolo: false,
     show_launch_codex: false,
     show_launch_codex_yolo: false,
     show_launch_kimi: false,
@@ -252,4 +250,3 @@ function saveLayout(rows) { saveJSON(LAYOUT_KEY, rows); }
 function saveHot() { saveJSON(HOT_KEY, state.hot); }
 function saveIdleAlerts() { saveJSON(IDLE_KEY, state.idleAlerts); }
 function saveGroups() { saveJSON(GROUPS_KEY, state.groups); }
-
