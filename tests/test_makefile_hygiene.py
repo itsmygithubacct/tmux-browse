@@ -49,6 +49,12 @@ def _phony_targets(text: str) -> set[str]:
     return names
 
 
+def _target_dependencies(text: str, target: str) -> set[str]:
+    match = re.search(rf"^{re.escape(target)}\s*:\s*(.*)$", text,
+                      flags=re.MULTILINE)
+    return set(match.group(1).split()) if match else set()
+
+
 class MakefilePhonyTests(unittest.TestCase):
 
     def setUp(self):
@@ -64,6 +70,12 @@ class MakefilePhonyTests(unittest.TestCase):
 
     def test_clean_target_exists(self):
         self.assertIn("clean", _makefile_targets(self.text))
+
+    def test_ci_runs_every_test_layer(self):
+        self.assertEqual(
+            _target_dependencies(self.text, "ci"),
+            {"preflight", "test-core", "test", "test-extensions"},
+        )
 
 
 class MakeCleanBehaviourTests(unittest.TestCase):
