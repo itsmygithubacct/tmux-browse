@@ -3,31 +3,22 @@
 Stdlib `unittest` — matches the project's "no pip deps" constraint.
 
 ```bash
-# Run the suite
-python3 -m unittest discover -s tests -v
+# Run preflight plus core, dashboard, and extension suites
+make ci
 
-# Or a specific module
-python3 -m unittest tests.test_targeting -v
+# Run only the dashboard suite, or a specific dashboard module
+make test
+python3 -m unittest tests.test_server_handler -v
 ```
 
-304 tests across 22 files covering:
+The CI target covers four layers:
 
-- **Core logic**: targeting, output formatting, port registry (incl.
-  corrupt-registry recovery), atomic PID writes, filename round-trips,
-  interface-cache/ifconfig parsing
-- **Agent runtime**: provider dispatch and response parsing, runner JSON
-  extraction and lifecycle events, conversation CRUD and forking,
-  runtime session management, log persistence and latest-entry reads,
-  run index append and filtered queries, cost recording and aggregation
-- **Agent operations**: status derivation, scheduler tick logic and
-  workflow execution, scheduler lock acquire/release/stale-PID handling,
-  workflow run history and state tracking
-- **Dashboard**: server route registration and agent endpoints, dashboard
-  config normalization, agent store save/load/key-preservation
-- **Tasks**: task CRUD, worktree slug generation
+- **Preflight**: core and extension tag/manifest compatibility.
+- **Vendored core**: the complete `tmux-cli` unit suite.
+- **Dashboard**: server, routes, configuration, streaming, tasks, templates,
+  wrappers, and security regression tests.
+- **Extensions**: every populated `extensions/*/tests` directory, with all
+  extension roots importable so cross-extension integrations are exercised.
 
-These cover the logic that doesn't depend on tmux / ttyd / subprocess I/O.
-Subprocess-heavy code (`lib/sessions.py`, `lib/ttyd.py` spawn paths) is
-intentionally out of scope — integration tests for those need a live tmux
-server and are better run in CI with `make test-integration` once someone
-adds that.
+The suites mock destructive process operations; CI installs tmux so command
+shape and server-detection behavior can also be exercised consistently.

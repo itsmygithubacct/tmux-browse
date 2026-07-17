@@ -15,7 +15,7 @@
         uninstall-agent uninstall-agent-with-state \
         install-federation update-federation enable-federation disable-federation \
         uninstall-federation uninstall-federation-with-state \
-        preflight test ci clean
+        preflight test-core test test-extensions ci clean
 
 PY ?= python3
 RUN := PYTHONPATH=tmux-cli TB_PROJECT_DIR=$(CURDIR) $(PY)
@@ -44,8 +44,10 @@ help:
 	@echo ""
 	@echo "  make list-extensions           show status of every known extension"
 	@echo "  make preflight                 check core/extension version alignment"
+	@echo "  make test-core                 run the vendored tmux-cli test suite"
 	@echo "  make test                      run the dashboard test suite"
-	@echo "  make ci                        preflight + tests (what CI runs)"
+	@echo "  make test-extensions           run every populated extension test suite"
+	@echo "  make ci                        run preflight + all test layers"
 	@echo "  make clean                     remove __pycache__, *.pyc, .pytest_cache"
 	@echo ""
 	@echo "After install/update/enable/disable, restart the dashboard."
@@ -102,10 +104,23 @@ uninstall-federation-with-state:
 preflight:
 	$(RUN) scripts/preflight.py
 
+test-core:
+	$(MAKE) -C tmux-cli test PY=$(PY)
+
 test:
 	$(RUN) -m unittest discover tests
 
-ci: preflight test
+test-extensions:
+	@set -e; \
+	ext_path="$$($(PY) -c 'from pathlib import Path; print(":".join(str(p) for p in sorted(Path("extensions").iterdir()) if p.is_dir()))')"; \
+	for test_dir in extensions/*/tests; do \
+		[ -d "$$test_dir" ] || continue; \
+		echo "== $$test_dir =="; \
+		PYTHONPATH="tmux-cli:$$ext_path" TB_PROJECT_DIR="$(CURDIR)" \
+			$(PY) -m unittest discover "$$test_dir"; \
+	done
+
+ci: preflight test-core test test-extensions
 
 # Remove Python bytecode caches and the pytest cache. Safe to run any
 # time; everything it deletes is regenerated on the next run.
