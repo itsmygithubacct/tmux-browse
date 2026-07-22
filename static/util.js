@@ -129,6 +129,23 @@ function ttydUrl(port) {
     return `${window.location.protocol}//${window.location.hostname}:${port}/`;
 }
 
+function sessionTtydUrl(session) {
+    if (!session || !session.port) return "";
+    return session.peer_url
+        ? _peerTtydUrl(session.peer_url, session.port)
+        : ttydUrl(session.port);
+}
+
+function sessionLogUrl(session) {
+    if (session && session.peer_url && session.device_id) {
+        const peerName = session.peer_session_name || session.name;
+        return "/api/peers/session-log"
+            + `?device_id=${encodeURIComponent(session.device_id)}`
+            + `&session=${encodeURIComponent(peerName)}&html=1`;
+    }
+    return `/api/session/log?session=${encodeURIComponent(session.name)}&html=1`;
+}
+
 
 // Federation routing stays same-origin: remote pane actions go to the local
 // dashboard's constrained peer proxy, which authenticates and relays them.

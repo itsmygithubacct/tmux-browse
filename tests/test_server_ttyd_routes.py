@@ -34,6 +34,46 @@ class _Handler:
 
 class TtydRouteTests(unittest.TestCase):
 
+    def test_startup_reconciles_surviving_ttyds(self):
+        expected = {"checked": 2, "restarted": 1, "errors": []}
+        with mock.patch.object(
+            server.ttyd, "reconcile_running", return_value=expected,
+        ) as reconcile:
+            result = server._reconcile_ttyd_policy("127.0.0.1", None)
+        self.assertEqual(result, expected)
+        reconcile.assert_called_once_with(bind_addr="127.0.0.1", tls_paths=None)
+
+    def test_startup_fails_closed_when_ttyd_policy_cannot_be_applied(self):
+        with mock.patch.object(
+            server.ttyd,
+            "reconcile_running",
+            return_value={
+                "checked": 1,
+                "restarted": 0,
+                "errors": ["work: permission denied"],
+            },
+        ):
+            with self.assertRaisesRegex(RuntimeError, "permission denied"):
+                server._reconcile_ttyd_policy("127.0.0.1", None)
+
+    def test_serve_reconciles_before_constructing_http_server(self):
+        with mock.patch.object(server.config, "ensure_dirs"), \
+             mock.patch.object(
+                 server.ttyd,
+                 "gc_orphans",
+                 return_value={"stale_pids_removed": 0, "ports_dropped": 0},
+             ), \
+             mock.patch.object(
+                 server,
+                 "_reconcile_ttyd_policy",
+                 side_effect=RuntimeError("policy sentinel"),
+             ) as reconcile, \
+             mock.patch.object(server, "DashboardServer") as dashboard_server:
+            with self.assertRaisesRegex(RuntimeError, "policy sentinel"):
+                server.serve("127.0.0.1", 8096)
+        reconcile.assert_called_once_with("127.0.0.1", None)
+        dashboard_server.assert_not_called()
+
     def test_start_response_includes_peer_reachable_url(self):
         handler = _Handler()
         with mock.patch.object(server.routes_ttyd.sessions, "exists", return_value=True), \

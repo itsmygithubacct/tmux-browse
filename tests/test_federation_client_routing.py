@@ -38,6 +38,7 @@ class FederationClientRoutingTests(unittest.TestCase):
             "/api/session/key",
         ):
             self.assertIn(f'_peerApi(session, "POST", "{path}"', sources)
+        self.assertNotIn('api("POST", "/api/ttyd/stop"', sources)
 
     def test_ttyd_fallback_replaces_port_structurally(self):
         util = (ROOT / "static" / "util.js").read_text(encoding="utf-8")
@@ -46,6 +47,17 @@ class FederationClientRoutingTests(unittest.TestCase):
         )
         self.assertIn("url.port = String(port)", util)
         self.assertNotIn("baseUrl.replace", lifecycle)
+
+    def test_refresh_keeps_remote_ttyd_and_log_urls_on_the_peer(self):
+        util = (ROOT / "static" / "util.js").read_text(encoding="utf-8")
+        render = (ROOT / "static" / "panes" / "render.js").read_text(
+            encoding="utf-8",
+        )
+        self.assertIn("function sessionTtydUrl(session)", util)
+        self.assertIn('"/api/peers/session-log"', util)
+        self.assertIn("sessionTtydUrl(s)", render)
+        self.assertIn("sessionLogUrl(s)", render)
+        self.assertNotIn("ttydUrl(s.port)", render)
 
 
 if __name__ == "__main__":

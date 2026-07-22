@@ -91,14 +91,16 @@ Once paired, each peer's `/api/sessions?local=1` is fetched in parallel on
 every dashboard refresh (5s per-peer timeout, 6s total budget).
 Remote rows arrive with:
 
-- `name` prefixed by the peer's hostname (`hostA:work`);
+- a user-facing `display_name` prefixed by the peer's hostname
+  (`hostA:work`), while the internal `name` key includes the full device id so
+  two peers with the same hostname cannot collide;
 - a hostname badge in the summary row (accent blue for remote;
   the local rows show a subtle grey badge with your own hostname
   when at least one remote is also visible, for symmetry);
 - `peer_url`, `device_id`, and `peer_session_name` tags. Per-pane
   interactions go to the local dashboard's allowlisted peer proxy; the
-  server authenticates and relays them. The iframe still loads ttyd
-  directly from the peer's port.
+  server authenticates and relays them. Logs use a safe same-origin relay;
+  the iframe still loads ttyd directly from the peer's port.
 
 ## Trust model
 
@@ -189,9 +191,10 @@ land in your `discovered` list and you can re-pair if you want.
   but browsers connect directly to peer ttyd ports. If a peer's port range
   isn't reachable from your browser, sessions remain visible while their
   embedded terminals fail to load.
-- **Config-lock tokens are host-local.** The proxy forwards the current
-  unlock token, but a separately locked peer will not recognize it. Unlock
-  or disable the config lock on the remote host before controlling its panes.
+- **Config-lock tokens are host-local.** The proxy never forwards them because
+  doing so would disclose a capability for the originating dashboard. A peer
+  with its config lock enabled therefore rejects proxied mutation; use that
+  peer's dashboard directly or disable its lock before remote control.
 - **Pairing is per-process.** The `~/.tmux-browse/paired-peers.json`
   file is per-host but a kill-9 mid-write (very narrow race) could
   corrupt it; we use atomic .tmp + replace to keep that window

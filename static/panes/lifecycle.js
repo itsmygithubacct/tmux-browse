@@ -177,7 +177,9 @@ async function stopTtyd(session) {
 }
 
 async function killSession(session) {
-    if (!confirm(`Kill tmux session '${session}'? This terminates all its programs.`)) return;
+    const row = state.sessions.find((item) => item.name === session);
+    const label = (row && row.display_name) || session;
+    if (!confirm(`Kill tmux session '${label}'? This terminates all its programs.`)) return;
     const r = await _peerApi(session, "POST", "/api/session/kill",
                               { session: _peerSessionName(session) });
     const msg = document.getElementById("msg-" + cssId(session));
@@ -194,7 +196,8 @@ async function killSession(session) {
 // on the next refresh because the server drops the shell from
 // /api/sessions when its pidfile is gone.
 async function stopRawShell(name) {
-    const r = await api("POST", "/api/ttyd/stop", { session: name });
+    const r = await _peerApi(name, "POST", "/api/ttyd/stop",
+                             { session: _peerSessionName(name) });
     const msg = document.getElementById("msg-" + cssId(name));
     if (msg && r) {
         msg.textContent = r.ok ? "stopped" : ("error: " + (r.error || ""));
