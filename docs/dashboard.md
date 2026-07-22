@@ -68,6 +68,10 @@ reverse proxy), see [`recipes-remote.md`](recipes-remote.md).
 - a concrete host IP such as `--bind 192.168.1.10` is mapped to the owning
   NIC for ttyd's `--interface`
 
+ttyd processes survive dashboard restarts. Before the HTTP listener opens,
+startup reconciles every surviving ttyd to the requested bind and TLS policy.
+This also reloads a certificate or key whose contents changed in place.
+
 ## Optional TLS (HTTPS)
 
 By default the dashboard is **plaintext HTTP**. Opt in to TLS with a PEM

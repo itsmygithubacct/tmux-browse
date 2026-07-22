@@ -19,26 +19,9 @@ function createPane(s) {
     // Display label: raw shells get the friendly "shell · <uid>" prefix
     // (the underlying name keeps its ``raw-shell-`` prefix because that's
     // what every server-side pidfile / port-registry / stop call expects).
-    const displayName = isRaw ? `shell · ${s.name}` : s.name;
+    const displayName = s.display_name || (isRaw ? `shell · ${s.name}` : s.name);
     const sname = el("span", { class: "sname" }, displayName);
     const sbadges = el("span", { class: "sbadges" });
-    // Host badge: always carries the originating hostname when one
-    // is known. Remote rows (peer_url present) get the accent
-    // styling so they're visually distinct from local. Local rows
-    // only show the badge when at least one remote is also visible
-    // — solo dashboards stay clean.
-    if (s.device_id && s.peer_hostname) {
-        const isRemote = !!s.peer_url;
-        const someRemote = state.sessions && state.sessions.some(r => r.peer_url);
-        if (isRemote || someRemote) {
-            sbadges.append(el("span", {
-                class: isRemote ? "badge host-badge host-badge-remote"
-                                : "badge host-badge host-badge-local",
-                title: isRemote ? `running on ${s.peer_hostname} (peer)`
-                                : `running on ${s.peer_hostname} (this host)`,
-            }, s.peer_hostname));
-        }
-    }
     const idle = el("span", { class: "dim" });
     const idleAlertBtn = el("button", {
         class: "btn blue summary-idle-alert",
@@ -76,7 +59,7 @@ function createPane(s) {
         target: "_blank", rel: "noopener",
         title: "tmux scrollback for this session",
         onclick: stopSummaryToggle,
-        href: `/api/session/log?session=${encodeURIComponent(s.name)}&html=1`,
+        href: sessionLogUrl(s),
         style: "text-decoration:none",
     }, "Log");
     const logIconBtn = el("a", {
@@ -84,7 +67,7 @@ function createPane(s) {
         target: "_blank", rel: "noopener",
         title: "view tmux log (scrollback dump)",
         onclick: stopSummaryToggle,
-        href: `/api/session/log?session=${encodeURIComponent(s.name)}&html=1`,
+        href: sessionLogUrl(s),
     });
     logIconBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2 1h8l4 4v10H2V1zm8 0v4h4M4 8h8M4 11h6"/><path d="M2 1h8l4 4v10H2V1z" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1"/><line x1="4" y1="10.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/><line x1="4" y1="6" x2="8" y2="6" stroke="currentColor" stroke-width="1"/></svg>';
     const scrollBtn = el("button", {
@@ -482,7 +465,7 @@ function createPane(s) {
     });
 
     return {
-        details, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
+        details, sname, sbadges, idle, idleWrap, idleAlertBtn, idleIconBtn,
         summaryTabLink, logLink, logIconBtn, scrollBtn, scrollIconBtn, splitBtn, moveBtn, moveIconBtn, hideBtn, hideIconBtn, reorderPad,
         launchBtn, stopBtn, killBtn: bodyKillBtn, hotManageBtn, msg,
         wcClose, wcMaximize, wcMinimize, wcTmuxResize,
@@ -496,8 +479,22 @@ function createPane(s) {
 
 function updatePane(rec, s) {
     const cfg = state.config;
+    rec.sname.textContent = s.display_name
+        || (s.kind === "raw" ? `shell · ${s.name}` : s.name);
     // Badges
     rec.sbadges.textContent = "";
+    if (s.device_id && s.peer_hostname) {
+        const isRemote = !!s.peer_url;
+        const someRemote = state.sessions && state.sessions.some(r => r.peer_url);
+        if (isRemote || someRemote) {
+            rec.sbadges.append(el("span", {
+                class: isRemote ? "badge host-badge host-badge-remote"
+                                : "badge host-badge host-badge-local",
+                title: isRemote ? `running on ${s.peer_hostname} (peer)`
+                                : `running on ${s.peer_hostname} (this host)`,
+            }, s.peer_hostname));
+        }
+    }
     if (cfg.show_attached_badge && s.attached > 0) {
         rec.sbadges.append(el("span", { class: "badge attached" }, `${s.attached} clients`));
     }
@@ -524,9 +521,12 @@ function updatePane(rec, s) {
     rec.idleIconBtn.style.color = idleCfg.enabled ? "var(--green)" : "";
 
     // Summary "Open" button: hidden entirely until ttyd is running.
-    const url = s.ttyd_running ? ttydUrl(s.port) : "#";
+    const url = s.ttyd_running ? sessionTtydUrl(s) : "#";
     rec.summaryTabLink.href = url;
     rec.summaryTabLink.dataset.available = s.ttyd_running ? "1" : "0";
+    const logUrl = sessionLogUrl(s);
+    rec.logLink.href = logUrl;
+    rec.logIconBtn.href = logUrl;
 
     // Footer — make the "port N" tag a link that opens the ttyd in a new tab.
     rec.fPort.textContent = "";
@@ -557,7 +557,7 @@ function updatePane(rec, s) {
     // consecutive polls. A single ttyd_running:false (e.g. server-side
     // pidfile flap) used to blank a working terminal permanently — the
     // streak counter absorbs transient false readings.
-    const iframeUrl = s.ttyd_running ? ttydUrl(s.port) : null;
+    const iframeUrl = s.ttyd_running ? sessionTtydUrl(s) : null;
     const cur = rec.iframe.getAttribute("src") || "";
     if (iframeUrl && state.openPanes.has(s.name) && cur !== iframeUrl) {
         rec.iframe.setAttribute("src", iframeUrl);
@@ -587,4 +587,3 @@ function updatePane(rec, s) {
     renderHotButtons(s.name);
     applyDashboardConfigToPane(rec);
 }
-

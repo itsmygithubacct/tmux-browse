@@ -230,6 +230,19 @@ def _startup_security_warnings(bind: str, expected_token: str | None,
     return warnings
 
 
+def _reconcile_ttyd_policy(
+    bind: str,
+    tls_paths: tuple[Path, Path] | None,
+) -> dict:
+    """Apply dashboard network policy to ttyds left across a restart."""
+    result = ttyd.reconcile_running(bind_addr=bind, tls_paths=tls_paths)
+    errors = result.get("errors") or []
+    if errors:
+        details = "; ".join(str(error) for error in errors)
+        raise RuntimeError(f"could not reconcile existing ttyd processes: {details}")
+    return result
+
+
 def _build_allowed_hosts(bind: str) -> frozenset[str] | None:
     """Compute the set of acceptable ``Host`` values, or None when the
     guard is disabled via ``TMUX_BROWSE_DISABLE_HOST_CHECK``."""
@@ -1169,6 +1182,16 @@ def serve(bind: str, port: int, verbose: bool = False,
                   f"pidfiles, dropped {gc_stats['ports_dropped']} stale ports")
     except Exception as e:  # never let GC failure block startup
         print(f"  startup gc: skipped ({e})")
+
+    # ttyds intentionally outlive the dashboard. Reconcile every live child
+    # before opening the HTTP listener so a tighter bind, TLS transition, or
+    # in-place certificate rotation cannot leave an old terminal policy live.
+    policy_stats = _reconcile_ttyd_policy(bind, tls_paths)
+    if policy_stats.get("restarted"):
+        print(
+            f"  startup policy: restarted {policy_stats['restarted']} ttyd "
+            "process(es)"
+        )
 
     _write_dashboard_state(bind, port)
     allowed_hosts = _build_allowed_hosts(bind)
