@@ -111,7 +111,10 @@ def h_session_new(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
             return
         handler._send_json({"ok": True, "name": name,
                             "port": ttyd_result.get("port"),
-                            "url": ttyd_result.get("url", "")})
+                            "url": handler._ttyd_url(
+                                ttyd_result.get("port"),
+                                ttyd_result.get("scheme"),
+                            )})
         return
     handler._send_json({"ok": True, "name": name})
 

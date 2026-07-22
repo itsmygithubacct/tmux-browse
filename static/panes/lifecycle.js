@@ -11,37 +11,6 @@
 const STEP_PX_W = 80;
 const STEP_PX_H = 60;
 
-// Federation routing: when a session lives on a remote peer the
-// row carries peer_url + peer_hostname. Local API calls (start /
-// stop ttyd, kill, etc.) need to hit the peer's HTTP surface, not
-// ours, and must use the un-prefixed session name. _peerInfo()
-// returns the row's federation tags or null for local sessions.
-function _peerInfo(displayName) {
-    const row = state.sessions.find((r) => r.name === displayName);
-    if (!row || !row.peer_url) return null;
-    return {
-        baseUrl: row.peer_url,
-        hostname: row.peer_hostname || displayName.split(":")[0],
-        // The tmux session name on the *peer* — strip our hostname prefix.
-        realName: displayName.includes(":") ? displayName.slice(displayName.indexOf(":") + 1) : displayName,
-    };
-}
-
-// API helper that respects federation routing. Passes the
-// fully-qualified URL when the session is remote so fetch() goes
-// directly to the peer; falls back to the relative path for local.
-async function _peerApi(displayName, method, path, body) {
-    const p = _peerInfo(displayName);
-    if (!p) return await api(method, path, body);
-    return await api(method, p.baseUrl + path, body);
-}
-
-// Resolve to the real session name on whichever host owns it.
-function _peerSessionName(displayName) {
-    const p = _peerInfo(displayName);
-    return p ? p.realName : displayName;
-}
-
 async function launchCodingSession(label, cmd) {
     const slug = label.toLowerCase().replace(/[\s-]+/g, "_");
     let name;
@@ -68,7 +37,7 @@ async function launchCodingSession(label, cmd) {
 }
 
 async function resizePane(session, cols) {
-    await api("POST", "/api/session/resize", { session, cols });
+    await _peerApi(session, "POST", "/api/session/resize", { session, cols });
     const rec = state.nodes.get(session);
     if (!rec || !rec.iframeWrap) return;
     const cur = rec.iframeWrap.style.height;
@@ -117,7 +86,9 @@ async function fitTmuxToIframe(session) {
     const cellH = Number(state.config.ttyd_cell_height_px) || 17;
     const cols = Math.max(20, Math.min(500, Math.round(w / cellW)));
     const rows = Math.max(5, Math.min(200, Math.round(h / cellH)));
-    const r = await api("POST", "/api/session/resize", { session, cols, rows });
+    const r = await _peerApi(
+        session, "POST", "/api/session/resize", { session, cols, rows },
+    );
     const msg = document.getElementById("msg-" + cssId(session));
     if (msg) {
         msg.textContent = r.ok
@@ -142,7 +113,7 @@ async function launch(session) {
     // the peer's response carries a 'url' field already pointing at
     // its own host:port, which is exactly what we want — the browser
     // connects directly to the peer's ttyd.
-    const url = peer ? (r.url || `${peer.baseUrl.replace(/\/$/, "")}:${r.port}`) : ttydUrl(r.port);
+    const url = peer ? (r.url || _peerTtydUrl(peer.baseUrl, r.port)) : ttydUrl(r.port);
     const iframe = document.getElementById("iframe-" + cssId(session));
     if (iframe) iframe.src = url;
     if (msg) { msg.textContent = r.already ? "attached" : "launched"; msg.className = "inline-msg ok"; }
@@ -173,7 +144,7 @@ async function openRawTtyd() {
 
 async function enterCopyMode(session) {
     const msg = document.getElementById("msg-" + cssId(session));
-    const r = await api("POST", "/api/session/scroll", { session });
+    const r = await _peerApi(session, "POST", "/api/session/scroll", { session });
     if (msg) {
         msg.textContent = r.ok ? "scroll mode" : ("error: " + (r.error || ""));
         msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
@@ -184,7 +155,7 @@ async function enterCopyMode(session) {
 // (equivalent to the C-b z binding / ``resize-pane -Z``).
 async function zoomPane(session) {
     const msg = document.getElementById("msg-" + cssId(session));
-    const r = await api("POST", "/api/session/zoom", { session });
+    const r = await _peerApi(session, "POST", "/api/session/zoom", { session });
     if (msg) {
         msg.textContent = r.ok ? "pane zoom toggled" : ("error: " + (r.error || ""));
         msg.className = r.ok ? "inline-msg ok" : "inline-msg err";

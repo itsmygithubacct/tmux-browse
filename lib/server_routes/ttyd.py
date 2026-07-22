@@ -26,7 +26,13 @@ def h_ttyd_start(handler: "Handler", _parsed: ParseResult, body: dict) -> None:
         return
     tls_paths = getattr(handler.server, "tls_paths", None)
     bind_addr = getattr(handler.server, "ttyd_bind_addr", None)
-    handler._send_json(ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr))
+    result = ttyd.start(name, tls_paths=tls_paths, bind_addr=bind_addr)
+    if result.get("ok") and result.get("port"):
+        result = dict(result)
+        result["url"] = handler._ttyd_url(
+            result["port"], result.get("scheme"),
+        )
+    handler._send_json(result)
 
 
 def h_ttyd_raw(handler: "Handler", _parsed: ParseResult, _body: dict) -> None:
@@ -34,7 +40,13 @@ def h_ttyd_raw(handler: "Handler", _parsed: ParseResult, _body: dict) -> None:
         return
     tls_paths = getattr(handler.server, "tls_paths", None)
     bind_addr = getattr(handler.server, "ttyd_bind_addr", None)
-    handler._send_json(ttyd.start_raw(tls_paths=tls_paths, bind_addr=bind_addr))
+    result = ttyd.start_raw(tls_paths=tls_paths, bind_addr=bind_addr)
+    if result.get("ok") and result.get("port"):
+        result = dict(result)
+        result["url"] = handler._ttyd_url(
+            result["port"], result.get("scheme"),
+        )
+    handler._send_json(result)
 
 
 def h_ttyd_stop(handler: "Handler", _parsed: ParseResult, body: dict) -> None:

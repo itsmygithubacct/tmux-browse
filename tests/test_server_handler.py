@@ -53,13 +53,46 @@ class ReadJsonTests(unittest.TestCase):
         with self.assertRaises(UsageError):
             server.Handler._read_json(shim)
 
-    def test_invalid_json_body_returns_empty_dict(self):
-        shim = _ReadJsonShim(headers={"Content-Length": "3"}, raw=b"{x}")
-        self.assertEqual(server.Handler._read_json(shim), {})
+    def test_invalid_json_body_raises_usage_error(self):
+        shim = _ReadJsonShim(
+            headers={"Content-Length": "3", "Content-Type": "application/json"},
+            raw=b"{x}",
+        )
+        with self.assertRaises(UsageError):
+            server.Handler._read_json(shim)
+
+    def test_json_content_type_with_charset_is_accepted(self):
+        shim = _ReadJsonShim(
+            headers={
+                "Content-Length": "7",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            raw=b'{"x":1}',
+        )
+        self.assertEqual(server.Handler._read_json(shim), {"x": 1})
+
+    def test_simple_cross_origin_content_type_is_rejected(self):
+        shim = _ReadJsonShim(
+            headers={"Content-Length": "2", "Content-Type": "text/plain"},
+            raw=b"{}",
+        )
+        with self.assertRaises(UsageError):
+            server.Handler._read_json(shim)
+
+    def test_json_array_is_rejected(self):
+        shim = _ReadJsonShim(
+            headers={"Content-Length": "2", "Content-Type": "application/json"},
+            raw=b"[]",
+        )
+        with self.assertRaises(UsageError):
+            server.Handler._read_json(shim)
 
     def test_oversized_body_raises_usage_error(self):
         shim = _ReadJsonShim(
-            headers={"Content-Length": str(server._MAX_JSON_BODY_BYTES + 1)},
+            headers={
+                "Content-Length": str(server._MAX_JSON_BODY_BYTES + 1),
+                "Content-Type": "application/json",
+            },
             raw=b"{}",
         )
         with self.assertRaises(UsageError):
@@ -68,7 +101,7 @@ class ReadJsonTests(unittest.TestCase):
     def test_body_read_timeout_raises_usage_error(self):
         conn = _ConnShim(timeout=None)
         shim = _ReadJsonShim(
-            headers={"Content-Length": "2"},
+            headers={"Content-Length": "2", "Content-Type": "application/json"},
             raw=_TimeoutReader(),
             connection=conn,
         )
@@ -96,6 +129,32 @@ class HostWithoutPortTests(unittest.TestCase):
 
     def test_empty(self):
         self.assertEqual(server._host_without_port(""), "")
+
+
+class TtydUrlTests(unittest.TestCase):
+
+    def _shim(self, host, *, tls=False):
+        shim = type("TtydUrlShim", (), {})()
+        shim.headers = {"Host": host}
+        shim.server = type("S", (), {
+            "server_address": ("0.0.0.0", 8096),
+            "tls_paths": (Path("cert"), Path("key")) if tls else None,
+        })()
+        return shim
+
+    def test_replaces_dashboard_port(self):
+        shim = self._shim("192.168.50.50:8096")
+        self.assertEqual(
+            server.Handler._ttyd_url(shim, 7704, "http"),
+            "http://192.168.50.50:7704/",
+        )
+
+    def test_formats_ipv6_and_https(self):
+        shim = self._shim("[::1]:8096", tls=True)
+        self.assertEqual(
+            server.Handler._ttyd_url(shim, 7705, "https"),
+            "https://[::1]:7705/",
+        )
 
 
 class _RebindShim:
@@ -130,6 +189,11 @@ class RebindGateTests(unittest.TestCase):
         self.assertFalse(server.Handler._rebind_gate(shim))
         self.assertEqual(shim.sent[0][0], 403)
 
+    def test_rejects_missing_host(self):
+        shim = _RebindShim(allowed=self.ALLOWED, headers={})
+        self.assertFalse(server.Handler._rebind_gate(shim))
+        self.assertEqual(shim.sent[0][0], 403)
+
     def test_rejects_cross_origin_even_with_allowed_host(self):
         # The classic rebinding/CSRF shape: Host looks right but the page
         # driving the request lives on the attacker's origin.
@@ -147,6 +211,51 @@ class RebindGateTests(unittest.TestCase):
                      "Origin": "http://192.168.50.50:8096"})
         self.assertTrue(server.Handler._rebind_gate(shim))
         self.assertEqual(shim.sent, [])
+
+    def test_rejects_null_origin(self):
+        shim = _RebindShim(
+            allowed=self.ALLOWED,
+            headers={"Host": "127.0.0.1:8096", "Origin": "null"},
+        )
+        self.assertFalse(server.Handler._rebind_gate(shim))
+
+    def test_rejects_malformed_origin(self):
+        shim = _RebindShim(
+            allowed=self.ALLOWED,
+            headers={"Host": "127.0.0.1:8096", "Origin": "127.0.0.1:8096"},
+        )
+        self.assertFalse(server.Handler._rebind_gate(shim))
+
+    def test_rejects_origin_with_wrong_port(self):
+        shim = _RebindShim(
+            allowed=self.ALLOWED,
+            headers={
+                "Host": "127.0.0.1:8096",
+                "Origin": "http://127.0.0.1:9999",
+            },
+        )
+        self.assertFalse(server.Handler._rebind_gate(shim))
+
+    def test_rejects_origin_with_wrong_scheme(self):
+        shim = _RebindShim(
+            allowed=self.ALLOWED,
+            headers={
+                "Host": "127.0.0.1:8096",
+                "Origin": "https://127.0.0.1:8096",
+            },
+        )
+        self.assertFalse(server.Handler._rebind_gate(shim))
+
+    def test_allows_forwarded_https_same_origin(self):
+        shim = _RebindShim(
+            allowed=frozenset({"dash.example"}),
+            headers={
+                "Host": "dash.example",
+                "Origin": "https://dash.example",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        self.assertTrue(server.Handler._rebind_gate(shim))
 
     def test_open_path_is_never_gated(self):
         shim = _RebindShim(

@@ -87,18 +87,18 @@ request is visible without expanding the section.
 
 ## Aggregated session UX
 
-Once paired, each peer's `/api/sessions` is fetched in parallel on
-every dashboard refresh (1.5s per-peer timeout, 2s total budget).
+Once paired, each peer's `/api/sessions?local=1` is fetched in parallel on
+every dashboard refresh (5s per-peer timeout, 6s total budget).
 Remote rows arrive with:
 
 - `name` prefixed by the peer's hostname (`hostA:work`);
 - a hostname badge in the summary row (accent blue for remote;
   the local rows show a subtle grey badge with your own hostname
   when at least one remote is also visible, for symmetry);
-- `peer_url` and `device_id` tags so per-pane interactions
-  (start/stop ttyd, kill, etc.) route through the peer's HTTP
-  surface, and the iframe loads ttyd directly from the peer's
-  port.
+- `peer_url`, `device_id`, and `peer_session_name` tags. Per-pane
+  interactions go to the local dashboard's allowlisted peer proxy; the
+  server authenticates and relays them. The iframe still loads ttyd
+  directly from the peer's port.
 
 ## Trust model
 
@@ -132,6 +132,17 @@ The browser's iframe loads from each peer's ttyd port range
 (default 7700-7799). If a peer binds those to `127.0.0.1` only,
 the federated panes won't expand from your browser; document or
 set `--bind 0.0.0.0` (the default) on each peer.
+
+## Authentication across peers
+
+When dashboard auth is enabled, every host in the federation must use the
+same bearer token. Session aggregation, pairing calls, and proxied pane
+actions send that token in the `Authorization` header. A mismatched token
+makes the peer appear offline and causes remote actions to fail.
+
+The LAN quickstart generates a different random token on each host unless
+you provide one. Set the same `TMUX_BROWSE_TOKEN` on every peer before
+launching, or pass the same `--auth` value to each manual `serve` command.
 
 ## Same scheme across peers
 
@@ -174,15 +185,13 @@ land in your `discovered` list and you can re-pair if you want.
   UDP listener port. The second still broadcasts (it's visible
   to peers) but can't see incoming beacons. Logged at WARN at
   startup.
-- **No proxy mode.** Browsers connect directly to peer ttyd ports.
-  If a peer's port range isn't reachable from your browser,
-  federation looks half-broken (sessions visible in the list,
-  expanding fails to load).
-- **No auth-token forwarding between peers.** If you run with
-  `--auth $TOKEN`, each peer enforces its own token on
-  `/api/sessions` — peers with mismatched tokens get an empty
-  session list from each other. Pair across hosts with uniform
-  auth (or no auth on either end).
+- **ttyd is not proxied.** Control actions use the local dashboard proxy,
+  but browsers connect directly to peer ttyd ports. If a peer's port range
+  isn't reachable from your browser, sessions remain visible while their
+  embedded terminals fail to load.
+- **Config-lock tokens are host-local.** The proxy forwards the current
+  unlock token, but a separately locked peer will not recognize it. Unlock
+  or disable the config lock on the remote host before controlling its panes.
 - **Pairing is per-process.** The `~/.tmux-browse/paired-peers.json`
   file is per-host but a kill-9 mid-write (very narrow race) could
   corrupt it; we use atomic .tmp + replace to keep that window
