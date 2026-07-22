@@ -130,6 +130,56 @@ function ttydUrl(port) {
 }
 
 
+// Federation routing stays same-origin: remote pane actions go to the local
+// dashboard's constrained peer proxy, which authenticates and relays them.
+function _peerInfo(displayName) {
+    const row = state.sessions.find((r) => r.name === displayName);
+    if (!row || !row.peer_url) return null;
+    return {
+        baseUrl: row.peer_url,
+        deviceId: row.device_id,
+        hostname: row.peer_hostname || displayName.split(":")[0],
+        realName: row.peer_session_name ||
+            (displayName.includes(":") ? displayName.slice(displayName.indexOf(":") + 1) : displayName),
+    };
+}
+
+async function _peerApi(displayName, method, path, body) {
+    const peer = _peerInfo(displayName);
+    if (!peer) return await api(method, path, body);
+    if ((method || "").toUpperCase() !== "POST") {
+        return { ok: false, error: "remote peer actions must use POST" };
+    }
+    const forwarded = { ...(body || {}) };
+    if (Object.prototype.hasOwnProperty.call(forwarded, "session")) {
+        forwarded.session = peer.realName;
+    }
+    return await api("POST", "/api/peers/proxy", {
+        device_id: peer.deviceId,
+        path,
+        body: forwarded,
+    });
+}
+
+function _peerSessionName(displayName) {
+    const peer = _peerInfo(displayName);
+    return peer ? peer.realName : displayName;
+}
+
+function _peerTtydUrl(baseUrl, port) {
+    try {
+        const url = new URL(baseUrl);
+        url.port = String(port);
+        url.pathname = "/";
+        url.search = "";
+        url.hash = "";
+        return url.toString();
+    } catch (_) {
+        return "";
+    }
+}
+
+
 function cssId(s) {
     return s.replace(/[^a-zA-Z0-9_-]/g, "_");
 }

@@ -14,7 +14,7 @@ async function sendToPane(session, inputEl, countEl) {
     const text = inputEl.value.trim();
     if (!text) return;
     const count = Math.max(1, Math.min(99, Number(countEl?.value) || 1));
-    const r = await api("POST", "/api/session/type", { session, text });
+    const r = await _peerApi(session, "POST", "/api/session/type", { session, text });
     if (!r.ok) {
         const msgEl = document.getElementById("msg-" + cssId(session));
         if (msgEl) {
@@ -79,8 +79,8 @@ async function checkSendQueue(rows) {
         if (idleSecs < idleThreshold) continue;
         entry.busy = true;
         try {
-            const r = await api("POST", "/api/session/type",
-                                { session, text: entry.text });
+            const r = await _peerApi(session, "POST", "/api/session/type",
+                                     { session, text: entry.text });
             if (!r.ok) {
                 const msgEl = document.getElementById("msg-" + cssId(session));
                 if (msgEl) {
@@ -123,5 +123,5 @@ function renderSendQueueStatus(session) {
 }
 
 async function sendKeysToPane(session, keys) {
-    await api("POST", "/api/session/key", { session, keys });
+    await _peerApi(session, "POST", "/api/session/key", { session, keys });
 }

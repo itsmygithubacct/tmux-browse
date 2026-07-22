@@ -100,8 +100,8 @@ def _redact_token(s: str) -> str:
 # A page the operator visits can rebind its own hostname to the
 # dashboard's IP (127.0.0.1 or the LAN address) and then drive mutating
 # endpoints — ``/api/session/type`` is arbitrary command execution. The
-# server doesn't enforce ``Content-Type``, so such a request can be sent
-# as a CORS-"simple" request that skips the preflight.
+# JSON POSTs require ``application/json``, so browser requests with a body
+# trigger CORS preflight in addition to the explicit checks below.
 #
 # Two cheap checks defeat this without touching the auth model:
 #   * Origin: a cross-origin browser request carries an ``Origin`` whose
@@ -133,6 +133,42 @@ def _host_without_port(host_header: str) -> str:
         if port.isdigit():
             return name
     return h
+
+
+def _parse_authority(value: str) -> tuple[str, int | None] | None:
+    """Parse an HTTP Host-style authority without accepting URL syntax."""
+    raw = (value or "").strip()
+    if (not raw or any(c.isspace() for c in raw)
+            or any(c in raw for c in "/?#@,")):
+        return None
+    try:
+        parsed = urlparse(f"//{raw}")
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return None
+    if not hostname or parsed.username is not None or parsed.password is not None:
+        return None
+    return hostname, port
+
+
+def _parse_origin(value: str) -> tuple[str, str, int] | None:
+    """Return a canonical (scheme, host, effective-port) web origin."""
+    raw = (value or "").strip()
+    if not raw or raw.lower() == "null":
+        return None
+    try:
+        parsed = urlparse(raw)
+        scheme = parsed.scheme.lower()
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return None
+    if (scheme not in {"http", "https"} or not hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.path or parsed.params or parsed.query or parsed.fragment):
+        return None
+    return scheme, hostname, port or (443 if scheme == "https" else 80)
 
 
 def _primary_outbound_ip() -> str | None:
@@ -806,17 +842,44 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self._safe_write(body)
 
+    def _ttyd_url(self, port: object, scheme: str | None = None) -> str:
+        """Build a ttyd URL on the request host with ``port`` substituted."""
+        try:
+            ttyd_port = int(port)
+        except (TypeError, ValueError):
+            return ""
+        if ttyd_port < 1 or ttyd_port > 65535:
+            return ""
+        authority = _parse_authority(self.headers.get("Host", ""))
+        host = authority[0] if authority else ""
+        if not host:
+            address = getattr(self.server, "server_address", ("localhost", 0))
+            host = str(address[0] or "localhost")
+        if host in {"0.0.0.0", "::"}:
+            host = "localhost"
+        if ":" in host:
+            host = f"[{host}]"
+        protocol = scheme if scheme in {"http", "https"} else (
+            "https" if getattr(self.server, "tls_paths", None) else "http"
+        )
+        return f"{protocol}://{host}:{ttyd_port}/"
+
     def _read_json(self) -> dict:
         try:
             length = int(self.headers.get("Content-Length") or "0")
         except ValueError:
             raise UsageError("invalid Content-Length header")
-        if length <= 0:
+        if length < 0:
+            raise UsageError("invalid Content-Length header")
+        if length == 0:
             return {}
         if length > _MAX_JSON_BODY_BYTES:
             raise UsageError(
                 f"request body too large ({length} bytes > {_MAX_JSON_BODY_BYTES})",
             )
+        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0]
+        if content_type.strip().lower() != "application/json":
+            raise UsageError("request body must use Content-Type: application/json")
         conn = getattr(self, "connection", None)
         old_timeout = None
         if conn is not None:
@@ -836,9 +899,12 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
         try:
-            return json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
-            return {}
+            body = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise UsageError("invalid JSON request body") from exc
+        if not isinstance(body, dict):
+            raise UsageError("JSON request body must be an object")
+        return body
 
     def _send_tb_error(self, err: TBError) -> None:
         # If a handler already began a response before raising, we can't send
@@ -886,16 +952,8 @@ class Handler(BaseHTTPRequestHandler):
             return True  # guard disabled
         if auth.path_is_open(self.path):
             return True
-        origin = self.headers.get("Origin")
-        if origin:
-            origin_host = _host_without_port(urlparse(origin).netloc).lower()
-            if origin_host and origin_host not in allowed:
-                self._send_json(
-                    {"ok": False, "error": "cross-origin request rejected"},
-                    status=403)
-                return False
-        host = _host_without_port(self.headers.get("Host", "")).lower()
-        if host and host not in allowed:
+        host_authority = _parse_authority(self.headers.get("Host", ""))
+        if host_authority is None or host_authority[0] not in allowed:
             self._send_json(
                 {"ok": False,
                  "error": ("host not allowed (DNS-rebinding guard); add it to "
@@ -903,6 +961,26 @@ class Handler(BaseHTTPRequestHandler):
                            "TMUX_BROWSE_DISABLE_HOST_CHECK=1")},
                 status=403)
             return False
+
+        origin_header = self.headers.get("Origin")
+        if origin_header is not None:
+            origin = _parse_origin(origin_header)
+            forwarded = (self.headers.get("X-Forwarded-Proto") or "")
+            forwarded = forwarded.split(",", 1)[0].strip().lower()
+            request_scheme = (
+                forwarded if forwarded in {"http", "https"}
+                else ("https" if getattr(self.server, "tls_paths", None) else "http")
+            )
+            host, host_port = host_authority
+            effective_host_port = host_port or (
+                443 if request_scheme == "https" else 80
+            )
+            expected_origin = (request_scheme, host, effective_host_port)
+            if origin is None or origin != expected_origin:
+                self._send_json(
+                    {"ok": False, "error": "cross-origin request rejected"},
+                    status=403)
+                return False
         return True
 
     # --- auth --------------------------------------------------------------

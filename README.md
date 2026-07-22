@@ -285,8 +285,10 @@ python3 tmux_browse.py serve --cert cert.pem --key key.pem --auth "$TOKEN"
 Phones will warn about the self-signed cert — accept once and it's pinned.
 
 **DNS-rebinding guard.** Independent of auth, the server rejects requests
-whose `Host`/`Origin` it isn't serving, so a web page you visit can't
-rebind to the dashboard's address and drive it. The allow-set is
+whose `Host` it isn't serving and requires every supplied `Origin` to match
+the exact request scheme, host, and port. Opaque origins such as `null` are
+rejected, and POST bodies must be `application/json`, so a web page you visit
+can't rebind to the dashboard's address and drive it. The allow-set is
 loopback, this host's hostname, its local IPs, and the bind address.
 Reaching the dashboard by another name — behind a reverse proxy, or via
 Tailscale/mDNS — needs that name added:

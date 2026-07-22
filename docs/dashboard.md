@@ -341,7 +341,9 @@ same per-browser localStorage that backs Hidden/Visible.
   `~/.tmux-browse/logs/<session>.log`.
 - Dashboard config lives at `~/.tmux-browse/dashboard-config.json`.
 - Task definitions live at `~/.tmux-browse/tasks.json`.
-- Per-session pipe-pane logs live under `~/.tmux-browse/session-logs/`.
+- Per-session pipe-pane logs live under `~/.tmux-browse/session-logs/` and
+  rotate at 10 MiB, retaining the newest 8 MiB by default. Set
+  `TB_SESSION_LOG_MAX_BYTES` to choose another ceiling.
 
 Extensions write their own state under `~/.tmux-browse/`. The agent
 extension, for example, adds files like `agents.json`,
@@ -354,7 +356,9 @@ A session keeps its port forever, or until you explicitly drop it via
 
 ## HTTP API
 
-All JSON responses use a stable `{ok, …}` envelope.
+All JSON responses use a stable `{ok, …}` envelope. POST bodies must use
+`Content-Type: application/json`; malformed JSON and non-object roots are
+rejected with HTTP 400.
 
 ### Core endpoints (always present)
 

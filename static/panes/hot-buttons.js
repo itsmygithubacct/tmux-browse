@@ -72,7 +72,7 @@ async function sendHotButton(session, slot) {
         msg.textContent = `sending hot ${slot + 1}…`;
         msg.className = "inline-msg dim";
     }
-    const r = await api("POST", "/api/session/type", { session, text });
+    const r = await _peerApi(session, "POST", "/api/session/type", { session, text });
     if (msg) {
         msg.textContent = r.ok ? `sent: ${hotButtonLabel(picked.name || text)}` : ("error: " + (r.error || ""));
         msg.className = r.ok ? "inline-msg ok" : "inline-msg err";
