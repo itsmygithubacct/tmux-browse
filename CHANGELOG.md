@@ -873,9 +873,7 @@ The route-table-immutability test still passes — it asserts on the
 *set* of registered paths, not the identity of handler functions.
 Full suite: 601 tests green.
 
-Phase B (split static/panes.js by feature) is the next planned
-refactor — see the planning doc in ``<workspace>/tmux-browse/`` for
-the full plan.
+Phase B (split static/panes.js by feature) is the next planned refactor.
 
 ## 0.7.1.7 — Extension-call shim + SessionSummary dataclass (2026-04-27)
 
