@@ -94,22 +94,29 @@ class CmdConfigTests(unittest.TestCase):
             rc = tmux_browse.cmd_config(self._args(set_=["nope=1"]))
         self.assertEqual(rc, 2)
 
-    def test_set_known_key_saves(self):
-        saved = {}
+    def test_set_known_keys_update_one_batch(self):
+        updated = {}
 
-        def fake_save(cfg):
-            saved.update(cfg)
-            return cfg
+        def fake_update_values(changes):
+            updated.update(changes)
+            return {"theme": changes["theme"], "refresh_seconds": 12}
 
-        with mock.patch.object(tmux_browse.dashboard_config, "load",
-                               return_value={"theme": "dark"}), \
-                mock.patch.object(tmux_browse.dashboard_config, "DEFAULTS",
-                                  {"theme": "dark"}), \
-                mock.patch.object(tmux_browse.dashboard_config, "save",
-                                  side_effect=fake_save):
-            rc = tmux_browse.cmd_config(self._args(set_=["theme=light"]))
+        with mock.patch.object(
+            tmux_browse.dashboard_config, "DEFAULTS",
+            {"theme": "dark", "refresh_seconds": 5},
+        ), mock.patch.object(
+            tmux_browse.dashboard_config, "update_values",
+            side_effect=fake_update_values,
+        ) as update_values, mock.patch.object(
+            tmux_browse.dashboard_config, "load",
+        ) as load:
+            rc = tmux_browse.cmd_config(self._args(
+                set_=["theme=light", "refresh_seconds=12"],
+            ))
         self.assertEqual(rc, 0)
-        self.assertEqual(saved["theme"], "light")
+        self.assertEqual(updated, {"theme": "light", "refresh_seconds": "12"})
+        update_values.assert_called_once_with(updated)
+        load.assert_not_called()
 
 
 if __name__ == "__main__":

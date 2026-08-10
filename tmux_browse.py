@@ -208,8 +208,7 @@ def cmd_config(args: argparse.Namespace) -> int:
     if args.reset:
         cfg = dashboard_config.save(dashboard_config.DEFAULTS)
     elif args.set:
-        cfg = dashboard_config.load()
-        pending = dict(cfg)
+        pending = {}
         valid_keys = set(dashboard_config.DEFAULTS.keys())
         for item in args.set:
             if "=" not in item:
@@ -221,7 +220,7 @@ def cmd_config(args: argparse.Namespace) -> int:
                 print(f"error: unknown config key '{key}'", file=sys.stderr)
                 return 2
             pending[key] = value.strip()
-        cfg = dashboard_config.save(pending)
+        cfg = dashboard_config.update_values(pending)
     else:
         cfg = dashboard_config.load()
 
