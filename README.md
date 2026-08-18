@@ -131,7 +131,7 @@ the exact command to restart yourself.
 
 ### Optional extensions
 
-Core stays small. Three optional extensions live in their own repos
+Core stays small. Four optional extensions live in their own repos
 and load through the dashboard's **Config → Extensions** card (or
 `make install-<name>` on a headless host):
 

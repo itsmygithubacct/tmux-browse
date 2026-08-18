@@ -49,6 +49,9 @@ from lib import (
 from lib.errors import TBError
 
 
+CLI_DESCRIPTION = "tmux-browse CLI."
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     if not (1 <= args.port <= 65535):
         # argparse only enforces int-ness; catch the out-of-range case
@@ -238,7 +241,7 @@ def cmd_config(args: argparse.Namespace) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="tmux-browse", description=__doc__.strip().splitlines()[0])
+    p = argparse.ArgumentParser(prog="tmux-browse", description=CLI_DESCRIPTION)
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s_serve = sub.add_parser("serve", help="run the dashboard HTTP server")

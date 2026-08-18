@@ -77,6 +77,12 @@ class MakefilePhonyTests(unittest.TestCase):
             {"preflight", "test-core", "test", "test-extensions"},
         )
 
+    def test_every_catalog_extension_has_headless_management_targets(self):
+        targets = _makefile_targets(self.text)
+        for extension in ("agent", "federation", "qr", "sandbox"):
+            for verb in ("install", "update", "enable", "disable", "uninstall"):
+                self.assertIn(f"{verb}-{extension}", targets)
+
 
 class MakeCleanBehaviourTests(unittest.TestCase):
 

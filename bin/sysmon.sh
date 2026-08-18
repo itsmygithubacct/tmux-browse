@@ -76,7 +76,10 @@ while true; do
     ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu 2>/dev/null | head -6
 
     # Tasks
-    running=$(ls -d /proc/[0-9]* 2>/dev/null | wc -l)
+    running=0
+    for proc_dir in /proc/[0-9]*; do
+        [ -d "$proc_dir" ] && running=$((running + 1))
+    done
     printf '\n\033[1mTasks:\033[0m %d  \033[1mRefresh:\033[0m %ds\n' "$running" "$INTERVAL"
 
     sleep "$INTERVAL"

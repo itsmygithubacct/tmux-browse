@@ -7,6 +7,7 @@ tmux, ttyd, or the network.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -36,6 +37,16 @@ class ParserTests(unittest.TestCase):
     def test_unknown_subcommand_errors(self):
         with self.assertRaises(SystemExit):
             tmux_browse._build_parser().parse_args(["frobnicate"])
+
+    def test_help_works_when_docstrings_are_stripped(self):
+        proc = subprocess.run(
+            [sys.executable, "-OO", str(_ROOT / "tmux_browse.py"), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("tmux-browse CLI.", proc.stdout)
 
 
 class CmdServePortTests(unittest.TestCase):

@@ -15,6 +15,8 @@
         uninstall-agent uninstall-agent-with-state \
         install-federation update-federation enable-federation disable-federation \
         uninstall-federation uninstall-federation-with-state \
+        install-qr update-qr enable-qr disable-qr uninstall-qr \
+        install-sandbox update-sandbox enable-sandbox disable-sandbox uninstall-sandbox \
         preflight test-core test test-extensions ci clean
 
 PY ?= python3
@@ -41,6 +43,18 @@ help:
 	@echo "  make disable-federation        flip enabled=false (keeps code)"
 	@echo "  make uninstall-federation      remove federation code (keeps paired-peers)"
 	@echo "  make uninstall-federation-with-state  also delete ~/.tmux-browse/paired-peers.json"
+	@echo ""
+	@echo "  make install-qr                clone/init + enable the QR extension"
+	@echo "  make update-qr                 advance QR to its pinned ref"
+	@echo "  make enable-qr                 flip enabled=true (restart to activate)"
+	@echo "  make disable-qr                flip enabled=false (keeps code)"
+	@echo "  make uninstall-qr              remove QR code (no persistent state)"
+	@echo ""
+	@echo "  make install-sandbox           clone/init + enable the sandbox extension"
+	@echo "  make update-sandbox            advance sandbox to its pinned ref"
+	@echo "  make enable-sandbox            flip enabled=true (restart to activate)"
+	@echo "  make disable-sandbox           flip enabled=false (keeps code)"
+	@echo "  make uninstall-sandbox         remove sandbox code (no persistent state)"
 	@echo ""
 	@echo "  make list-extensions           show status of every known extension"
 	@echo "  make preflight                 check core/extension version alignment"
@@ -100,6 +114,36 @@ uninstall-federation:
 
 uninstall-federation-with-state:
 	$(RUN) -m lib.extensions uninstall federation --remove-state
+
+install-qr:
+	$(RUN) -m lib.extensions install qr
+
+update-qr:
+	$(RUN) -m lib.extensions update qr
+
+enable-qr:
+	$(RUN) -m lib.extensions enable qr
+
+disable-qr:
+	$(RUN) -m lib.extensions disable qr
+
+uninstall-qr:
+	$(RUN) -m lib.extensions uninstall qr
+
+install-sandbox:
+	$(RUN) -m lib.extensions install sandbox
+
+update-sandbox:
+	$(RUN) -m lib.extensions update sandbox
+
+enable-sandbox:
+	$(RUN) -m lib.extensions enable sandbox
+
+disable-sandbox:
+	$(RUN) -m lib.extensions disable sandbox
+
+uninstall-sandbox:
+	$(RUN) -m lib.extensions uninstall sandbox
 
 preflight:
 	$(RUN) scripts/preflight.py

@@ -73,7 +73,9 @@ need() { command -v "$1" >/dev/null 2>&1 || die "missing '$1' on PATH — instal
 need git
 need python3
 
-INSTALL_DIR="$(cd "$INSTALL_DIR" 2>/dev/null && pwd || true)"
+if ! INSTALL_DIR="$(cd "$INSTALL_DIR" 2>/dev/null && pwd)"; then
+    INSTALL_DIR=""
+fi
 [[ -n "$INSTALL_DIR" && -d "$INSTALL_DIR/.git" ]] \
     || die "${INSTALL_DIR:-target} is not a git checkout — pass --dir <tmux-browse checkout>"
 [[ -f "$INSTALL_DIR/tmux_browse.py" ]] \
@@ -121,7 +123,8 @@ if [[ -n "$TGT_REV" && "$TGT_REV" == "$HEAD_REV" ]]; then
     [[ "$CHECK" -eq 1 ]] && exit 0
     # Still refresh submodules in case an extension drifted; harmless no-op
     # when they're already aligned.
-    g submodule update --recursive >/dev/null 2>&1 || true
+    g submodule update --recursive >/dev/null 2>&1 \
+        || die "installed submodules failed to align with $REF — run: git -C $INSTALL_DIR submodule status"
     exit 0
 fi
 
@@ -173,7 +176,7 @@ fi
 if [[ -f "$INSTALL_DIR/.gitmodules" ]]; then
     say "Advancing installed extensions to their pinned refs"
     g submodule update --recursive >/dev/null 2>&1 \
-        || warn "some submodules failed to update — check 'git -C $INSTALL_DIR submodule status'"
+        || die "installed submodules failed to align with $REF — run: git -C $INSTALL_DIR submodule status"
 fi
 
 NEW_VER="$(current_version 2>/dev/null || echo '?')"
